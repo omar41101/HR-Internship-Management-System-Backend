@@ -5,11 +5,16 @@ import Department from "../models/Department.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
-import { isValidEmail, isEmpty } from "../middleware/UserValidation.js";
+import {
+  isValidEmail,
+  isEmpty,
+  generatePassword,
+} from "../middleware/UserValidation.js";
+import { sendOnboardingEmail } from "../utils/sendEmail.js";
 
 dotenv.config();
 
-// Login Functionality (All users can do it)
+// Login Functionality (All users can do it) : STILL NOT DONE
 export const login = async (req, res) => {
   const { email, password } = req.body; // Get the credentials submitted
 
@@ -92,8 +97,8 @@ export const addUser = async (req, res) => {
       name,
       lastName,
       email,
-      password,
       address,
+      joinDate,
       phoneNumber,
       position,
       bonus,
@@ -107,6 +112,7 @@ export const addUser = async (req, res) => {
       isAvailable,
       role,
       department,
+      supervisor_full_name,
     } = req.body;
 
     // Check for missing required fields
@@ -114,7 +120,6 @@ export const addUser = async (req, res) => {
       "name",
       "lastName",
       "email",
-      "password",
       "address",
       "phoneNumber",
       "position",
@@ -124,17 +129,22 @@ export const addUser = async (req, res) => {
       "role",
       "department",
     ];
+    // "joinDate",
 
-    const missing = requiredFields.filter((field) => !req.body[field]);
+    const missing = requiredFields.filter(
+      (field) => req.body[field] === undefined || req.body[field] === null,
+    );
     const empty =
       isEmpty(name) &&
       isEmpty(lastName) &&
       isEmpty(address) &&
       isEmpty(position);
+
     if (missing.length > 0 || empty) {
       return res.status(400).json({
         status: "Error",
         message: "Missing required fields",
+        missing,
       });
     }
 
@@ -155,13 +165,6 @@ export const addUser = async (req, res) => {
       });
     }
 
-    // Check the validity of the phone number
-    if (phoneNumber.length !== 8 || !/^\d{8}$/.test(phoneNumber)) {
-      return res.status(400).json({
-        message: "Invalid Phone Number!",
-      });
-    }
-
     // Check the validity of the role
     const userrole = await UserRole.findOne({ name: role });
     if (!userrole) {
@@ -172,48 +175,54 @@ export const addUser = async (req, res) => {
     }
     const roleId = userrole._id; // Get the role ID
 
-    // Check the validity of the password
-    if (password.length < 7 || !/[A-Z]/.test(password)) {
-      return res.status(400).json({
-        message:
-          "Password must be at least 7 characters long and contain at least one capital letter!",
-      });
-    }
-
-    // Check if the code exists
-    let extractedRole = "";
-    const code = password.slice(-3);
-    switch (code) {
-      case process.env.CODE_ADMIN:
-        extractedRole = "Admin";
+    // Generate password + code
+    let password = "";
+    switch (role) {
+      case "Admin":
+        password = generatePassword(process.env.CODE_ADMIN);
         break;
 
-      case process.env.CODE_INTERN:
-        extractedRole = "Intern";
+      case "Intern":
+        password = generatePassword(process.env.CODE_INTERN);
         break;
 
-      case process.env.CODE_SUPERVISOR:
-        extractedRole = "Supervisor";
+      case "Supervisor":
+        password = generatePassword(process.env.CODE_SUPERVISOR);
         break;
 
-      case process.env.CODE_EMPLOYEE:
-        extractedRole = "Employee";
+      case "Employee":
+        password = generatePassword(process.env.CODE_EMPLOYEE);
         break;
 
       default:
         return res.status(401).json({
           status: "Error",
-          message: "The password must include the secret code!",
+          message: "Invalid Role!",
         });
     }
 
-    // Check the code matches the role
-    if (extractedRole !== role) {
-      return res.status(401).json({
+    // Check for the existance of the supervisor's name if the role is Intern or Employee
+    if ((role === "Intern" || role === "Employee") && !supervisor_full_name) {
+      return res.status(400).json({
         status: "Error",
-        message: "Mismatched Role!",
+        message: "Supervisor name is required!",
       });
     }
+
+    // Get the supervisor's ID
+    const [supervisor_name, supervisor_lastName] =
+      supervisor_full_name.split(" ");
+    const supervisor = await User.findOne({
+      name: supervisor_name,
+      lastName: supervisor_lastName,
+    });
+    if (!supervisor) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Supervisor not found!",
+      });
+    }
+    const supervisorId = supervisor._id;
 
     // Check the validity of the department
     const userdepartment = await Department.findOne({ name: department });
@@ -225,6 +234,13 @@ export const addUser = async (req, res) => {
     }
     const departmentId = userdepartment._id; // Get the Department ID
 
+    // Check the validity of the phone number
+    if (phoneNumber.length !== 8 || !/^\d{8}$/.test(phoneNumber)) {
+      return res.status(400).json({
+        message: "Invalid Phone Number!",
+      });
+    }
+
     // Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -235,6 +251,7 @@ export const addUser = async (req, res) => {
       email,
       password: hashedPassword,
       address,
+      joinDate,
       phoneNumber,
       position,
       bonus,
@@ -248,7 +265,11 @@ export const addUser = async (req, res) => {
       isAvailable,
       role_id: roleId,
       department_id: departmentId,
+      supervisor_id: supervisorId,
     });
+
+    // Send an Email to the user (password + platform link)
+    await sendOnboardingEmail(email, name, password);
 
     return res.status(201).json({
       status: "Success",
@@ -286,8 +307,7 @@ export const getUserById = async (req, res) => {
       });
     }
     res.status(200).json(user);
-  } 
-  catch (err) {
+  } catch (err) {
     res.status(500).json({
       status: "Error",
       message: err.message,
@@ -295,7 +315,31 @@ export const getUserById = async (req, res) => {
   }
 };
 
-// Update User (Only the Admin can do it)
-export const updateUser = async (req, res) => {
-  
+// Update User (Only the Admin can do it)   STILL NOT DONE
+export const updateUser = async (req, res) => {};
+
+// Delete User (Only for Admins) STILL Not DONE
+export const deleteUser = async (req, res) => {
+  try {
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
 };
+
+// Search User (Only for Admins) STILL NOT DONE
+export const searchUser = async (req, res) => {
+  try {
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Toggle User Status (Only for Admins)
+
+// Export User Status (Only for Admins)

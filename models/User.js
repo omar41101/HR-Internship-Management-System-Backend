@@ -1,6 +1,4 @@
 import mongoose from "mongoose";
-// joinDate
-// generate password automatically + code + lien de la plateforme
 const userSchema = mongoose.Schema(
   {
     name: {
@@ -23,11 +21,16 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    joinDate: {
+      type: Date,
+      required: true,
+      default: Date.now
+    },
     phoneNumber: {
       type: String,
       required: true,
     },
-    position:{
+    position:{ 
       type: String,
       required: true
     },
@@ -76,6 +79,11 @@ const userSchema = mongoose.Schema(
     department_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Department",
+    },
+    supervisor_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null
     },
   },
   {
