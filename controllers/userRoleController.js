@@ -1,7 +1,7 @@
 // Importations
 import UserRole from "../models/UserRole.js";
 import { generateRoleCode } from "../middleware/roleService.js";
-import bcrypt from "bcrypt";
+import { encrypt } from "../utils/cryptoUtils.js";
 
 // Add new Role Functionnality
 export const addUserRole = async (req, res) => {
@@ -27,13 +27,13 @@ export const addUserRole = async (req, res) => {
 
     // Generate new code for the role
     const generatedCode = await generateRoleCode();
-    const hashedCode = await bcrypt.hash(generatedCode.toString(), 10); // Hash the generated code
+    const encryptedCode = encrypt(generatedCode.toString()); // Encrypt the user role code
 
     // Save the new user role in the Database
     let userRole = await UserRole.create({
       name,
       description,
-      code: hashedCode,
+      code: encryptedCode,
     });
 
     return res.status(201).json({

@@ -1,16 +1,20 @@
 import UserRole from "../models/UserRole.js";
-import bcrypt from "bcrypt";
+import { decrypt } from "../utils/cryptoUtils.js"; 
 
 // Generation of the secret code for each role
 export const generateRoleCode = async () => {
   while (true) {
-    // Generate an initial 3-digit code
-    const newCode = Math.floor(100 + Math.random() * 900);
+    const newCode = Math.floor(100 + Math.random() * 900); // 3-digit random code
 
-    // Check for code uniqueness
-    let conflict = false;
-    for (const role of await UserRole.find()) {
-      if (await bcrypt.compare(newCode.toString(), role.code)) {
+    let conflict = false; 
+
+    // Get all roles from DB
+    const roles = await UserRole.find();
+
+    // Check uniqueness by decrypting existing codes
+    for (const role of roles) {
+      const plainCode = decrypt(role.code); // Decrypt the code
+      if (plainCode === newCode.toString()) {
         conflict = true;
         break;
       }

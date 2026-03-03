@@ -13,6 +13,7 @@ import {
   generatePassword,
 } from "../middleware/UserValidation.js";
 import { sendOnboardingEmail } from "../utils/sendEmail.js";
+import { decrypt } from "../utils/cryptoUtils.js"; 
 
 dotenv.config();
 
@@ -47,41 +48,25 @@ export const login = async (req, res) => {
 
   // Extract role from the password
   let extractedRole = "";
-  const code = trimmedPassword.slice(-3);
+  const code = trimmedPassword.slice(-3);  
 
-  // Get the Actual role codes
-  const adminCode = (process.env.CODE_ADMIN || "").trim();
-  const internCode = (process.env.CODE_INTERN || "").trim();
-  const supervisorCode = (process.env.CODE_SUPERVISOR || "").trim();
-  const employeeCode = (process.env.CODE_EMPLOYEE || "").trim();
+  // Extract the role from the password
+  const roleCodes = await UserRole.find({}, { name: 1, code: 1 }); // Only fetch the role name and role code
 
-  console.log(
-    `[LOGIN-DEBUG] Extracted code: "${code}" | Expected: Admin:${adminCode}, Employee:${employeeCode}, Intern:${internCode}, Supervisor:${supervisorCode}`,
-  );
+  // Find the role that matches the extracted code
+  const matchedRole = roleCodes.find((role) => {
+    const decryptedCode = decrypt(role.code);
+    return decryptedCode === code;
+  });
 
-  switch (code) {
-    case adminCode:
-      extractedRole = "Admin";
-      break;
-
-    case internCode:
-      extractedRole = "Intern";
-      break;
-
-    case supervisorCode:
-      extractedRole = "Supervisor";
-      break;
-
-    case employeeCode:
-      extractedRole = "Employee";
-      break;
-
-    default:
-      return res.status(401).json({
-        status: "Error",
-        message: "Invalid Email or password!",
-      });
+  if (!matchedRole) {
+    console.log(`[LOGIN-DEBUG] No matching role found for code: ${code}`);
+    return res.status(401).json({
+      status: "Error",
+      message: "Invalid Email or password!",
+    });
   }
+  extractedRole = matchedRole.name;
 
   // Get the user's actual role
   const userRole = await UserRole.findOne({ _id: user.role_id });
@@ -211,7 +196,7 @@ export const addUser = async (req, res) => {
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
-    // Role check
+    // Check Role validity
     const userrole = await UserRole.findOne({
       name: { $regex: new RegExp(`^${role}$`, "i") },
     });
@@ -223,35 +208,17 @@ export const addUser = async (req, res) => {
         message: "Invalid Role!",
       });
     }
-    const roleId = userrole._id; // Get the role ID
+
+    // Get the role ID
+    const roleId = userrole._id; 
     console.log(`[ADD-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
 
+    // Get and Decrypt the user role code 
+    const roleCode = decrypt(userrole.code); 
+
     // Generate password + code
-    let password = "";
-    switch (role) {
-      case "Admin":
-        password = generatePassword(process.env.CODE_ADMIN);
-        break;
-
-      case "Intern":
-        password = generatePassword(process.env.CODE_INTERN);
-        break;
-
-      case "Supervisor":
-        password = generatePassword(process.env.CODE_SUPERVISOR);
-        break;
-
-      case "Employee":
-        password = generatePassword(process.env.CODE_EMPLOYEE);
-        break;
-
-      default:
-        return res.status(401).json({
-          status: "Error",
-          message: "Invalid Role!",
-        });
-    }
-
+    const password = generatePassword(roleCode);
+    
     // --- Supervisor is now optional for the Intern and Employee (can use "Not assigned yet") ---
 
     // Check the validity of the supervisor
@@ -565,22 +532,14 @@ export const updateUser = async (req, res) => {
 
         // Generate NEW password for the NEW role code
         let code = "";
-        const roleNameNormalized = roleDoc.name.toLowerCase();
-
-        const adminCode = (process.env.CODE_ADMIN || "").trim();
-        const internCode = (process.env.CODE_INTERN || "").trim();
-        const supervisorCode = (process.env.CODE_SUPERVISOR || "").trim();
-        const employeeCode = (process.env.CODE_EMPLOYEE || "").trim();
-
-        if (roleNameNormalized === "Admin") code = adminCode;
-        else if (roleNameNormalized === "Intern") code = internCode;
-        else if (roleNameNormalized === "Supervisor") code = supervisorCode;
-        else if (roleNameNormalized === "Employee") code = employeeCode;
+        try {
+          code = decrypt(roleDoc.code); // Decrypt the role code
+        } catch (err) {
+          console.log(`[UPDATE-USER-DEBUG] Error decrypting role code for ${roleDoc.name}: ${err.message}`);
+        }
 
         if (!code) {
-          console.log(
-            `[UPDATE-USER-DEBUG] WARNING: No code found for role: ${roleDoc.name}`,
-          );
+          console.log(`[UPDATE-USER-DEBUG] WARNING: No code found for role: ${roleDoc.name}`);
         }
 
         newPasswordRaw = generatePassword(code);
