@@ -1,7 +1,7 @@
 // Importations
 import UserRole from "../models/UserRole.js";
 
-// Add new Role Functionnality
+// Add new Role Functionnality: FAZET EL CODEEEE
 export const addUserRole = async (req, res) => {
     const {name, description} = req.body; // Get the new role credentials
 

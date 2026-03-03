@@ -24,6 +24,7 @@ export const sendOnboardingEmail = async (to, name, password) => {
         <br>
         Access the Platform via this link: <a href="${process.env.PLATFORM_URL}"
           style="display:inline-block; background:#4CAF50; color:#fff; padding:12px 20px; text-decoration:none; border-radius:5px;"> 
+          Go to HRcoM
         </a>
 
         <br><br>
