@@ -14,6 +14,15 @@ export const addDepartment = async (req, res) => {
   }
 
   try {
+    // Check for department existence
+    const existingDepartment = await Department.findOne({ name: name.trim() });
+    if (existingDepartment) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Department already existing!",
+      });
+    }
+    
     // Save the new department in the Database
     let department = await Department.create({
       name,
@@ -32,99 +41,91 @@ export const addDepartment = async (req, res) => {
   }
 };
 
-
 // Get All Departments Functionnality
 export const getAllDepartments = async (req, res) => {
-    try{
-        const departments = await Department.find();
-        res.status(200).json(departments);
-    }
-    catch(err){
-        res.status(500).json({
-            status: "Error",
-            message: err.message
-        });
-    }
+  try {
+    const departments = await Department.find();
+    res.status(200).json(departments);
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
 };
-
 
 // Get a Department by Id
 export const getDepartmentById = async (req, res) => {
-    try{
-        const department = await Department.findById(req.params.id);
-        if(!department){
-            return res.status(404).json({
-                status: "Error",
-                message: "Department not found!"
-            });
-        }
+  try {
+    const department = await Department.findById(req.params.id);
+    if (!department) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Department not found!",
+      });
+    }
 
-        res.status(200).json(department);
-    }
-    catch(err){
-        res.status(500).json({
-            status: "Error",
-            message: err.message
-        });
-    }
+    res.status(200).json(department);
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
 };
-
 
 // Delete a Department (All admins can do it)
 export const deleteDepartment = async (req, res) => {
-    try{
-        const department = await Department.findById(req.params.id);
-        if(!department){
-            return res.status(404).json({
-                status: "Error",
-                message: "Department is not found!"
-            });
-        }
+  try {
+    const department = await Department.findById(req.params.id);
+    if (!department) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Department is not found!",
+      });
+    }
 
-        // Delete the department
-        await Department.findByIdAndDelete(req.params.id);
-        res.status(200).json({
-            status: "Success",
-            message: "Department Deleted Successfully!"
-        });
-    }
-    catch(err){
-        res.status(500).json({
-            status: "Error",
-            message: err.message
-        });
-    }
+    // Delete the department
+    await Department.findByIdAndDelete(req.params.id);
+    res.status(200).json({
+      status: "Success",
+      message: "Department Deleted Successfully!",
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
 };
-
 
 // Update a Department
 export const updateDepartment = async (req, res) => {
-    const {name, description} = req.body;
+  const { name, description } = req.body;
 
-    try{
-        const department = await Department.findById(req.params.id);
-        if(!department){
-            return res.status(404).json({
-                status: "Error",
-                message: "Department not found!"
-            });
-        }
+  try {
+    const department = await Department.findById(req.params.id);
+    if (!department) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Department not found!",
+      });
+    }
 
-        // Update Department
-        const departmentToUpdate = await Department.findByIdAndUpdate(
-            req.params.id,
-            {
-                name,
-                description
-            },
-            {new: true}
-        );
-        res.status(200).json(departmentToUpdate);
-    }
-    catch(err){
-        res.status(500).json({
-            status: "Error",
-            message: err.message
-        });
-    }
+    // Update Department
+    const departmentToUpdate = await Department.findByIdAndUpdate(
+      req.params.id,
+      {
+        name,
+        description,
+      },
+      { new: true },
+    );
+    res.status(200).json(departmentToUpdate);
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
 };
