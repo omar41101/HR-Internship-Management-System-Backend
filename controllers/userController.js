@@ -5,6 +5,11 @@ import Department from "../models/Department.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import { sendEmail } from "../utils/sendEmail.js";
+import { decrypt } from "../utils/cryptoUtils.js";
+import { Parser } from "json2csv";
+import ExcelJS from "exceljs";
+import cloudinary from "../config/cloudinary.js";
 import {
   isValidEmail,
   isEmpty,
@@ -12,16 +17,10 @@ import {
   isWithinRange,
   generatePassword,
 } from "../middleware/UserValidation.js";
-import { sendEmail } from "../utils/sendEmail.js";
-import { decrypt } from "../utils/cryptoUtils.js";
-import { Parser } from "json2csv";
-import ExcelJS from "exceljs";
 
 dotenv.config();
 
-// -------------------- DEAL WITH THE PICTURE IMAGE WITH CLOUDINARY AND MULTER: TOOO DOOO --------------------
 // -------------------- IMPLEMENT SWAGGER FROM OMAR PUSHED TO GITHUB TO MAIN: TOOO DOOO --------------------
-// -------------------- HAVE TO CHANGE PASSWORD AFTER YOU LOGIN THE FIRST TIME : TOOO DOOO --------------------
 
 // Login Functionality (All users can do it)
 export const login = async (req, res) => {
@@ -120,7 +119,6 @@ export const addUser = async (req, res) => {
       phoneNumber,
       position,
       bonus,
-      profileImageURL,
       bio,
       leaveBalance,
       socialStatus,
@@ -306,7 +304,6 @@ export const addUser = async (req, res) => {
       phoneNumber: validatedPhoneNumber,
       position,
       bonus,
-      profileImageURL,
       bio,
       leaveBalance,
       socialStatus,
@@ -918,6 +915,66 @@ export const exportUsersToExcel = async (req, res) => {
   } catch (err) {
     res.status(500).json({ status: "Error", 
       message: err.message 
+    });
+  }
+};
+
+// Upload Profile Image to Cloudinary
+export const uploadProfileImage = async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    // Check for user existence
+    const existingUser = await User.findById(userId);
+    if (!existingUser) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found",
+      });
+    }
+
+    // Check if the image is provided
+    if (!req.file) {
+      return res.status(400).json({
+        status: "Error",
+        message: "No file uploaded",
+      });
+    }
+
+    // Upload to Cloudinary
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "hrcom/profile_images",
+          resource_type: "image",
+        },
+        (error, uploadResult) => {
+          if (error) reject(error);
+          else resolve(uploadResult);
+        }
+      );
+
+      stream.end(req.file.buffer); // Upload buffer directly
+    });
+
+    // Update the user's profileImageURL 
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { profileImageURL: result.secure_url },
+      { returnDocument: 'after' }
+    );
+
+    res.status(200).json({
+      status: "Success",
+      message: "Profile image updated successfully!",
+      profileImageURL: result.secure_url,
+      user,
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
     });
   }
 };

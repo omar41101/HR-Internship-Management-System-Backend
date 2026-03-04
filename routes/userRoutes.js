@@ -10,8 +10,10 @@ import {
     filterUsers,
     toggleUserStatus,
     exportUsersToCSV,
-    exportUsersToExcel
+    exportUsersToExcel,
+    uploadProfileImage
 } from "../controllers/userController.js";
+import { upload } from "../middleware/upload.js";
 import authorizeRole from "../middleware/rolePermission.js";
 
 const router = express.Router();
@@ -48,5 +50,8 @@ router.get("/users/export/csv", authorizeRole("Admin"), exportUsersToCSV);
 
 // Route to export users to Excel
 router.get("/users/export/excel", authorizeRole("Admin"), exportUsersToExcel);
+
+// Route to upload the profile picture
+router.post("/users/:id/profile-image", upload.single("profileImage"), uploadProfileImage);
 
 export default router;
