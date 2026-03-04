@@ -15,22 +15,27 @@ export const isEmpty = (field) => {
 }
 
 // Phone validation
-export function validatePhoneNumber(phone) {
-  if (!phone) return null;
+export function validatePhoneNumber(code, number) {
+  if (!code || !number) return null;
 
   try {
-    // Parse the number, will throw if invalid
-    const number = phoneUtil.parseAndKeepRawInput(phone);
+    // Combine the country code + phone number
+    const fullPhoneNumber = `${code}${number}`;
 
-    if (!phoneUtil.isValidNumber(number)) return null;
+    // Parse the number
+    const parsed = phoneUtil.parseAndKeepRawInput(fullPhoneNumber);
 
-    return phoneUtil.format(number, PNF.E164); // +216XXXXXXX
+    // Check validity
+    if (!phoneUtil.isValidNumber(parsed)) return null;
+
+    // Return formatted E.164 number (Ex: +21612345678)
+    return phoneUtil.format(parsed, PNF.E164);
   } catch (err) {
     return null;
   }
 }
 
-// Basic URL validation
+// Basic URL validation (For the profile image urls)
 export const isValidURL = (url) => {
   if (!url) return true; // Optional field
   try {
@@ -47,7 +52,7 @@ export const isWithinRange = (str, min, max) => {
   return str.length >= min && str.length <= max;
 }
 
-// Generate a random secure password with the role code appended
+// Password Generator + secret code 
 export const generatePassword = (code, length = 12) => {
   const baseLength = length - code.length;
   const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

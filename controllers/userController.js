@@ -14,10 +14,12 @@ import {
 } from "../middleware/UserValidation.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { decrypt } from "../utils/cryptoUtils.js";
+import { Parser } from "json2csv";
+import ExcelJS from "exceljs";
 
 dotenv.config();
 
-// -------------------- DEAL WITH THE PICTURE AND VALIDATE THE PHONE NUMBER : TOOO DOOO --------------------
+// -------------------- DEAL WITH THE PICTURE IMAGE: TOOO DOOO --------------------
 // -------------------- HAVE TO CHANGE PASSWORD AFTER YOU LOGIN THE FIRST TIME : TOOO DOOO --------------------
 
 // Login Functionality (All users can do it)
@@ -113,6 +115,7 @@ export const addUser = async (req, res) => {
       email,
       address,
       joinDate,
+      countryCode,
       phoneNumber,
       position,
       bonus,
@@ -146,7 +149,7 @@ export const addUser = async (req, res) => {
 
     if (!isValidEmail(email))
       errors.push({ field: "email", message: "Invalid email format" });
-    if (validatePhoneNumber(phoneNumber) === null)
+    if (validatePhoneNumber(countryCode, phoneNumber) === null)
       errors.push({
         field: "phoneNumber",
         message: "Invalid phone number format",
@@ -284,6 +287,9 @@ export const addUser = async (req, res) => {
       );
     }
 
+    // Get the full validated Phone number
+    const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
+
     // Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -296,7 +302,7 @@ export const addUser = async (req, res) => {
       password: hashedPassword,
       address,
       joinDate,
-      phoneNumber,
+      phoneNumber: validatedPhoneNumber,
       position,
       bonus,
       profileImageURL,
@@ -621,7 +627,9 @@ export const updateUser = async (req, res) => {
     }
 
     // Update the user
-    const user = await User.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
+    const user = await User.findByIdAndUpdate(id, updateData, {
+      returnDocument: "after",
+    });
 
     // If role changed, send by Email the new credentials to the User
     if (roleChanged) {
@@ -686,10 +694,25 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-// Search User (Only for Admins) STILL NOT DONE
+// Search User (Only for Admins)
 export const searchUser = async (req, res) => {
   try {
-    
+    // The user query (Search by name/lastname and email)
+    const { q } = req.query;
+
+    // Search
+    const users = await User.find({
+      $or: [
+        { name: { $regex: q, $options: "i" } },
+        { lastName: { $regex: q, $options: "i" } },
+        { email: { $regex: q, $options: "i" } },
+      ],
+    })
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id", "name lastName email"); // To get the role, department and supervisor names in the response
+
+    res.status(200).json(users);
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -698,6 +721,198 @@ export const searchUser = async (req, res) => {
   }
 };
 
-// Toggle User Status (Only for Admins) STILL NOT DONE
+// Filter users by Role, Department or status (only for Admins)
+export const filterUsers = async (req, res) => {
+  try {
+    const { role, department, status } = req.query; // Get the filters wanted
 
-// Export User Status (Only for Admins) STILL NOT DONE
+    let roleId, departmentId;
+
+    // Get Role ID if role filter exists
+    if (role) {
+      // Check the role existence
+      const roleDoc = await UserRole.findOne({
+        name: { $regex: `^${role}$`, $options: "i" },
+      });
+
+      if (!roleDoc) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Role not found!",
+        });
+      }
+      roleId = roleDoc._id;
+    }
+
+    // Get Department ID if department filter exists
+    if (department) {
+      // Check the department existence
+      const deptDoc = await Department.findOne({
+        name: { $regex: `^${department}$`, $options: "i" },
+      });
+
+      if (!deptDoc) {
+        return res.status(400).json({
+          status: "Error",
+          message: "Department not found!",
+        });
+      }
+      departmentId = deptDoc._id;
+    }
+
+    // Build the query dynamically
+    const query = {};
+    if (roleId) query.role_id = roleId;
+    if (departmentId) query.department_id = departmentId;
+    if (status) {
+      if (status === "Active") query.isActive = true;
+      else if (status === "Inactive") query.isActive = false;
+    }
+
+    // Execute query and populate relevant fields
+    const users = await User.find(query)
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id", "name lastName email")
+      .lean(); // Convert to plain JSON for the frontend later
+
+    res.status(200).json({
+      status: "Success",
+      data: users,
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Toggle User Status(Active/Inactive) (Only for Admins)
+export const toggleUserStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    // Check for user existence
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found",
+      });
+    }
+
+    // Toggle the user's status
+    user.isActive = !user.isActive;
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: `User has been ${user.isActive ? "activated" : "deactivated"}`,
+      data: { id: user._id, isActive: user.isActive },
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Export User to CSV format (Only for Admins)
+export const exportUsersToCSV = async (req, res) => {
+  try {
+    // Get the list of users
+    const users = await User.find()
+      .populate("role_id", "name")
+      .populate("department_id", "name")
+      .populate("supervisor_id", "name lastName email")
+      .lean(); // Transform to JSON for the frontend
+
+    // Map users to pre-format date and booleans
+    const formattedUsers = users.map(user => ({
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      role: user.role_id?.name,
+      department: user.department_id?.name,
+      isActive: user.isActive ? "true" : "false",
+      joinDate: new Date(user.joinDate).toLocaleDateString("en-GB")
+    }));
+    
+    // Specify the fields to export
+    const fields = [
+      "name",
+      "lastName",
+      "email",
+      "address",
+      "phoneNumber",
+      "role",
+      "department",
+      "isActive",
+      "joinDate",
+    ];
+
+    const parser = new Parser({ fields });
+    const csv = parser.parse(formattedUsers);
+
+    res.header("Content-Type", "text/csv");
+    res.attachment("users.csv");
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ 
+      status: "Error", 
+      message: err.message 
+    });
+  }
+};
+
+// Export User to Excel format (Only for Admins)
+export const exportUsersToExcel = async (req, res) => {
+  try {
+    // Get the list of users
+    const users = await User.find()
+      .populate("role_id", "name")
+      .populate("department_id", "name")
+      .populate("supervisor_id", "name lastName email")
+      .lean();
+
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Users");
+
+    sheet.columns = [
+      { header: "Name", key: "name", width: 20 },
+      { header: "Last Name", key: "lastName", width: 20 },
+      { header: "Email", key: "email", width: 30 },
+      { header: "Address", key: "address", width: 15 },
+      { header: "Phone", key: "phoneNumber", width: 15 },
+      { header: "Role", key: "role", width: 15 },
+      { header: "Department", key: "department", width: 20 },
+      { header: "Active", key: "isActive", width: 10 },
+      { header: "Join Date", key: "joinDate", width: 15 },
+    ];
+
+    users.forEach((user) =>
+      sheet.addRow({
+        ...user,
+        role: user.role_id?.name,
+        department: user.department_id?.name,
+        isActive: user.isActive ? "True" : "False",
+      }),
+    );
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
+    res.setHeader("Content-Disposition", "attachment; filename=users.xlsx");
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    res.status(500).json({ status: "Error", 
+      message: err.message 
+    });
+  }
+};

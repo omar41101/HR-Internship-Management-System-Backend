@@ -1,6 +1,9 @@
 // Importations
 import Department from "../models/Department.js";
 
+// --------------- WHEN THE DEPARTMENT IS MODIFIED ITS MODIFIED FOR ALL USER HAVING THAT DEPARTMENT -----
+// --------------- WHEN THE DEPARTMENT IS DELETED THE DEPAERTMENT OF ITS USERS ARE NOT ASSIGNED YET -----
+
 // Add new Department Functionnality
 export const addDepartment = async (req, res) => {
   const { name, description } = req.body; // Get the new department credentials
