@@ -53,7 +53,7 @@ export const addDepartment = async (req, res) => {
     });
   }
 };
-
+ 
 // Get All Departments Functionnality
 export const getAllDepartments = async (req, res) => {
   try {

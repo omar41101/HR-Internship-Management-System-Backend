@@ -20,8 +20,6 @@ import {
 
 dotenv.config();
 
-// -------------------- IMPLEMENT SWAGGER FROM OMAR PUSHED TO GITHUB TO MAIN: TOOO DOOO --------------------
-
 // Login Functionality (All users can do it)
 export const login = async (req, res) => {
   const { email, password } = req.body;

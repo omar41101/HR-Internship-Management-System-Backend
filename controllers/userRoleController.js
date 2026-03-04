@@ -60,7 +60,7 @@ export const addUserRole = async (req, res) => {
     });
   }
 };
-
+ 
 // Get All Roles Functionnality
 export const getAllUserRoles = async (req, res) => {
   try {
