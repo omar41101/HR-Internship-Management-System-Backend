@@ -1,6 +1,8 @@
 // Importations
 import express from "express";
 import dotenv from "dotenv";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./swagger.js";
 import connectMongo from "./config/db.js";
 
 import userRoutes from "./routes/userRoutes.js";
@@ -11,6 +13,9 @@ const app = express();
 dotenv.config();
 
 app.use(express.json());
+
+// Swagger API Documentation
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Connect to MongoDB
 connectMongo();
