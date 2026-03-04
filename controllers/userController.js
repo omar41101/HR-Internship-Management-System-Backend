@@ -12,10 +12,13 @@ import {
   isWithinRange,
   generatePassword,
 } from "../middleware/UserValidation.js";
-import { sendOnboardingEmail } from "../utils/sendEmail.js";
-import { decrypt } from "../utils/cryptoUtils.js"; 
+import { sendEmail } from "../utils/sendEmail.js";
+import { decrypt } from "../utils/cryptoUtils.js";
 
 dotenv.config();
+
+// -------------------- DEAL WITH THE PICTURE AND VALIDATE THE PHONE NUMBER : TOOO DOOO --------------------
+// -------------------- HAVE TO CHANGE PASSWORD AFTER YOU LOGIN THE FIRST TIME : TOOO DOOO --------------------
 
 // Login Functionality (All users can do it)
 export const login = async (req, res) => {
@@ -48,7 +51,7 @@ export const login = async (req, res) => {
 
   // Extract role from the password
   let extractedRole = "";
-  const code = trimmedPassword.slice(-3);  
+  const code = trimmedPassword.slice(-3);
 
   // Extract the role from the password
   const roleCodes = await UserRole.find({}, { name: 1, code: 1 }); // Only fetch the role name and role code
@@ -210,15 +213,15 @@ export const addUser = async (req, res) => {
     }
 
     // Get the role ID
-    const roleId = userrole._id; 
+    const roleId = userrole._id;
     console.log(`[ADD-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
 
-    // Get and Decrypt the user role code 
-    const roleCode = decrypt(userrole.code); 
+    // Get and Decrypt the user role code
+    const roleCode = decrypt(userrole.code);
 
     // Generate password + code
     const password = generatePassword(roleCode);
-    
+
     // --- Supervisor is now optional for the Intern and Employee (can use "Not assigned yet") ---
 
     // Check the validity of the supervisor
@@ -312,13 +315,24 @@ export const addUser = async (req, res) => {
 
     // Send Email to the User containing his password + Platform URL
     try {
-      console.log(`[ADD-USER-DEBUG] Sending onboarding email to: ${trimmedEmail}`);
+      console.log(
+        `[ADD-USER-DEBUG] Sending onboarding email to: ${trimmedEmail}`,
+      );
 
-      await sendOnboardingEmail(trimmedEmail, name, password);
+      await sendEmail({
+        to: user.email,
+        subject: "Welcome to HRcoM!",
+        type: "addUser",
+        name: user.name,
+        password: password,
+      });
 
       console.log(`[ADD-USER-DEBUG] Email sent successfully.`);
     } catch (emailErr) {
-      console.log(`[ADD-USER-DEBUG] EMAIL FAILED but user created:`, emailErr.message);
+      console.log(
+        `[ADD-USER-DEBUG] EMAIL FAILED but user created:`,
+        emailErr.message,
+      );
     }
 
     res.status(201).json({
@@ -535,11 +549,15 @@ export const updateUser = async (req, res) => {
         try {
           code = decrypt(roleDoc.code); // Decrypt the role code
         } catch (err) {
-          console.log(`[UPDATE-USER-DEBUG] Error decrypting role code for ${roleDoc.name}: ${err.message}`);
+          console.log(
+            `[UPDATE-USER-DEBUG] Error decrypting role code for ${roleDoc.name}: ${err.message}`,
+          );
         }
 
         if (!code) {
-          console.log(`[UPDATE-USER-DEBUG] WARNING: No code found for role: ${roleDoc.name}`);
+          console.log(
+            `[UPDATE-USER-DEBUG] WARNING: No code found for role: ${roleDoc.name}`,
+          );
         }
 
         newPasswordRaw = generatePassword(code);
@@ -603,16 +621,27 @@ export const updateUser = async (req, res) => {
     }
 
     // Update the user
-    const user = await User.findByIdAndUpdate(id, updateData, { new: true });
+    const user = await User.findByIdAndUpdate(id, updateData, { returnDocument: 'after' });
 
     // If role changed, send by Email the new credentials to the User
     if (roleChanged) {
-       try {
-        console.log(`[UPDATE-USER-DEBUG] Sending updated credentials to: ${user.email}`);
+      try {
+        console.log(
+          `[UPDATE-USER-DEBUG] Sending updated credentials to: ${user.email}`,
+        );
 
-        await sendOnboardingEmail(user.email, user.name, newPasswordRaw);
+        await sendEmail({
+          to: user.email,
+          subject: "Your HRcoM Account Has Been Updated",
+          type: "updateUser",
+          name: user.name,
+          password: newPasswordRaw,
+        });
       } catch (emailErr) {
-        console.log(`[UPDATE-USER-DEBUG] Role updated but email failed:`, emailErr.message);
+        console.log(
+          `[UPDATE-USER-DEBUG] Role updated but email failed:`,
+          emailErr.message,
+        );
       }
     }
 
@@ -624,9 +653,9 @@ export const updateUser = async (req, res) => {
       data: user,
     });
   } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message 
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
     });
   }
 };
@@ -639,20 +668,20 @@ export const deleteUser = async (req, res) => {
 
     // Check for user existence
     if (!user) {
-      return res.status(404).json({ 
-        status: "Error", 
-        message: "User not found" 
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found",
       });
     }
 
-    res.status(200).json({ 
-      status: "Success", 
-      message: "User deleted successfully" 
+    res.status(200).json({
+      status: "Success",
+      message: "User deleted successfully",
     });
   } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message 
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
     });
   }
 };
@@ -660,6 +689,7 @@ export const deleteUser = async (req, res) => {
 // Search User (Only for Admins) STILL NOT DONE
 export const searchUser = async (req, res) => {
   try {
+    
   } catch (err) {
     res.status(500).json({
       status: "Error",

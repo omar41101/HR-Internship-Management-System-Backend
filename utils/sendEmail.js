@@ -1,43 +1,31 @@
 import nodemailer from "nodemailer";
+import { wrapEmailContent } from "./emailLayout.js";
+import { getAddUserContent, getUpdateUserContent } from "./emailContent.js";
 
-export const sendOnboardingEmail = async (to, name, password) => {
+export const sendEmail = async ({ to, subject, type, name, password }) => {
+  let bodyHtml;
+
+  // Decide the content based on type
+  if (type === "addUser") bodyHtml = getAddUserContent({ name, password });
+  else if (type === "updateUser")
+    bodyHtml = getUpdateUserContent({ name, password });
+  else bodyHtml = `<p>Default message</p>`;
+
+  const htmlContent = wrapEmailContent(bodyHtml);
+
   try {
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
+      port: 587,
       secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
     });
-
-    const html = `
-      <div style="font-family: Arial; padding: 20px;">
-        <h2>Welcome to HRcoM, ${name}!</h2>
-
-        <p>Your account has been added successfully!</p>
-        
-        <p><strong>Your Login Email:</strong> ${to}</p>
-        <p><strong>Your Password:</strong> ${password}</p>
-
-        <br>
-        Access the Platform via this link: <a href="${process.env.PLATFORM_URL}"
-          style="display:inline-block; background:#4CAF50; color:#fff; padding:12px 20px; text-decoration:none; border-radius:5px;"> 
-          Go to HRcoM
-        </a>
-
-        <br><br>
-
-        <p>Best regards,<br>HRcoM</p>
-      </div>
-    `;
 
     await transporter.sendMail({
       from: `"HRcoM" <${process.env.SMTP_USER}>`,
       to,
-      subject: "Your Account Login Details",
-      html,
+      subject,
+      html: htmlContent,
     });
 
     console.log("Onboarding email sent to:", to);

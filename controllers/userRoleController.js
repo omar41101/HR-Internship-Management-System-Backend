@@ -3,6 +3,9 @@ import UserRole from "../models/UserRole.js";
 import { generateRoleCode } from "../middleware/roleService.js";
 import { encrypt } from "../utils/cryptoUtils.js";
 
+// --------------- WHEN THE ROLE IS MODIFIED ITS MODIFIED FOR ALL USER HAVING THAT ROLE -----
+// --------------- WHEN THE ROLE IS DELETED THE ROLE OF ITS USERS ARE NOT ASSIGNED YET -----
+
 // Add new Role Functionnality
 export const addUserRole = async (req, res) => {
   const { name, description } = req.body; // Get the new role credentials
