@@ -1,8 +1,6 @@
 // Importations
 import Department from "../models/Department.js";
-
-// --------------- WHEN THE DEPARTMENT IS MODIFIED ITS MODIFIED FOR ALL USER HAVING THAT DEPARTMENT -----
-// --------------- WHEN THE DEPARTMENT IS DELETED THE DEPAERTMENT OF ITS USERS ARE NOT ASSIGNED YET -----
+import User from "../models/User.js";
 
 // Add new Department Functionnality
 export const addDepartment = async (req, res) => {
@@ -25,7 +23,19 @@ export const addDepartment = async (req, res) => {
         message: "Department already existing!",
       });
     }
-    
+
+    // Check for department name existence
+    const existingDepartmentName = await Department.findOne({ name: name.trim() });
+    if (
+      existingDepartmentName &&
+      existingDepartmentName._id.toString() !== req.params.id
+    ) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Department name already exists!",
+      });
+    }
+
     // Save the new department in the Database
     let department = await Department.create({
       name,
@@ -80,6 +90,7 @@ export const getDepartmentById = async (req, res) => {
 // Delete a Department (All admins can do it)
 export const deleteDepartment = async (req, res) => {
   try {
+    // Check for department existence
     const department = await Department.findById(req.params.id);
     if (!department) {
       return res.status(404).json({
@@ -87,6 +98,23 @@ export const deleteDepartment = async (req, res) => {
         message: "Department is not found!",
       });
     }
+
+    // Find the "Not assigned" department and create it if it doesn't exist
+    let notAssignedDepartment = await Department.findOne({
+      name: "Not assigned",
+    });
+    if (!notAssignedDepartment) {
+      notAssignedDepartment = await Department.create({
+        name: "Not assigned",
+        description: "Default department for unassigned users",
+      });
+    }
+
+    // Reassign users having the deleted department to "Not assigned"
+    await User.updateMany(
+      { department_id: department._id },
+      { $set: { department_id: notAssignedDepartment._id } },
+    );
 
     // Delete the department
     await Department.findByIdAndDelete(req.params.id);
@@ -106,7 +134,16 @@ export const deleteDepartment = async (req, res) => {
 export const updateDepartment = async (req, res) => {
   const { name, description } = req.body;
 
+  // Check for empty name field (required)
+  if (!name || name.trim() === "") {
+    return res.status(400).json({
+      status: "Error",
+      message: "The name field must be filled!",
+    });
+  }
+
   try {
+    // Check for department existence
     const department = await Department.findById(req.params.id);
     if (!department) {
       return res.status(404).json({
@@ -115,6 +152,21 @@ export const updateDepartment = async (req, res) => {
       });
     }
 
+    // Check for department name existence
+    const existingDepartment = await Department.findOne({ name: name.trim() });
+    if (
+      existingDepartment &&
+      existingDepartment._id.toString() !== req.params.id
+    ) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Department name already exists!",
+      });
+    }
+
+    // Get the old department name
+    const oldDepartmentName = department.name; 
+
     // Update Department
     const departmentToUpdate = await Department.findByIdAndUpdate(
       req.params.id,
@@ -122,7 +174,13 @@ export const updateDepartment = async (req, res) => {
         name,
         description,
       },
-      { new: true },
+      { returnDocument: "after" },
+    );
+
+    // Update users having this department with the new department name
+    await User.updateMany(
+      { department: oldDepartmentName },
+      { department: departmentToUpdate.name },
     );
     res.status(200).json(departmentToUpdate);
   } catch (err) {

@@ -21,7 +21,6 @@
     "google-libphonenumber": "^3.2.44",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
-    "libphonenumber-js": "^1.12.38",
     "mongoose": "^9.2.1",
     "nodemailer": "^8.0.1"
   },

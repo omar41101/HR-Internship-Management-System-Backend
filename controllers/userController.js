@@ -19,7 +19,8 @@ import ExcelJS from "exceljs";
 
 dotenv.config();
 
-// -------------------- DEAL WITH THE PICTURE IMAGE: TOOO DOOO --------------------
+// -------------------- DEAL WITH THE PICTURE IMAGE WITH CLOUDINARY AND MULTER: TOOO DOOO --------------------
+// -------------------- IMPLEMENT SWAGGER FROM OMAR PUSHED TO GITHUB TO MAIN: TOOO DOOO --------------------
 // -------------------- HAVE TO CHANGE PASSWORD AFTER YOU LOGIN THE FIRST TIME : TOOO DOOO --------------------
 
 // Login Functionality (All users can do it)
@@ -477,7 +478,7 @@ export const updateUser = async (req, res) => {
       errors.push({ field: "email", message: "Invalid email format" });
     if (
       updateData.phoneNumber &&
-      validatePhoneNumber(updateData.phoneNumber) === null
+      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null
     )
       errors.push({
         field: "phoneNumber",
@@ -626,10 +627,14 @@ export const updateUser = async (req, res) => {
       }
     }
 
+    // Get the full validated phone number
+    updateData.phoneNumber = validatePhoneNumber(
+      updateData.countryCode,
+      updateData.phoneNumber,
+    );
+
     // Update the user
-    const user = await User.findByIdAndUpdate(id, updateData, {
-      returnDocument: "after",
-    });
+    const user = await User.findByIdAndUpdate(id, updateData, {returnDocument: "after"});
 
     // If role changed, send by Email the new credentials to the User
     if (roleChanged) {
@@ -640,7 +645,7 @@ export const updateUser = async (req, res) => {
 
         await sendEmail({
           to: user.email,
-          subject: "Your HRcoM Account Has Been Updated",
+          subject: "HRcoM Account Update",
           type: "updateUser",
           name: user.name,
           password: newPasswordRaw,
