@@ -72,7 +72,7 @@ router.post("/login", login);
  *       500:
  *         description: Server error
  */
-router.post("/users", authorizeRole("Admin"), addUser);
+router.post("/users", addUser);
 
 /**
  * @swagger

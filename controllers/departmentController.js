@@ -1,6 +1,6 @@
-// Importations
 import Department from "../models/Department.js";
 import User from "../models/User.js";
+import { logAuditAction } from "../utils/logger.js";
 
 // Add new Department Functionnality
 export const addDepartment = async (req, res) => {
@@ -42,9 +42,19 @@ export const addDepartment = async (req, res) => {
       description,
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       status: "Success",
       data: { department },
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "CREATE_DEPARTMENT",
+      targetType: "Department",
+      targetId: department._id,
+      targetName: department.name,
+      ipAddress: req.ip,
     });
   } catch (err) {
     res.status(500).json({
@@ -53,7 +63,7 @@ export const addDepartment = async (req, res) => {
     });
   }
 };
- 
+
 // Get All Departments Functionnality
 export const getAllDepartments = async (req, res) => {
   try {
@@ -122,6 +132,16 @@ export const deleteDepartment = async (req, res) => {
       status: "Success",
       message: "Department Deleted Successfully!",
     });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "DELETE_DEPARTMENT",
+      targetType: "Department",
+      targetId: department._id,
+      targetName: department.name,
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -165,7 +185,7 @@ export const updateDepartment = async (req, res) => {
     }
 
     // Get the old department name
-    const oldDepartmentName = department.name; 
+    const oldDepartmentName = department.name;
 
     // Update Department
     const departmentToUpdate = await Department.findByIdAndUpdate(
@@ -183,6 +203,17 @@ export const updateDepartment = async (req, res) => {
       { department: departmentToUpdate.name },
     );
     res.status(200).json(departmentToUpdate);
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPDATE_DEPARTMENT",
+      targetType: "Department",
+      targetId: departmentToUpdate._id,
+      targetName: departmentToUpdate.name,
+      details: req.body,
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",

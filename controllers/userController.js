@@ -17,6 +17,7 @@ import {
   isWithinRange,
   generatePassword,
 } from "../middleware/UserValidation.js";
+import { logAuditAction } from "../utils/logger.js";
 
 dotenv.config();
 
@@ -58,8 +59,12 @@ export const login = async (req, res) => {
 
   // Find the role that matches the extracted code
   const matchedRole = roleCodes.find((role) => {
-    const decryptedCode = decrypt(role.code);
-    return decryptedCode === code;
+    try {
+      const decryptedCode = decrypt(role.code);
+      return decryptedCode === code;
+    } catch (err) {
+      return false;
+    }
   });
 
   if (!matchedRole) {
@@ -342,6 +347,16 @@ export const addUser = async (req, res) => {
       message: "User created successfully!",
       result: user,
     });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "CREATE_USER",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -384,10 +399,10 @@ export const getAllUsers = async (req, res) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-            id: user.supervisor_id._id,
-            name: user.supervisor_id.name,
-            lastName: user.supervisor_id.lastName,
-          }
+          id: user.supervisor_id._id,
+          name: user.supervisor_id.name,
+          lastName: user.supervisor_id.lastName,
+        }
         : null,
     }));
 
@@ -417,36 +432,36 @@ export const getUserById = async (req, res) => {
     // Format the user data
     const formattedUser = user
       ? {
-          id: user._id,
-          name: user.name,
-          lastName: user.lastName,
-          email: user.email,
-          address: user.address,
-          phoneNumber: user.phoneNumber,
-          bonus: user.bonus,
-          profileImageURL: user.profileImageURL,
-          bio: user.bio,
-          leaveBalance: user.leaveBalance,
-          socialStatus: user.socialStatus,
-          hasChildren: user.hasChildren,
-          nbOfChildren: user.nbOfChildren,
-          isActive: user.isActive,
-          isAvailable: user.isAvailable,
-          joinDate: user.joinDate,
-          role: user.role_id
-            ? { id: user.role_id._id, name: user.role_id.name }
-            : null,
-          department: user.department_id
-            ? { id: user.department_id._id, name: user.department_id.name }
-            : null,
-          supervisor: user.supervisor_id
-            ? {
-                id: user.supervisor_id._id,
-                name: user.supervisor_id.name,
-                lastName: user.supervisor_id.lastName,
-              }
-            : null,
-        }
+        id: user._id,
+        name: user.name,
+        lastName: user.lastName,
+        email: user.email,
+        address: user.address,
+        phoneNumber: user.phoneNumber,
+        bonus: user.bonus,
+        profileImageURL: user.profileImageURL,
+        bio: user.bio,
+        leaveBalance: user.leaveBalance,
+        socialStatus: user.socialStatus,
+        hasChildren: user.hasChildren,
+        nbOfChildren: user.nbOfChildren,
+        isActive: user.isActive,
+        isAvailable: user.isAvailable,
+        joinDate: user.joinDate,
+        role: user.role_id
+          ? { id: user.role_id._id, name: user.role_id.name }
+          : null,
+        department: user.department_id
+          ? { id: user.department_id._id, name: user.department_id.name }
+          : null,
+        supervisor: user.supervisor_id
+          ? {
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
+          : null,
+      }
       : null;
 
     res.status(200).json(formattedUser);
@@ -629,7 +644,7 @@ export const updateUser = async (req, res) => {
     );
 
     // Update the user
-    const user = await User.findByIdAndUpdate(id, updateData, {returnDocument: "after"});
+    const user = await User.findByIdAndUpdate(id, updateData, { returnDocument: "after" });
 
     // If role changed, send by Email the new credentials to the User
     if (roleChanged) {
@@ -660,6 +675,17 @@ export const updateUser = async (req, res) => {
         : "User updated successfully.",
       data: user,
     });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPDATE_USER",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      details: req.body, // Log the changes requested
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -685,6 +711,16 @@ export const deleteUser = async (req, res) => {
     res.status(200).json({
       status: "Success",
       message: "User deleted successfully",
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "DELETE_USER",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: req.ip,
     });
   } catch (err) {
     res.status(500).json({
@@ -811,6 +847,17 @@ export const toggleUserStatus = async (req, res) => {
       message: `User has been ${user.isActive ? "activated" : "deactivated"}`,
       data: { id: user._id, isActive: user.isActive },
     });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "TOGGLE_STATUS",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      details: { isActive: user.isActive },
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -840,7 +887,7 @@ export const exportUsersToCSV = async (req, res) => {
       isActive: user.isActive ? "true" : "false",
       joinDate: new Date(user.joinDate).toLocaleDateString("en-GB")
     }));
-    
+
     // Specify the fields to export
     const fields = [
       "name",
@@ -861,9 +908,9 @@ export const exportUsersToCSV = async (req, res) => {
     res.attachment("users.csv");
     res.send(csv);
   } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message 
+    res.status(500).json({
+      status: "Error",
+      message: err.message
     });
   }
 };
@@ -911,8 +958,9 @@ export const exportUsersToExcel = async (req, res) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    res.status(500).json({ status: "Error", 
-      message: err.message 
+    res.status(500).json({
+      status: "Error",
+      message: err.message
     });
   }
 };
@@ -967,6 +1015,16 @@ export const uploadProfileImage = async (req, res) => {
       message: "Profile image updated successfully!",
       profileImageURL: result.secure_url,
       user,
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPLOAD_IMAGE",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: req.ip,
     });
 
   } catch (err) {

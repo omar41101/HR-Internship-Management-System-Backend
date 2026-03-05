@@ -1,8 +1,8 @@
-// Importations
 import UserRole from "../models/UserRole.js";
 import User from "../models/User.js";
 import { generateRoleCode } from "../middleware/roleService.js";
 import { encrypt } from "../utils/cryptoUtils.js";
+import { logAuditAction } from "../utils/logger.js";
 
 // Add new Role Functionnality
 export const addUserRole = async (req, res) => {
@@ -49,9 +49,19 @@ export const addUserRole = async (req, res) => {
       code: encryptedCode,
     });
 
-    return res.status(201).json({
+    res.status(201).json({
       status: "Success",
       data: { code: generatedCode, userRole },
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "CREATE_ROLE",
+      targetType: "UserRole",
+      targetId: userRole._id,
+      targetName: userRole.name,
+      ipAddress: req.ip,
     });
   } catch (err) {
     res.status(500).json({
@@ -60,7 +70,7 @@ export const addUserRole = async (req, res) => {
     });
   }
 };
- 
+
 // Get All Roles Functionnality
 export const getAllUserRoles = async (req, res) => {
   try {
@@ -106,13 +116,13 @@ export const deleteUserRole = async (req, res) => {
       });
     }
 
-    // Find the "Not assigned" role and create it if it doesn't exist
+    // Find the role and create if missing
     let notAssignedRole = await UserRole.findOne({ name: "Not assigned" });
     if (!notAssignedRole) {
       notAssignedRole = await UserRole.create({
         name: "Not assigned",
         description: "Default role for unassigned users",
-        code: "000",
+        code: encrypt("000"),
       });
     }
 
@@ -127,6 +137,16 @@ export const deleteUserRole = async (req, res) => {
     res.status(200).json({
       status: "Success",
       message: "User Role Deleted Successfully!",
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "DELETE_ROLE",
+      targetType: "UserRole",
+      targetId: userRole._id,
+      targetName: userRole.name,
+      ipAddress: req.ip,
     });
   } catch (err) {
     res.status(500).json({
@@ -187,6 +207,17 @@ export const updateUserRole = async (req, res) => {
     );
 
     res.status(200).json(userRoleToUpdate);
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPDATE_ROLE",
+      targetType: "UserRole",
+      targetId: userRoleToUpdate._id,
+      targetName: userRoleToUpdate.name,
+      details: req.body,
+      ipAddress: req.ip,
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
