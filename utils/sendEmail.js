@@ -1,8 +1,8 @@
 import nodemailer from "nodemailer";
 import { wrapEmailContent } from "./emailLayout.js";
-import { getAddUserContent, getUpdateUserContent, getResendOTPContent } from "./emailContent.js";
+import { getAddUserContent, getUpdateUserContent, getResendOTPContent, getForgetPasswordValidationContent } from "./emailContent.js";
 
-export const sendEmail = async ({ to, subject, type, name, password, code }) => {
+export const sendEmail = async ({ to, subject, type, name, password, code, resetLink }) => {
   let bodyHtml;
 
   // Decide the content based on type
@@ -17,6 +17,10 @@ export const sendEmail = async ({ to, subject, type, name, password, code }) => 
     
     case "resendOTP":
       bodyHtml = getResendOTPContent({ name, code });
+      break;
+
+    case "forgetPasswordRequest":
+      bodyHtml = getForgetPasswordValidationContent({ name, resetLink });
       break;
 
     default:

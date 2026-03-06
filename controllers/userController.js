@@ -9,6 +9,7 @@ import { sendEmail } from "../utils/sendEmail.js";
 import { Parser } from "json2csv";
 import ExcelJS from "exceljs";
 import cloudinary from "../config/cloudinary.js";
+import crypto from "crypto";
 import {
   isValidEmail,
   isEmpty,
@@ -39,6 +40,16 @@ export const login = async (req, res) => {
       });
     }
 
+    // Get the user role
+    const userRole = await UserRole.findById(user.role_id);
+    if (!userRole) {
+      console.log(`[LOGIN-DEBUG] Role not found for user: ${trimmedEmail}`);
+      return res.status(404).json({
+        status: "Error",
+        message: "User role not found!",
+      });
+    }
+
     // Compare password
     const isMatch = await bcrypt.compare(trimmedPassword, user.password);
     if (!isMatch) {
@@ -53,19 +64,16 @@ export const login = async (req, res) => {
     // For the Frontend, if the account is not verified, we redirect to the OTP code form
     if (!user.isVerified) {
       return res.status(200).json({
-        status: "OTPVerificationRequired",
+        status: "Success but OTPVerificationRequired",
         message: "Account not verified!",
-        userId: user._id,
       });
     }
 
-    // Get the user role
-    const userRole = await UserRole.findById(user.role_id);
-    if (!userRole) {
-      console.log(`[LOGIN-DEBUG] Role not found for user: ${trimmedEmail}`);
-      return res.status(404).json({
-        status: "Error",
-        message: "User role not found!",
+    // Before access the user's Dashboard, Reset the password if not already done
+    if (user.mustResetPassword) {
+      return res.status(200).json({
+        status: "Success but MustResetPassword",
+        message: "Please Reset your password before continuing!",
       });
     }
 
@@ -316,7 +324,7 @@ export const addUser = async (req, res) => {
 
       await sendEmail({
         to: user.email,
-        subject: "Welcome to HRcoM!",
+        subject: "Welcome to HRcoM! - Your Account Details",
         type: "addUser",
         name: user.name,
         password: password,
@@ -376,7 +384,7 @@ export const verifyUser = async (req, res) => {
     if (!(await bcrypt.compare(code, user.verificationCode))) {
       return res.status(400).json({
         status: "Error",
-        message: "Invalid verification code!",
+        message: "Invalid OTP Code!",
       });
     }
 
@@ -393,17 +401,19 @@ export const verifyUser = async (req, res) => {
     user.verificationCode = null;
     user.verificationCodeExpires = null;
 
+    user.mustResetPassword = true; // To redirect to the must reset password form in the frontend
+
     // Save the changes
     await user.save();
 
     res.status(200).json({
       status: "Success",
-      message: "Account verified successfully",
+      message: "Account Verified Successfully!",
     });
   } catch (err) {
     return res.status(500).json({
       status: "Error",
-      message: "Server error",
+      message: err.message,
     });
   }
 };
@@ -423,11 +433,11 @@ export const resendVerificationCode = async (req, res) => {
       });
     }
 
-    // If already verified
+    // Check user already verified
     if (user.isVerified) {
       return res.status(400).json({
         status: "Error",
-        message: "Account already verified.",
+        message: "Account Already Verified!",
       });
     }
 
@@ -444,7 +454,8 @@ export const resendVerificationCode = async (req, res) => {
     if (user.resendCount >= 3) {
       return res.status(429).json({
         status: "Error",
-        message: "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+        message:
+          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
       });
     }
 
@@ -475,13 +486,174 @@ export const resendVerificationCode = async (req, res) => {
 
     return res.status(200).json({
       status: "Success",
-      message: "Verification code resent successfully!",
+      message: "OTP code resent successfully!",
     });
-
   } catch (err) {
     return res.status(500).json({
       status: "Error",
       message: err.message,
+    });
+  }
+};
+
+// Reset the Password after the first login (Obligatory for all users at the first Login)
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Check the user existence
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user){
+      return res.status(404).json({
+        status: "Error", 
+        message: "User not found!" 
+      });
+    } 
+
+    // Check password emptiness
+    if (isEmpty(newPassword)) {
+      return res.status(400).json({ 
+        status: "Error", 
+        message: "New Password Missing!" 
+      });
+    }
+
+    // Check the new password validity
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message:
+          "Password must be at least 8 characters long, and contain at least one capital letter!",
+      });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    user.mustResetPassword = false; // mark the password as reset
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password Reset successfully!",
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: "Error", 
+      message: err.message
+    });
+  }
+};
+
+// Forget password Request
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Check the user existance
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Generate a random token (32 bytes) to be sent to the user email
+    const token = crypto.randomBytes(32).toString("hex");
+    console.log(`[FORGET-PASSWORD-REQUEST-DEBUG] Generated reset token for ${email}: ${token}`);
+
+    // Hash the token and store in DB
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour (Token validity)
+    await user.save();
+
+    // Create a reset URL to be sent to the user's email
+    const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
+
+    // Send email
+    await sendEmail({
+      to: user.email,
+      subject: "HRcoM Password Reset",
+      type: "forgetPasswordRequest",
+      name: user.name,
+      resetLink: resetURL,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password reset link sent to your email!",
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: "Error", 
+      message: err.message 
+    });
+  }
+};
+
+// Forget password reset
+export const forgetPassword = async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    // Hash the incoming token to compare with DB
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Check the user existence and Reqest validation (token match and not expired)
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() }, // token not expired
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Invalid or Expired password reset token!",
+      });
+    }
+
+    // Check password if empty
+    if(isEmpty(newPassword)){
+      return res.status(400).json({
+        status: "Error",
+        message: "Missing Password!"
+      });
+    }
+
+    // Check the new password validity
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message:
+          "Password must be at least 8 characters long, and contain at least one capital letter!",
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+
+    // Clear reset token fields
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password Reset Successfully!",
+    });
+  } catch (err) {
+    res.status(500).json({ 
+      status: "Error", 
+      message: err.message 
     });
   }
 };

@@ -13,7 +13,10 @@ import {
   exportUsersToExcel,
   uploadProfileImage,
   verifyUser,
-  resendVerificationCode
+  resendVerificationCode,
+  resetPassword,
+  requestPasswordReset,
+  forgetPassword
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authorizeRole from "../middleware/rolePermission.js";
@@ -81,6 +84,15 @@ router.post("/users/verify-user", verifyUser);
 
 // Route to resend OTP code
 router.post("/users/resend-verification", resendVerificationCode);
+
+// Route to reset password
+router.post("/users/reset-password", resetPassword);
+
+// Route to forget password request
+router.post("/users/request-password-reset", requestPasswordReset);
+
+// Route to forget password reset
+router.post("/users/forget-password", forgetPassword);
 
 /**
  * @swagger

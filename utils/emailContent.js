@@ -26,7 +26,6 @@ export const getAddUserContent = ({ name, password, code }) => {
     <p> <strong> Important Notes: </strong> </p>
     <p>
       - Do not share this email or your credentials with anyone. </br>
-      - After logging in, you have to reset your password. 
     </p>
   `;
 };
@@ -51,11 +50,50 @@ export const getUpdateUserContent = ({ name, password, code }) => {
 // Email of resending OTP code
 export const getResendOTPContent = ({ name, code }) => {
   return `
+    <h2>OTP Code Sending request!</h2>
+
     <p> Dear ${name},</p>
     <p>You requested a new verification code to activate your HRcoM account.</p>
     <p>Your new verification code is:</p>
     <p><strong>OTP Code: </strong> ${code}</p>
 
     Please note that this code will expire in 24 hours!
+  `;
+};
+
+// Email of forget password validation link
+export const getForgetPasswordValidationContent = ({ name, resetLink }) => {
+  return `
+    <h2>Password Reset Request!</h2>
+
+    <p> Dear ${name},</p>
+    <p>You requested a password reset for your HRcoM account.</p>
+
+    <p>Please click the link below to reset your password:</p>
+
+    <div style="text-align: center; margin: 20px 0;">
+      <a href="${resetLink}" target="_blank" 
+        style="
+          display: inline-block;
+          padding: 12px 24px;
+          background-color: #232ED1;
+          color: #ffffff;
+          text-decoration: none;
+          font-weight: bold;
+          border-radius: 6px;
+          font-family: Arial, sans-serif;
+          font-size: 16px;
+        ">
+        Reset Password
+      </a>
+    </div>
+
+    <p><strong>Please note that this link will expire in 1 Hour!</strong></p>
+    
+    <p>If you did not request this, please ignore this email.</p>
+  
+    <p><strong>Please note that this link will expire in 1 Hour!</strong></p>
+    
+    <p>If you did not request this, please ignore this email!</p>
   `;
 };

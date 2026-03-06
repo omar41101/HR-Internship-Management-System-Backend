@@ -27,13 +27,25 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    resendCount: {  // Number of times the user has requested to resend the OTP code
+    resendCount: {
+      // Number of times the user has requested to resend the OTP code
       type: Number,
       default: 0,
     },
-    resendDate: {  // Date of the last OTP code resend request to control: 3 resends per day
+    resendDate: {
+      // Date of the last OTP code resend request to control: 3 resends per day
       type: Date,
       default: Date.now,
+    },
+    mustResetPassword: {
+      type: Boolean,
+      default: true, // all new users must reset their password on first login
+    },
+    resetPasswordToken: { 
+      type: String 
+    },
+    resetPasswordExpires: { 
+      type: Date 
     },
     address: {
       type: String,
@@ -87,8 +99,7 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    isAvailable: {
-      // Availability to take more projects
+    isAvailable: {  // Availability to take more projects
       type: Boolean,
       default: true,
     },
