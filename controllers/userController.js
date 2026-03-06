@@ -21,6 +21,10 @@ import { logAuditAction } from "../utils/logger.js";
 
 dotenv.config();
 
+// --------------------------------------------------------------------------- //
+// ---------------------------------- AUTH ----------------------------------- //
+// --------------------------------------------------------------------------- //
+
 // Login Functionality (All users can do it)
 export const login = async (req, res) => {
   try {
@@ -40,6 +44,17 @@ export const login = async (req, res) => {
       });
     }
 
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
     // Get the user role
     const userRole = await UserRole.findById(user.role_id);
     if (!userRole) {
@@ -50,10 +65,26 @@ export const login = async (req, res) => {
       });
     }
 
-    // Compare password
+    // Compare password - hashPassword in DB
     const isMatch = await bcrypt.compare(trimmedPassword, user.password);
     if (!isMatch) {
       console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
+
+      user.loginAttempts += 1;
+
+      // The user has 3 login attempts before account blockage
+      if (user.loginAttempts >= 3) {
+        user.status = "Blocked";
+        await user.save(); // Save the updated status
+
+        return res.status(403).json({
+          status: "Error",
+          message:
+            "Your Account is now Blocked. Please contact the Administration!",
+        });
+      }
+      await user.save(); // Save the updated login attempts
+
       return res.status(401).json({
         status: "Error",
         message: "Invalid Email or password!",
@@ -62,7 +93,7 @@ export const login = async (req, res) => {
     console.log(`[LOGIN-DEBUG] Password match for: ${trimmedEmail}`);
 
     // For the Frontend, if the account is not verified, we redirect to the OTP code form
-    if (!user.isVerified) {
+    if (!user.status === "Active") {
       return res.status(200).json({
         status: "Success but OTPVerificationRequired",
         message: "Account not verified!",
@@ -84,6 +115,10 @@ export const login = async (req, res) => {
       { expiresIn: "24h" },
     );
 
+    // Reset Login attempts
+    user.loginAttempts = 0;
+    await user.save();
+
     res.status(200).json({
       status: "Success",
       message: "Logged in successfully!",
@@ -100,6 +135,375 @@ export const login = async (req, res) => {
     });
   }
 };
+
+// Verify User's OTP code
+export const verifyUser = async (req, res) => {
+  try {
+    const { email, code } = req.body; // We get the email to search for the user's hashed code
+
+    // Check user existence
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
+    // Check if status already verified
+    if (user.status === "Active") {
+      return res.status(400).json({
+        status: "Error",
+        message: "Account Already Verified!",
+      });
+    }
+
+    // Check code validity
+    if (!(await bcrypt.compare(code, user.verificationCode))) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Invalid OTP Code!",
+      });
+    }
+
+    // Check code expiration
+    if (user.verificationCodeExpires < Date.now()) {
+      return res.status(400).json({
+        status: "Error",
+        message: "OTP Code expired!",
+      });
+    }
+
+    // Verify the user account
+    user.status = "Active";
+    user.verificationCode = null;
+    user.verificationCodeExpires = null;
+
+    user.mustResetPassword = true; // To redirect to the must reset password form in the frontend
+
+    // Save the changes
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Account Verified Successfully!",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Resend OTP Code (3 max per day)
+export const resendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const trimmedEmail = (email || "").trim().toLowerCase();
+
+    // Check user existence
+    const user = await User.findOne({ email: trimmedEmail });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
+    // Check user already verified
+    if (user.status === "Active") {
+      return res.status(400).json({
+        status: "Error",
+        message: "Account Already Verified!",
+      });
+    }
+
+    const today = new Date();
+    const lastResend = user.resendDate ? new Date(user.resendDate) : null; // The date of the last resend request
+
+    // Check if it is a new day. If it is, reset counter
+    if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
+      user.resendCount = 0;
+      user.resendDate = today;
+    }
+
+    // Check the resend limit (3 emails per day)
+    if (user.resendCount >= 3) {
+      return res.status(429).json({
+        status: "Error",
+        message:
+          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+      });
+    }
+
+    // Generate new OTP
+    const otpCode = generateRandomCode(6);
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    // Update user
+    user.verificationCode = hashedOTP;
+    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    user.resendCount += 1;
+    user.resendDate = today;
+
+    await user.save();
+
+    // Send email
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "HRcoM – New Verification Code",
+        type: "resendOTP",
+        name: user.name,
+        code: otpCode,
+      });
+    } catch (emailErr) {
+      console.log("[RESEND-OTP-EMAIL-ERROR]", emailErr.message);
+    }
+
+    return res.status(200).json({
+      status: "Success",
+      message: "OTP code resent successfully!",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Reset the Password after the first login (Obligatory for all users at the first Login)
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    // Check the user existence
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
+    // Check if mustReset the password
+    if (!user.mustResetPassword) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Password Reset not required for this account!",
+      });
+    }
+
+    // Check password emptiness
+    if (isEmpty(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message: "New Password Missing!",
+      });
+    }
+
+    // Check the new password validity
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message:
+          "Password must be at least 8 characters long, and contain at least one capital letter!",
+      });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    user.mustResetPassword = false; // mark the password as reset
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password Reset successfully!",
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Forget password Request
+export const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Check the user existance
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
+    // Generate a random token (32 bytes) to be sent to the user email
+    const token = crypto.randomBytes(32).toString("hex");
+    console.log(
+      `[FORGET-PASSWORD-REQUEST-DEBUG] Generated reset token for ${email}: ${token}`,
+    );
+
+    // Hash the token and store in DB
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
+
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour (Token validity)
+    await user.save();
+
+    // Create a reset URL to be sent to the user's email
+    const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
+
+    // Send email
+    await sendEmail({
+      to: user.email,
+      subject: "HRcoM Password Reset",
+      type: "forgetPasswordRequest",
+      name: user.name,
+      resetLink: resetURL,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password reset link sent to your email!",
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Forget password reset
+export const forgetPassword = async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+
+    // Hash the incoming token to compare with DB
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Check the user existence and Reqest validation (token match and not expired)
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() }, // token not expired
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Invalid or Expired password reset token!",
+      });
+    }
+
+    // Check if status blocked or inactive
+    if (user.status === "Blocked" || user.status === "Inactive") {
+      return res.status(403).json({
+        status: "Error",
+        message:
+          "Your Account is " +
+          user.status +
+          ". Please contact the Administration!",
+      });
+    }
+
+    // Check password if empty
+    if (isEmpty(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Missing Password!",
+      });
+    }
+
+    // Check the new password validity
+    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+      return res.status(400).json({
+        status: "Error",
+        message:
+          "Password must be at least 8 characters long, and contain at least one capital letter!",
+      });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+
+    // Clear reset token fields
+    user.resetPasswordToken = null;
+    user.resetPasswordExpires = null;
+
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Password Reset Successfully!",
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// --------------------------------------------------------------------------- //
+// ----------------------------- USER MANAGEMENT ----------------------------- //
+// --------------------------------------------------------------------------- //
 
 // Add User Functionnality (Only the Admin can do it)
 export const addUser = async (req, res) => {
@@ -119,7 +523,7 @@ export const addUser = async (req, res) => {
       socialStatus,
       hasChildren,
       nbOfChildren,
-      isActive,
+      status, // Select List (Pending, Active, Inactive, Blocked)
       isAvailable,
       role,
       department,
@@ -308,7 +712,7 @@ export const addUser = async (req, res) => {
       socialStatus,
       hasChildren,
       nbOfChildren,
-      isActive,
+      status: status || "Pending",
       isAvailable,
       role_id: roleId,
       department_id: departmentId,
@@ -366,298 +770,6 @@ export const addUser = async (req, res) => {
   }
 };
 
-// Verify User's OTP code
-export const verifyUser = async (req, res) => {
-  try {
-    const { email, code } = req.body; // We get the email to search for the user's hashed code
-
-    // Check user existence
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found",
-      });
-    }
-
-    // Check code validity
-    if (!(await bcrypt.compare(code, user.verificationCode))) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Invalid OTP Code!",
-      });
-    }
-
-    // Check code expiration
-    if (user.verificationCodeExpires < Date.now()) {
-      return res.status(400).json({
-        status: "Error",
-        message: "OTP Code expired!",
-      });
-    }
-
-    // Verify the user account
-    user.isVerified = true;
-    user.verificationCode = null;
-    user.verificationCodeExpires = null;
-
-    user.mustResetPassword = true; // To redirect to the must reset password form in the frontend
-
-    // Save the changes
-    await user.save();
-
-    res.status(200).json({
-      status: "Success",
-      message: "Account Verified Successfully!",
-    });
-  } catch (err) {
-    return res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
-  }
-};
-
-// Resend OTP Code (3 max per day)
-export const resendVerificationCode = async (req, res) => {
-  try {
-    const { email } = req.body;
-    const trimmedEmail = (email || "").trim().toLowerCase();
-
-    // Check user existence
-    const user = await User.findOne({ email: trimmedEmail });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
-
-    // Check user already verified
-    if (user.isVerified) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Account Already Verified!",
-      });
-    }
-
-    const today = new Date();
-    const lastResend = user.resendDate ? new Date(user.resendDate) : null;
-
-    // Check if it is a new day. If it is, reset counter
-    if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
-      user.resendCount = 0;
-      user.resendDate = today;
-    }
-
-    // Check the resend limit (3 emails per day)
-    if (user.resendCount >= 3) {
-      return res.status(429).json({
-        status: "Error",
-        message:
-          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
-      });
-    }
-
-    // Generate new OTP
-    const otpCode = generateRandomCode(6);
-    const hashedOTP = await bcrypt.hash(otpCode, 10);
-
-    // Update user
-    user.verificationCode = hashedOTP;
-    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
-    user.resendCount += 1;
-    user.resendDate = today;
-
-    await user.save();
-
-    // Send email
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "HRcoM – New Verification Code",
-        type: "resendOTP",
-        name: user.name,
-        code: otpCode,
-      });
-    } catch (emailErr) {
-      console.log("[RESEND-OTP-EMAIL-ERROR]", emailErr.message);
-    }
-
-    return res.status(200).json({
-      status: "Success",
-      message: "OTP code resent successfully!",
-    });
-  } catch (err) {
-    return res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
-  }
-};
-
-// Reset the Password after the first login (Obligatory for all users at the first Login)
-export const resetPassword = async (req, res) => {
-  try {
-    const { email, newPassword } = req.body;
-
-    // Check the user existence
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user){
-      return res.status(404).json({
-        status: "Error", 
-        message: "User not found!" 
-      });
-    } 
-
-    // Check password emptiness
-    if (isEmpty(newPassword)) {
-      return res.status(400).json({ 
-        status: "Error", 
-        message: "New Password Missing!" 
-      });
-    }
-
-    // Check the new password validity
-    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message:
-          "Password must be at least 8 characters long, and contain at least one capital letter!",
-      });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    user.password = hashedPassword;
-    user.mustResetPassword = false; // mark the password as reset
-    await user.save();
-
-    res.status(200).json({
-      status: "Success",
-      message: "Password Reset successfully!",
-    });
-  } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message
-    });
-  }
-};
-
-// Forget password Request
-export const requestPasswordReset = async (req, res) => {
-  try {
-    const { email } = req.body;
-    
-    // Check the user existance
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
-
-    // Generate a random token (32 bytes) to be sent to the user email
-    const token = crypto.randomBytes(32).toString("hex");
-    console.log(`[FORGET-PASSWORD-REQUEST-DEBUG] Generated reset token for ${email}: ${token}`);
-
-    // Hash the token and store in DB
-    user.resetPasswordToken = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
-
-    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour (Token validity)
-    await user.save();
-
-    // Create a reset URL to be sent to the user's email
-    const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
-
-    // Send email
-    await sendEmail({
-      to: user.email,
-      subject: "HRcoM Password Reset",
-      type: "forgetPasswordRequest",
-      name: user.name,
-      resetLink: resetURL,
-    });
-
-    res.status(200).json({
-      status: "Success",
-      message: "Password reset link sent to your email!",
-    });
-  } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message 
-    });
-  }
-};
-
-// Forget password reset
-export const forgetPassword = async (req, res) => {
-  try {
-    const { email, token, newPassword } = req.body;
-
-    // Hash the incoming token to compare with DB
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
-    // Check the user existence and Reqest validation (token match and not expired)
-    const user = await User.findOne({
-      email: email.trim().toLowerCase(),
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() }, // token not expired
-    });
-
-    if (!user) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Invalid or Expired password reset token!",
-      });
-    }
-
-    // Check password if empty
-    if(isEmpty(newPassword)){
-      return res.status(400).json({
-        status: "Error",
-        message: "Missing Password!"
-      });
-    }
-
-    // Check the new password validity
-    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message:
-          "Password must be at least 8 characters long, and contain at least one capital letter!",
-      });
-    }
-
-    // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-
-    // Clear reset token fields
-    user.resetPasswordToken = null;
-    user.resetPasswordExpires = null;
-
-    await user.save();
-
-    res.status(200).json({
-      status: "Success",
-      message: "Password Reset Successfully!",
-    });
-  } catch (err) {
-    res.status(500).json({ 
-      status: "Error", 
-      message: err.message 
-    });
-  }
-};
-
 // Get All Users Functionnality (Only the Admin can do it)
 export const getAllUsers = async (req, res) => {
   try {
@@ -666,40 +778,7 @@ export const getAllUsers = async (req, res) => {
       .populate("department_id")
       .populate("supervisor_id");
 
-    // Map users to a clean format
-    const cleanUsers = users.map((user) => ({
-      id: user._id,
-      name: user.name,
-      lastName: user.lastName,
-      email: user.email,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      bonus: user.bonus,
-      profileImageURL: user.profileImageURL,
-      bio: user.bio,
-      leaveBalance: user.leaveBalance,
-      socialStatus: user.socialStatus,
-      hasChildren: user.hasChildren,
-      nbOfChildren: user.nbOfChildren,
-      isActive: user.isActive,
-      isAvailable: user.isAvailable,
-      joinDate: user.joinDate,
-      role: user.role_id
-        ? { id: user.role_id._id, name: user.role_id.name }
-        : null,
-      department: user.department_id
-        ? { id: user.department_id._id, name: user.department_id.name }
-        : null,
-      supervisor: user.supervisor_id
-        ? {
-            id: user.supervisor_id._id,
-            name: user.supervisor_id.name,
-            lastName: user.supervisor_id.lastName,
-          }
-        : null,
-    }));
-
-    res.status(200).json(cleanUsers);
+    res.status(200).json(users);
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -722,42 +801,8 @@ export const getUserById = async (req, res) => {
         message: "User not found!",
       });
     }
-    // Format the user data
-    const formattedUser = user
-      ? {
-          id: user._id,
-          name: user.name,
-          lastName: user.lastName,
-          email: user.email,
-          address: user.address,
-          phoneNumber: user.phoneNumber,
-          bonus: user.bonus,
-          profileImageURL: user.profileImageURL,
-          bio: user.bio,
-          leaveBalance: user.leaveBalance,
-          socialStatus: user.socialStatus,
-          hasChildren: user.hasChildren,
-          nbOfChildren: user.nbOfChildren,
-          isActive: user.isActive,
-          isAvailable: user.isAvailable,
-          joinDate: user.joinDate,
-          role: user.role_id
-            ? { id: user.role_id._id, name: user.role_id.name }
-            : null,
-          department: user.department_id
-            ? { id: user.department_id._id, name: user.department_id.name }
-            : null,
-          supervisor: user.supervisor_id
-            ? {
-                id: user.supervisor_id._id,
-                name: user.supervisor_id.name,
-                lastName: user.supervisor_id.lastName,
-              }
-            : null,
-        }
-      : null;
 
-    res.status(200).json(formattedUser);
+    res.status(200).json(user);
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -928,7 +973,7 @@ export const updateUser = async (req, res) => {
     updateData.verificationCodeExpires = new Date(
       Date.now() + 24 * 60 * 60 * 1000,
     ); // 24 hours
-    updateData.isVerified = false;
+    updateData.status = "Pending";
 
     // Update the user
     const user = await User.findByIdAndUpdate(id, updateData, {
@@ -1091,8 +1136,10 @@ export const filterUsers = async (req, res) => {
     if (roleId) query.role_id = roleId;
     if (departmentId) query.department_id = departmentId;
     if (status) {
-      if (status === "Active") query.isActive = true;
-      else if (status === "Inactive") query.isActive = false;
+      if (status === "Active") query.status = "Active";
+      else if (status === "Inactive") query.status = "Inactive";
+      else if (status === "Blocked") query.status = "Blocked";
+      else if (status === "Pending") query.status = "Pending";
     }
 
     // Execute query and populate relevant fields
@@ -1124,18 +1171,18 @@ export const toggleUserStatus = async (req, res) => {
     if (!user) {
       return res.status(404).json({
         status: "Error",
-        message: "User not found",
+        message: "User not found!",
       });
     }
 
     // Toggle the user's status
-    user.isActive = !user.isActive;
+    user.status = user.status === "Active" ? "Inactive" : "Active";
     await user.save();
 
     res.status(200).json({
       status: "Success",
-      message: `User has been ${user.isActive ? "activated" : "deactivated"}`,
-      data: { id: user._id, isActive: user.isActive },
+      message: `User has been ${user.status === "Active" ? "Activated" : "Deactivated"} successfully!`,
+      data: { id: user._id, status: user.status },
     });
 
     // Logging the action
@@ -1145,7 +1192,7 @@ export const toggleUserStatus = async (req, res) => {
       targetType: "User",
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
-      details: { isActive: user.isActive },
+      details: { status: user.status },
       ipAddress: req.ip,
     });
   } catch (err) {
@@ -1174,7 +1221,7 @@ export const exportUsersToCSV = async (req, res) => {
       phoneNumber: user.phoneNumber,
       role: user.role_id?.name,
       department: user.department_id?.name,
-      isActive: user.isActive ? "true" : "false",
+      isActive: user.status,
       joinDate: new Date(user.joinDate).toLocaleDateString("en-GB"),
     }));
 
@@ -1187,7 +1234,7 @@ export const exportUsersToCSV = async (req, res) => {
       "phoneNumber",
       "role",
       "department",
-      "isActive",
+      "status",
       "joinDate",
     ];
 
@@ -1226,7 +1273,7 @@ export const exportUsersToExcel = async (req, res) => {
       { header: "Phone", key: "phoneNumber", width: 15 },
       { header: "Role", key: "role", width: 15 },
       { header: "Department", key: "department", width: 20 },
-      { header: "Active", key: "isActive", width: 10 },
+      { header: "Status", key: "status", width: 10 },
       { header: "Join Date", key: "joinDate", width: 15 },
     ];
 
@@ -1235,7 +1282,7 @@ export const exportUsersToExcel = async (req, res) => {
         ...user,
         role: user.role_id?.name,
         department: user.department_id?.name,
-        isActive: user.isActive ? "True" : "False",
+        status: user.status,
       }),
     );
 
@@ -1265,7 +1312,7 @@ export const uploadProfileImage = async (req, res) => {
     if (!existingUser) {
       return res.status(404).json({
         status: "Error",
-        message: "User not found",
+        message: "User not found!",
       });
     }
 
@@ -1273,7 +1320,7 @@ export const uploadProfileImage = async (req, res) => {
     if (!req.file) {
       return res.status(400).json({
         status: "Error",
-        message: "No file uploaded",
+        message: "No file uploaded!",
       });
     }
 

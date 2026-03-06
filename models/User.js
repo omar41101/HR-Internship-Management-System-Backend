@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+
 const userSchema = mongoose.Schema(
   {
     name: {
@@ -18,14 +19,18 @@ const userSchema = mongoose.Schema(
       required: true,
     },
     verificationCode: {
+      // OTP Code
       type: String,
     },
     verificationCodeExpires: {
+      // OTP Code expiration
       type: Date,
     },
-    isVerified: {
-      type: Boolean,
-      default: false,
+    status: {
+      // Account status
+      type: String,
+      enum: ["Pending", "Active", "Inactive", "Blocked"],
+      default: "Pending",
     },
     resendCount: {
       // Number of times the user has requested to resend the OTP code
@@ -41,11 +46,15 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true, // all new users must reset their password on first login
     },
-    resetPasswordToken: { 
-      type: String 
+    resetPasswordToken: {
+      type: String,
     },
-    resetPasswordExpires: { 
-      type: Date 
+    resetPasswordExpires: {
+      type: Date,
+    },
+    loginAttempts: {
+      type: Number,
+      default: 0,
     },
     address: {
       type: String,
@@ -79,9 +88,6 @@ const userSchema = mongoose.Schema(
       type: Number,
       default: 21,
     },
-    faceData: {
-      type: String,
-    },
     socialStatus: {
       type: String,
       enum: ["Married", "Not Married"],
@@ -95,11 +101,8 @@ const userSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
-    isAvailable: {  // Availability to take more projects
+    isAvailable: {
+      // Availability to take more projects
       type: Boolean,
       default: true,
     },
