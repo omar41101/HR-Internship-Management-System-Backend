@@ -17,6 +17,24 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    verificationCode: {
+      type: String,
+    },
+    verificationCodeExpires: {
+      type: Date,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    resendCount: {  // Number of times the user has requested to resend the OTP code
+      type: Number,
+      default: 0,
+    },
+    resendDate: {  // Date of the last OTP code resend request to control: 3 resends per day
+      type: Date,
+      default: Date.now,
+    },
     address: {
       type: String,
       required: true,
@@ -24,15 +42,15 @@ const userSchema = mongoose.Schema(
     joinDate: {
       type: Date,
       required: true,
-      default: Date.now
+      default: Date.now,
     },
     phoneNumber: {
       type: String,
       required: true,
     },
-    position:{ 
+    position: {
       type: String,
-      required: true
+      required: true,
     },
     bonus: {
       type: Number,
@@ -40,7 +58,7 @@ const userSchema = mongoose.Schema(
     },
     profileImageURL: {
       type: String,
-      default: ""
+      default: "",
     },
     bio: {
       type: String,
@@ -50,7 +68,7 @@ const userSchema = mongoose.Schema(
       default: 21,
     },
     faceData: {
-      type: String
+      type: String,
     },
     socialStatus: {
       type: String,
@@ -69,7 +87,8 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    isAvailable: { // Availability to take more projects
+    isAvailable: {
+      // Availability to take more projects
       type: Boolean,
       default: true,
     },
@@ -84,7 +103,7 @@ const userSchema = mongoose.Schema(
     supervisor_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      default: null
+      default: null,
     },
   },
   {

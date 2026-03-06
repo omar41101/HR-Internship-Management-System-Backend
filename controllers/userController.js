@@ -6,7 +6,6 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
 import { sendEmail } from "../utils/sendEmail.js";
-import { decrypt } from "../utils/cryptoUtils.js";
 import { Parser } from "json2csv";
 import ExcelJS from "exceljs";
 import cloudinary from "../config/cloudinary.js";
@@ -15,7 +14,7 @@ import {
   isEmpty,
   validatePhoneNumber,
   isWithinRange,
-  generatePassword,
+  generateRandomCode,
 } from "../middleware/UserValidation.js";
 import { logAuditAction } from "../utils/logger.js";
 
@@ -23,90 +22,75 @@ dotenv.config();
 
 // Login Functionality (All users can do it)
 export const login = async (req, res) => {
-  const { email, password } = req.body;
-  const trimmedEmail = (email || "").trim().toLowerCase();
-  const trimmedPassword = (password || "").trim();
+  try {
+    const { email, password } = req.body;
+    const trimmedEmail = (email || "").trim().toLowerCase();
+    const trimmedPassword = (password || "").trim();
 
-  console.log(`[LOGIN-DEBUG] Login attempt for: ${trimmedEmail}`);
+    console.log(`[LOGIN-DEBUG] Login attempt for: ${trimmedEmail}`);
 
-  // Check the User existence
-  const user = await User.findOne({ email: trimmedEmail });
-  if (!user) {
-    console.log(`[LOGIN-DEBUG] User not found: ${trimmedEmail}`);
-    return res.status(404).json({
-      status: "Error",
-      message: "User not found!",
-    });
-  }
-
-  // Compare password
-  const isMatch = await bcrypt.compare(trimmedPassword, user.password);
-  if (!isMatch) {
-    console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
-    return res.status(401).json({
-      status: "Error",
-      message: "Invalid Email or password!",
-    });
-  }
-  console.log(`[LOGIN-DEBUG] Password match for: ${trimmedEmail}`);
-
-  // Extract role from the password
-  let extractedRole = "";
-  const code = trimmedPassword.slice(-3);
-
-  // Extract the role from the password
-  const roleCodes = await UserRole.find({}, { name: 1, code: 1 }); // Only fetch the role name and role code
-
-  // Find the role that matches the extracted code
-  const matchedRole = roleCodes.find((role) => {
-    try {
-      const decryptedCode = decrypt(role.code);
-      return decryptedCode === code;
-    } catch (err) {
-      return false;
+    // Check the User existence
+    const user = await User.findOne({ email: trimmedEmail });
+    if (!user) {
+      console.log(`[LOGIN-DEBUG] User not found: ${trimmedEmail}`);
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
     }
-  });
 
-  if (!matchedRole) {
-    console.log(`[LOGIN-DEBUG] No matching role found for code: ${code}`);
-    return res.status(401).json({
-      status: "Error",
-      message: "Invalid Email or password!",
-    });
-  }
-  extractedRole = matchedRole.name;
+    // Compare password
+    const isMatch = await bcrypt.compare(trimmedPassword, user.password);
+    if (!isMatch) {
+      console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
+      return res.status(401).json({
+        status: "Error",
+        message: "Invalid Email or password!",
+      });
+    }
+    console.log(`[LOGIN-DEBUG] Password match for: ${trimmedEmail}`);
 
-  // Get the user's actual role
-  const userRole = await UserRole.findOne({ _id: user.role_id });
-  if (
-    !userRole ||
-    userRole.name.toLowerCase() !== extractedRole.toLowerCase()
-  ) {
-    console.log(
-      `[DEBUG] Role mismatch: User has "${userRole?.name}", extracted "${extractedRole}" from password`,
+    // For the Frontend, if the account is not verified, we redirect to the OTP code form
+    if (!user.isVerified) {
+      return res.status(200).json({
+        status: "OTPVerificationRequired",
+        message: "Account not verified!",
+        userId: user._id,
+      });
+    }
+
+    // Get the user role
+    const userRole = await UserRole.findById(user.role_id);
+    if (!userRole) {
+      console.log(`[LOGIN-DEBUG] Role not found for user: ${trimmedEmail}`);
+      return res.status(404).json({
+        status: "Error",
+        message: "User role not found!",
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { id: user._id, role: userRole.name },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" },
     );
-    return res.status(401).json({
+
+    res.status(200).json({
+      status: "Success",
+      message: "Logged in successfully!",
+      result: {
+        token,
+        userId: user._id,
+        role: userRole.name,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({
       status: "Error",
-      message: "Invalid Email or password!",
+      message: err.message,
     });
   }
-
-  // Generate JWT token
-  const token = jwt.sign(
-    { id: user._id, role: userRole.name },
-    process.env.JWT_SECRET,
-    { expiresIn: "24h" },
-  );
-
-  res.json({
-    status: "Success",
-    result: {
-      token,
-      userId: user._id,
-      role: userRole.name,
-    },
-    message: "Logged in successfully!",
-  });
 };
 
 // Add User Functionnality (Only the Admin can do it)
@@ -221,14 +205,7 @@ export const addUser = async (req, res) => {
     const roleId = userrole._id;
     console.log(`[ADD-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
 
-    // Get and Decrypt the user role code
-    const roleCode = decrypt(userrole.code);
-
-    // Generate password + code
-    const password = generatePassword(roleCode);
-
     // --- Supervisor is now optional for the Intern and Employee (can use "Not assigned yet") ---
-
     // Check the validity of the supervisor
     let supervisorId = null;
 
@@ -292,8 +269,17 @@ export const addUser = async (req, res) => {
     // Get the full validated Phone number
     const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
 
+    // Generate password (length = 8)
+    const password = generateRandomCode();
+
+    // Generate OTP code (length = 6)
+    const otpCode = generateRandomCode(6);
+
     // Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Hash OTP code
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -302,6 +288,8 @@ export const addUser = async (req, res) => {
       lastName,
       email: trimmedEmail,
       password: hashedPassword,
+      verificationCode: hashedOTP,
+      verificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       address,
       joinDate,
       phoneNumber: validatedPhoneNumber,
@@ -320,7 +308,7 @@ export const addUser = async (req, res) => {
     });
     console.log(`[ADD-USER-DEBUG] User created successfully! ID: ${user._id}`);
 
-    // Send Email to the User containing his password + Platform URL
+    // Send Email to the User containing his password + OTP Code + Platform URL
     try {
       console.log(
         `[ADD-USER-DEBUG] Sending onboarding email to: ${trimmedEmail}`,
@@ -332,6 +320,7 @@ export const addUser = async (req, res) => {
         type: "addUser",
         name: user.name,
         password: password,
+        code: otpCode,
       });
 
       console.log(`[ADD-USER-DEBUG] Email sent successfully.`);
@@ -342,23 +331,155 @@ export const addUser = async (req, res) => {
       );
     }
 
-    res.status(201).json({
+    // Logging the action
+    try {
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "CREATE_USER",
+        targetType: "User",
+        targetId: user._id,
+        targetName: `${user.name} ${user.lastName}`,
+        ipAddress: req.ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+
+    return res.status(201).json({
       status: "Success",
       message: "User created successfully!",
       result: user,
     });
-
-    // Logging the action
-    await logAuditAction({
-      adminId: req.user.id,
-      action: "CREATE_USER",
-      targetType: "User",
-      targetId: user._id,
-      targetName: `${user.name} ${user.lastName}`,
-      ipAddress: req.ip,
-    });
   } catch (err) {
     res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Verify User's OTP code
+export const verifyUser = async (req, res) => {
+  try {
+    const { email, code } = req.body; // We get the email to search for the user's hashed code
+
+    // Check user existence
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found",
+      });
+    }
+
+    // Check code validity
+    if (!(await bcrypt.compare(code, user.verificationCode))) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Invalid verification code!",
+      });
+    }
+
+    // Check code expiration
+    if (user.verificationCodeExpires < Date.now()) {
+      return res.status(400).json({
+        status: "Error",
+        message: "OTP Code expired!",
+      });
+    }
+
+    // Verify the user account
+    user.isVerified = true;
+    user.verificationCode = null;
+    user.verificationCodeExpires = null;
+
+    // Save the changes
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Account verified successfully",
+    });
+  } catch (err) {
+    return res.status(500).json({
+      status: "Error",
+      message: "Server error",
+    });
+  }
+};
+
+// Resend OTP Code (3 max per day)
+export const resendVerificationCode = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const trimmedEmail = (email || "").trim().toLowerCase();
+
+    // Check user existence
+    const user = await User.findOne({ email: trimmedEmail });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // If already verified
+    if (user.isVerified) {
+      return res.status(400).json({
+        status: "Error",
+        message: "Account already verified.",
+      });
+    }
+
+    const today = new Date();
+    const lastResend = user.resendDate ? new Date(user.resendDate) : null;
+
+    // Check if it is a new day. If it is, reset counter
+    if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
+      user.resendCount = 0;
+      user.resendDate = today;
+    }
+
+    // Check the resend limit (3 emails per day)
+    if (user.resendCount >= 3) {
+      return res.status(429).json({
+        status: "Error",
+        message: "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+      });
+    }
+
+    // Generate new OTP
+    const otpCode = generateRandomCode(6);
+    const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    // Update user
+    user.verificationCode = hashedOTP;
+    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    user.resendCount += 1;
+    user.resendDate = today;
+
+    await user.save();
+
+    // Send email
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: "HRcoM – New Verification Code",
+        type: "resendOTP",
+        name: user.name,
+        code: otpCode,
+      });
+    } catch (emailErr) {
+      console.log("[RESEND-OTP-EMAIL-ERROR]", emailErr.message);
+    }
+
+    return res.status(200).json({
+      status: "Success",
+      message: "Verification code resent successfully!",
+    });
+
+  } catch (err) {
+    return res.status(500).json({
       status: "Error",
       message: err.message,
     });
@@ -399,10 +520,10 @@ export const getAllUsers = async (req, res) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
         : null,
     }));
 
@@ -432,36 +553,36 @@ export const getUserById = async (req, res) => {
     // Format the user data
     const formattedUser = user
       ? {
-        id: user._id,
-        name: user.name,
-        lastName: user.lastName,
-        email: user.email,
-        address: user.address,
-        phoneNumber: user.phoneNumber,
-        bonus: user.bonus,
-        profileImageURL: user.profileImageURL,
-        bio: user.bio,
-        leaveBalance: user.leaveBalance,
-        socialStatus: user.socialStatus,
-        hasChildren: user.hasChildren,
-        nbOfChildren: user.nbOfChildren,
-        isActive: user.isActive,
-        isAvailable: user.isAvailable,
-        joinDate: user.joinDate,
-        role: user.role_id
-          ? { id: user.role_id._id, name: user.role_id.name }
-          : null,
-        department: user.department_id
-          ? { id: user.department_id._id, name: user.department_id.name }
-          : null,
-        supervisor: user.supervisor_id
-          ? {
-            id: user.supervisor_id._id,
-            name: user.supervisor_id.name,
-            lastName: user.supervisor_id.lastName,
-          }
-          : null,
-      }
+          id: user._id,
+          name: user.name,
+          lastName: user.lastName,
+          email: user.email,
+          address: user.address,
+          phoneNumber: user.phoneNumber,
+          bonus: user.bonus,
+          profileImageURL: user.profileImageURL,
+          bio: user.bio,
+          leaveBalance: user.leaveBalance,
+          socialStatus: user.socialStatus,
+          hasChildren: user.hasChildren,
+          nbOfChildren: user.nbOfChildren,
+          isActive: user.isActive,
+          isAvailable: user.isAvailable,
+          joinDate: user.joinDate,
+          role: user.role_id
+            ? { id: user.role_id._id, name: user.role_id.name }
+            : null,
+          department: user.department_id
+            ? { id: user.department_id._id, name: user.department_id.name }
+            : null,
+          supervisor: user.supervisor_id
+            ? {
+                id: user.supervisor_id._id,
+                name: user.supervisor_id.name,
+                lastName: user.supervisor_id.lastName,
+              }
+            : null,
+        }
       : null;
 
     res.status(200).json(formattedUser);
@@ -488,7 +609,8 @@ export const updateUser = async (req, res) => {
       errors.push({ field: "email", message: "Invalid email format" });
     if (
       updateData.phoneNumber &&
-      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null
+      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) ===
+        null
     )
       errors.push({
         field: "phoneNumber",
@@ -531,7 +653,7 @@ export const updateUser = async (req, res) => {
     if (!existingUser) {
       return res.status(404).json({
         status: "Error",
-        message: "User not found",
+        message: "User not found!",
       });
     }
 
@@ -555,33 +677,14 @@ export const updateUser = async (req, res) => {
         if (!roleDoc) {
           return res.status(400).json({
             status: "Error",
-            message: "Invalid Role",
+            message: "Invalid Role!",
           });
         }
 
         updateData.role_id = roleDoc._id; // Get the new role ID
 
-        // Generate NEW password for the NEW role code
-        let code = "";
-        try {
-          code = decrypt(roleDoc.code); // Decrypt the role code
-        } catch (err) {
-          console.log(
-            `[UPDATE-USER-DEBUG] Error decrypting role code for ${roleDoc.name}: ${err.message}`,
-          );
-        }
-
-        if (!code) {
-          console.log(
-            `[UPDATE-USER-DEBUG] WARNING: No code found for role: ${roleDoc.name}`,
-          );
-        }
-
-        newPasswordRaw = generatePassword(code);
-        updateData.password = await bcrypt.hash(newPasswordRaw, 10); // Hash the new password
-
         console.log(
-          `[UPDATE-USER-DEBUG] Role changed from "${currentRoleName}" to "${roleDoc.name}". New code: "${code}", Password generated.`,
+          `[UPDATE-USER-DEBUG] Role changed from "${currentRoleName}" to "${roleDoc.name}".`,
         );
       } else {
         console.log(`[UPDATE-USER-DEBUG] Role unchanged: "${currentRoleName}"`);
@@ -604,7 +707,7 @@ export const updateUser = async (req, res) => {
         if (!dept) {
           return res.status(400).json({
             status: "Error",
-            message: "Invalid Department",
+            message: "Invalid Department!",
           });
         }
 
@@ -629,7 +732,7 @@ export const updateUser = async (req, res) => {
         if (!supervisor) {
           return res.status(400).json({
             status: "Error",
-            message: "Invalid Supervisor",
+            message: "Invalid Supervisor!",
           });
         }
 
@@ -643,8 +746,22 @@ export const updateUser = async (req, res) => {
       updateData.phoneNumber,
     );
 
+    // Generate NEW password and a NEW OTP code
+    newPasswordRaw = generateRandomCode();
+    const newCode = generateRandomCode(6);
+
+    // Hash the new password and OTP Code
+    updateData.password = await bcrypt.hash(newPasswordRaw, 10);
+    updateData.verificationCode = await bcrypt.hash(newCode, 10);
+    updateData.verificationCodeExpires = new Date(
+      Date.now() + 24 * 60 * 60 * 1000,
+    ); // 24 hours
+    updateData.isVerified = false;
+
     // Update the user
-    const user = await User.findByIdAndUpdate(id, updateData, { returnDocument: "after" });
+    const user = await User.findByIdAndUpdate(id, updateData, {
+      returnDocument: "after",
+    });
 
     // If role changed, send by Email the new credentials to the User
     if (roleChanged) {
@@ -659,6 +776,7 @@ export const updateUser = async (req, res) => {
           type: "updateUser",
           name: user.name,
           password: newPasswordRaw,
+          code: newCode,
         });
       } catch (emailErr) {
         console.log(
@@ -877,7 +995,7 @@ export const exportUsersToCSV = async (req, res) => {
       .lean(); // Transform to JSON for the frontend
 
     // Map users to pre-format date and booleans
-    const formattedUsers = users.map(user => ({
+    const formattedUsers = users.map((user) => ({
       name: user.name,
       lastName: user.lastName,
       email: user.email,
@@ -885,7 +1003,7 @@ export const exportUsersToCSV = async (req, res) => {
       role: user.role_id?.name,
       department: user.department_id?.name,
       isActive: user.isActive ? "true" : "false",
-      joinDate: new Date(user.joinDate).toLocaleDateString("en-GB")
+      joinDate: new Date(user.joinDate).toLocaleDateString("en-GB"),
     }));
 
     // Specify the fields to export
@@ -910,7 +1028,7 @@ export const exportUsersToCSV = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: err.message
+      message: err.message,
     });
   }
 };
@@ -960,7 +1078,7 @@ export const exportUsersToExcel = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       status: "Error",
-      message: err.message
+      message: err.message,
     });
   }
 };
@@ -997,17 +1115,17 @@ export const uploadProfileImage = async (req, res) => {
         (error, uploadResult) => {
           if (error) reject(error);
           else resolve(uploadResult);
-        }
+        },
       );
 
       stream.end(req.file.buffer); // Upload buffer directly
     });
 
-    // Update the user's profileImageURL 
+    // Update the user's profileImageURL
     const user = await User.findByIdAndUpdate(
       userId,
       { profileImageURL: result.secure_url },
-      { returnDocument: 'after' }
+      { returnDocument: "after" },
     );
 
     res.status(200).json({
@@ -1026,7 +1144,6 @@ export const uploadProfileImage = async (req, res) => {
       targetName: `${user.name} ${user.lastName}`,
       ipAddress: req.ip,
     });
-
   } catch (err) {
     res.status(500).json({
       status: "Error",

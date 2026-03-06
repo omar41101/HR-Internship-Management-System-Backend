@@ -52,30 +52,29 @@ export const isWithinRange = (str, min, max) => {
   return str.length >= min && str.length <= max;
 }
 
-// Password Generator + secret code 
-export const generatePassword = (code, length = 12) => {
-  const baseLength = length - code.length;
+// Random Code Generator (Password or OTP code generation)
+export const generateRandomCode = (length = 8) => {
   const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
   const lowercase = "abcdefghijklmnopqrstuvwxyz";
   const numbers = "0123456789";
   const symbols = "!@#$%^&*";
   const allChars = uppercase + lowercase + numbers + symbols;
 
-  let password = "";
+  let randomCode = "";
 
   // Ensure at least one of each required type for security
-  password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
-  password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
-  password += numbers.charAt(Math.floor(Math.random() * numbers.length));
-  password += symbols.charAt(Math.floor(Math.random() * symbols.length));
+  randomCode += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+  randomCode += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+  randomCode += numbers.charAt(Math.floor(Math.random() * numbers.length));
+  randomCode += symbols.charAt(Math.floor(Math.random() * symbols.length));
 
   // Fill the rest randomly
-  for (let i = password.length; i < baseLength; i++) {
-    password += allChars.charAt(Math.floor(Math.random() * allChars.length));
+  for (let i = randomCode.length; i < length; i++) {
+    randomCode += allChars.charAt(Math.floor(Math.random() * allChars.length));
   }
 
   // Shuffle the random part so the required chars aren't always at the start
-  const shuffledPreview = password.split('').sort(() => 0.5 - Math.random()).join('');
+  const shuffledCode = randomCode.split('').sort(() => 0.5 - Math.random()).join('');
 
-  return shuffledPreview + code;
+  return shuffledCode;
 }

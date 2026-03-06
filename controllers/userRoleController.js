@@ -1,12 +1,11 @@
 import UserRole from "../models/UserRole.js";
 import User from "../models/User.js";
-import { generateRoleCode } from "../middleware/roleService.js";
-import { encrypt } from "../utils/cryptoUtils.js";
 import { logAuditAction } from "../utils/logger.js";
 
 // Add new Role Functionnality
 export const addUserRole = async (req, res) => {
-  const { name, description } = req.body; // Get the new role credentials
+  // Get the new role credentials
+  const { name, description } = req.body; 
 
   // Check for empty name field (required)
   if (!name || name.trim() === "") {
@@ -38,20 +37,15 @@ export const addUserRole = async (req, res) => {
       });
     }
 
-    // Generate new code for the role
-    const generatedCode = await generateRoleCode();
-    const encryptedCode = encrypt(generatedCode.toString()); // Encrypt the user role code
-
     // Save the new user role in the Database
     let userRole = await UserRole.create({
       name,
       description,
-      code: encryptedCode,
     });
 
     res.status(201).json({
       status: "Success",
-      data: { code: generatedCode, userRole },
+      data: { userRole },
     });
 
     // Logging the action
@@ -122,7 +116,6 @@ export const deleteUserRole = async (req, res) => {
       notAssignedRole = await UserRole.create({
         name: "Not assigned",
         description: "Default role for unassigned users",
-        code: encrypt("000"),
       });
     }
 

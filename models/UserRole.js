@@ -8,11 +8,7 @@ const userRoleSchema = mongoose.Schema(
     },
     description: {
       type: String,
-    },
-    code: {
-      type: String,
-      required: true,
-    },
+    }
   },
   {
     timestamps: true,

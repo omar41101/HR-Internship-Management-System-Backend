@@ -12,6 +12,8 @@ import {
   exportUsersToCSV,
   exportUsersToExcel,
   uploadProfileImage,
+  verifyUser,
+  resendVerificationCode
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authorizeRole from "../middleware/rolePermission.js";
@@ -72,7 +74,13 @@ router.post("/login", login);
  *       500:
  *         description: Server error
  */
-router.post("/users", addUser);
+router.post("/users", authorizeRole("Admin"), addUser);
+
+// Route to verify user's OTP code
+router.post("/users/verify-user", verifyUser);
+
+// Route to resend OTP code
+router.post("/users/resend-verification", resendVerificationCode);
 
 /**
  * @swagger

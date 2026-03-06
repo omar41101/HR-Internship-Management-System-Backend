@@ -1,15 +1,27 @@
 import nodemailer from "nodemailer";
 import { wrapEmailContent } from "./emailLayout.js";
-import { getAddUserContent, getUpdateUserContent } from "./emailContent.js";
+import { getAddUserContent, getUpdateUserContent, getResendOTPContent } from "./emailContent.js";
 
-export const sendEmail = async ({ to, subject, type, name, password }) => {
+export const sendEmail = async ({ to, subject, type, name, password, code }) => {
   let bodyHtml;
 
   // Decide the content based on type
-  if (type === "addUser") bodyHtml = getAddUserContent({ name, password });
-  else if (type === "updateUser")
-    bodyHtml = getUpdateUserContent({ name, password });
-  else bodyHtml = `<p>Default message</p>`;
+  switch (type) {
+    case "addUser":
+      bodyHtml = getAddUserContent({ name, password, code });
+      break;
+
+    case "updateUser":
+      bodyHtml = getUpdateUserContent({ name, password, code });
+      break;
+    
+    case "resendOTP":
+      bodyHtml = getResendOTPContent({ name, code });
+      break;
+
+    default:
+      bodyHtml = `<p>Default message</p>`;
+  }
 
   const htmlContent = wrapEmailContent(bodyHtml);
 
