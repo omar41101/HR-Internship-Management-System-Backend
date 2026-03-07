@@ -1,7 +1,8 @@
-import libphonenumber from "google-libphonenumber";
+import pkg from "google-libphonenumber";
+const { PhoneNumberUtil, PhoneNumberFormat } = pkg;
 
-const phoneUtil = libphonenumber.PhoneNumberUtil.getInstance();
-const PNF = libphonenumber.PhoneNumberFormat;
+const phoneUtil = PhoneNumberUtil.getInstance();
+const PNF = PhoneNumberFormat;
 
 // Email validation with Regex method
 export const isValidEmail = (email) => {
@@ -14,26 +15,34 @@ export const isEmpty = (field) => {
   return !field || field.trim().length === 0;
 }
 
-// Phone validation
-export function validatePhoneNumber(code, number) {
-  if (!code || !number) return null;
-
+export const validatePhoneNumber = (code, number) => {
+  if (!number) return null;
+  console.log(`[Phone-Validation-Start] Code: ${code}, Number: ${number}`);
   try {
-    // Combine the country code + phone number
-    const fullPhoneNumber = `${code}${number}`;
+    let phoneNumber;
+    if (number.startsWith("+")) {
+      phoneNumber = phoneUtil.parseAndKeepRawInput(number);
+    } else {
+      phoneNumber = phoneUtil.parseAndKeepRawInput(number, code || "TN");
+    }
 
-    // Parse the number
-    const parsed = phoneUtil.parseAndKeepRawInput(fullPhoneNumber);
+    const nationalNumber = phoneNumber.getNationalNumber().toString();
+    const digitCount = nationalNumber.length;
+    console.log(`[Phone-Validation-Process] National: ${nationalNumber}, Count: ${digitCount}`);
 
-    // Check validity
-    if (!phoneUtil.isValidNumber(parsed)) return null;
+    if (digitCount < 5 || digitCount > 15) {
+      console.warn(`[Phone-Validation-FAIL] Invalid digit count: ${digitCount}`);
+      return null;
+    }
 
-    // Return formatted E.164 number (Ex: +21612345678)
-    return phoneUtil.format(parsed, PNF.E164);
-  } catch (err) {
+    const formatted = phoneUtil.format(phoneNumber, PNF.E164);
+    console.log(`[Phone-Validation-SUCCESS] Result: ${formatted}`);
+    return formatted;
+  } catch (error) {
+    console.error("[Phone-Validation-ERROR]", error.message);
     return null;
   }
-}
+};
 
 // Basic URL validation (For the profile image urls)
 export const isValidURL = (url) => {

@@ -10,17 +10,18 @@ import UserRoleRoutes from "./routes/userRoleRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
 
 // Creation of an express app
-const app = express(); 
+const app = express();
 
 // Load the right .env file based on NODE_ENV
 if (process.env.NODE_ENV === "test") {
   dotenv.config({ path: ".env.test" });
-} 
+}
 else {
   dotenv.config();
 }
 
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
 // Swagger API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -41,7 +42,10 @@ export default app;
 
 // Start the server only if not in test environment
 if (process.env.NODE_ENV !== "test") {
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
+  app.listen(PORT, () => {
+    console.log("##################################################");
+    console.log(`### SERVER STARTED AT: ${new Date().toISOString()} ###`);
+    console.log(`### LISTENING ON PORT: ${PORT}                ###`);
+    console.log("##################################################");
+  });
 }

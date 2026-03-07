@@ -22,6 +22,26 @@ import { logAuditAction } from "../utils/logger.js";
 dotenv.config();
 
 // --------------------------------------------------------------------------- //
+// --------------------------------- HELPERS --------------------------------- //
+// --------------------------------------------------------------------------- //
+
+const sendError = (res, message, code = 400) => {
+  return res.status(code).json({ status: "Error", message });
+};
+
+const handleError = (res, err) => {
+  console.error(err);
+  return res.status(500).json({ status: "Error", message: err.message });
+};
+
+const validateUserStatus = (user, res) => {
+  if (user.status === "Blocked" || user.status === "Inactive") {
+    return sendError(res, `Your Account is ${user.status}. Please contact the Administration!`, 403);
+  }
+  return null;
+};
+
+// --------------------------------------------------------------------------- //
 // ---------------------------------- AUTH ----------------------------------- //
 // --------------------------------------------------------------------------- //
 
@@ -38,31 +58,17 @@ export const login = async (req, res) => {
     const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
       console.log(`[LOGIN-DEBUG] User not found: ${trimmedEmail}`);
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
+      return sendError(res, "User not found!", 404);
     }
 
     // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
     // Get the user role
     const userRole = await UserRole.findById(user.role_id);
     if (!userRole) {
       console.log(`[LOGIN-DEBUG] Role not found for user: ${trimmedEmail}`);
-      return res.status(404).json({
-        status: "Error",
-        message: "User role not found!",
-      });
+      return sendError(res, "User role not found!", 404);
     }
 
     // Compare password - hashPassword in DB
@@ -75,25 +81,17 @@ export const login = async (req, res) => {
       // The user has 3 login attempts before account blockage
       if (user.loginAttempts >= 3) {
         user.status = "Blocked";
-        await user.save(); // Save the updated status
-
-        return res.status(403).json({
-          status: "Error",
-          message:
-            "Your Account is now Blocked. Please contact the Administration!",
-        });
+        await user.save();
+        return sendError(res, "Your Account is now Blocked. Please contact the Administration!", 403);
       }
-      await user.save(); // Save the updated login attempts
+      await user.save();
 
-      return res.status(401).json({
-        status: "Error",
-        message: "Invalid Email or password!",
-      });
+      return sendError(res, "Invalid Email or password!", 401);
     }
     console.log(`[LOGIN-DEBUG] Password match for: ${trimmedEmail}`);
 
     // For the Frontend, if the account is not verified, we redirect to the OTP code form
-    if (!user.status === "Active") {
+    if (user.status !== "Active") {
       return res.status(200).json({
         status: "Success but OTPVerificationRequired",
         message: "Account not verified!",
@@ -139,65 +137,45 @@ export const login = async (req, res) => {
 // Verify User's OTP code
 export const verifyUser = async (req, res) => {
   try {
-    const { email, code } = req.body; // We get the email to search for the user's hashed code
+    const { email, code } = req.body;
 
-    // Check user existence
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
 
-    // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
-    // Check if status already verified
-    if (user.status === "Active") {
-      return res.status(400).json({
-        status: "Error",
-        message: "Account Already Verified!",
-      });
-    }
+    if (user.status === "Active") return sendError(res, "Account Already Verified!");
 
-    // Check code validity
     if (!(await bcrypt.compare(code, user.verificationCode))) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Invalid OTP Code!",
-      });
+      return sendError(res, "Invalid OTP Code!");
     }
 
-    // Check code expiration
     if (user.verificationCodeExpires < Date.now()) {
-      return res.status(400).json({
-        status: "Error",
-        message: "OTP Code expired!",
-      });
+      return sendError(res, "OTP Code expired!");
     }
 
-    // Verify the user account
     user.status = "Active";
     user.verificationCode = null;
     user.verificationCodeExpires = null;
-
-    user.mustResetPassword = true; // To redirect to the must reset password form in the frontend
-
-    // Save the changes
+    user.mustResetPassword = true;
     await user.save();
+
+    const userRole = await UserRole.findById(user.role_id);
+    const token = jwt.sign(
+      { id: user._id, role: userRole?.name || "Employee" },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
 
     res.status(200).json({
       status: "Success",
       message: "Account Verified Successfully!",
+      result: {
+        token,
+        userId: user._id,
+        role: userRole?.name || "Employee",
+        requiresPasswordChange: user.mustResetPassword,
+      }
     });
   } catch (err) {
     return res.status(500).json({
@@ -207,82 +185,50 @@ export const verifyUser = async (req, res) => {
   }
 };
 
-// Resend OTP Code (3 max per day)
+// Resend OTP Code
 export const resendVerificationCode = async (req, res) => {
   try {
     const { email } = req.body;
     const trimmedEmail = (email || "").trim().toLowerCase();
 
-    // Check user existence
     const user = await User.findOne({ email: trimmedEmail });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
 
-    // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
-    // Check user already verified
-    if (user.status === "Active") {
-      return res.status(400).json({
-        status: "Error",
-        message: "Account Already Verified!",
-      });
-    }
+    if (user.status === "Active") return sendError(res, "Account Already Verified!");
 
     const today = new Date();
-    const lastResend = user.resendDate ? new Date(user.resendDate) : null; // The date of the last resend request
+    const lastResend = user.resendDate ? new Date(user.resendDate) : null;
 
-    // Check if it is a new day. If it is, reset counter
     if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
       user.resendCount = 0;
       user.resendDate = today;
     }
 
-    // Check the resend limit (3 emails per day)
     if (user.resendCount >= 3) {
       return res.status(429).json({
         status: "Error",
-        message:
-          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+        message: "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
       });
     }
 
-    // Generate new OTP
     const otpCode = generateRandomCode(6);
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // Update user
     user.verificationCode = hashedOTP;
-    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h
+    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
     user.resendCount += 1;
     user.resendDate = today;
-
     await user.save();
 
-    // Send email
-    try {
-      await sendEmail({
-        to: user.email,
-        subject: "HRcoM – New Verification Code",
-        type: "resendOTP",
-        name: user.name,
-        code: otpCode,
-      });
-    } catch (emailErr) {
-      console.log("[RESEND-OTP-EMAIL-ERROR]", emailErr.message);
-    }
+    await sendEmail({
+      to: user.email,
+      subject: "HRcoM – New Verification Code",
+      type: "resendOTP",
+      name: user.name,
+      code: otpCode,
+    });
 
     return res.status(200).json({
       status: "Success",
@@ -296,66 +242,46 @@ export const resendVerificationCode = async (req, res) => {
   }
 };
 
-// Reset the Password after the first login (Obligatory for all users at the first Login)
+// Reset Password
 export const resetPassword = async (req, res) => {
   try {
     const { email, newPassword } = req.body;
 
-    // Check the user existence
     const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
 
-    // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
-    // Check if mustReset the password
     if (!user.mustResetPassword) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Password Reset not required for this account!",
-      });
+      return sendError(res, "Password Reset not required for this account!");
     }
 
-    // Check password emptiness
-    if (isEmpty(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "New Password Missing!",
-      });
-    }
+    if (isEmpty(newPassword)) return sendError(res, "New Password Missing!");
 
-    // Check the new password validity
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message:
-          "Password must be at least 8 characters long, and contain at least one capital letter!",
-      });
+      return sendError(res, "Password must be at least 8 characters long, and contain at least one capital letter!");
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-
     user.password = hashedPassword;
-    user.mustResetPassword = false; // mark the password as reset
+    user.mustResetPassword = false;
     await user.save();
+
+    const userRole = await UserRole.findById(user.role_id);
+    const token = jwt.sign(
+      { id: user._id, role: userRole?.name || "Employee" },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
 
     res.status(200).json({
       status: "Success",
       message: "Password Reset successfully!",
+      result: {
+        token,
+        userId: user._id,
+        role: userRole?.name || "Employee",
+      }
     });
   } catch (err) {
     res.status(500).json({
@@ -365,50 +291,23 @@ export const resetPassword = async (req, res) => {
   }
 };
 
-// Forget password Request
+// Forget Password Request
 export const requestPasswordReset = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Check the user existance
     const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
 
-    // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
-    // Generate a random token (32 bytes) to be sent to the user email
     const token = crypto.randomBytes(32).toString("hex");
-    console.log(
-      `[FORGET-PASSWORD-REQUEST-DEBUG] Generated reset token for ${email}: ${token}`,
-    );
-
-    // Hash the token and store in DB
-    user.resetPasswordToken = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
-
-    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1 hour (Token validity)
+    user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
+    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
 
-    // Create a reset URL to be sent to the user's email
     const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
 
-    // Send email
     await sendEmail({
       to: user.email,
       subject: "HRcoM Password Reset",
@@ -429,69 +328,51 @@ export const requestPasswordReset = async (req, res) => {
   }
 };
 
-// Forget password reset
+// Forget Password Reset
 export const forgetPassword = async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
-
-    // Hash the incoming token to compare with DB
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
-    // Check the user existence and Reqest validation (token match and not expired)
     const user = await User.findOne({
       email: email.trim().toLowerCase(),
       resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() }, // token not expired
+      resetPasswordExpires: { $gt: Date.now() },
     });
 
-    if (!user) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Invalid or Expired password reset token!",
-      });
-    }
+    if (!user) return sendError(res, "Invalid or Expired password reset token!");
 
-    // Check if status blocked or inactive
-    if (user.status === "Blocked" || user.status === "Inactive") {
-      return res.status(403).json({
-        status: "Error",
-        message:
-          "Your Account is " +
-          user.status +
-          ". Please contact the Administration!",
-      });
-    }
+    if (validateUserStatus(user, res)) return;
 
-    // Check password if empty
-    if (isEmpty(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Missing Password!",
-      });
-    }
+    if (isEmpty(newPassword)) return sendError(res, "Missing Password!");
 
-    // Check the new password validity
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        status: "Error",
-        message:
-          "Password must be at least 8 characters long, and contain at least one capital letter!",
-      });
+      return sendError(res, "Password must be at least 8 characters long, and contain at least one capital letter!");
     }
 
-    // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
-
-    // Clear reset token fields
     user.resetPasswordToken = null;
     user.resetPasswordExpires = null;
-
+    user.status = "Active";
+    user.mustResetPassword = false;
     await user.save();
+
+    const userRole = await UserRole.findById(user.role_id);
+    const tokenGen = jwt.sign(
+      { id: user._id, role: userRole?.name || "Employee" },
+      process.env.JWT_SECRET,
+      { expiresIn: "24h" }
+    );
 
     res.status(200).json({
       status: "Success",
       message: "Password Reset Successfully!",
+      result: {
+        token: tokenGen,
+        userId: user._id,
+        role: userRole?.name || "Employee",
+      }
     });
   } catch (err) {
     res.status(500).json({
@@ -531,46 +412,25 @@ export const addUser = async (req, res) => {
     } = req.body;
 
     const trimmedEmail = (email || "").trim().toLowerCase();
-    console.log(`[ADD-USER-DEBUG] Called for: ${trimmedEmail}, Role: ${role}`);
 
     // Validate the field inputs
     const errors = [];
 
-    if (isEmpty(name))
-      errors.push({ field: "name", message: "First name is required" });
-    if (isEmpty(lastName))
-      errors.push({ field: "lastName", message: "Last name is required" });
-    if (isEmpty(address))
-      errors.push({ field: "address", message: "Address is required" });
-    if (isEmpty(position))
-      errors.push({ field: "position", message: "Position is required" });
+    if (isEmpty(name)) errors.push({ field: "name", message: "First name is required" });
+    if (isEmpty(lastName)) errors.push({ field: "lastName", message: "Last name is required" });
+    if (isEmpty(address)) errors.push({ field: "address", message: "Address is required" });
+    if (isEmpty(position)) errors.push({ field: "position", message: "Position is required" });
 
-    if (!isValidEmail(email))
-      errors.push({ field: "email", message: "Invalid email format" });
-    if (validatePhoneNumber(countryCode, phoneNumber) === null)
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
+    if (!isValidEmail(email)) errors.push({ field: "email", message: "Invalid email format" });
+    if (validatePhoneNumber(countryCode, phoneNumber) === null) {
+      errors.push({ field: "phoneNumber", message: "Invalid phone number format" });
+    }
 
-    if (bio && !isWithinRange(bio, 0, 500))
-      errors.push({
-        field: "bio",
-        message: "Bio must be under 500 characters",
-      });
+    if (bio && !isWithinRange(bio, 0, 500)) errors.push({ field: "bio", message: "Bio must be under 500 characters" });
 
-    if (hasChildren && nbOfChildren <= 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Please specify the number of children",
-      });
-    if (nbOfChildren < 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Number of children cannot be negative",
-      });
-    if (bonus < 0)
-      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
+    if (hasChildren && nbOfChildren <= 0) errors.push({ field: "nbOfChildren", message: "Please specify the number of children" });
+    if (nbOfChildren < 0) errors.push({ field: "nbOfChildren", message: "Number of children cannot be negative" });
+    if (bonus < 0) errors.push({ field: "bonus", message: "Bonus cannot be negative" });
 
     if (errors.length > 0) {
       console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
@@ -587,14 +447,7 @@ export const addUser = async (req, res) => {
       `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
     );
     const existingUser = await User.findOne({ email: trimmedEmail });
-    if (existingUser) {
-      console.log(`[ADD-USER-DEBUG] User already exists: ${trimmedEmail}`);
-
-      return res.status(401).json({
-        status: "Error",
-        message: "User Already Existing!",
-      });
-    }
+    if (existingUser) return sendError(res, "User Already Existing!", 401);
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
@@ -604,14 +457,7 @@ export const addUser = async (req, res) => {
     const userrole = await UserRole.findOne({
       name: { $regex: new RegExp(`^${role}$`, "i") },
     });
-    if (!userrole) {
-      console.log(`[ADD-USER-DEBUG] Invalid role: ${role}`);
-
-      return res.status(401).json({
-        status: "Error",
-        message: "Invalid Role!",
-      });
-    }
+    if (!userrole) return sendError(res, "Invalid Role!", 401);
 
     // Get the role ID
     const roleId = userrole._id;
@@ -640,16 +486,7 @@ export const addUser = async (req, res) => {
         lastName: supervisor_lastName,
       });
 
-      if (!supervisor) {
-        console.log(
-          `[ADD-USER-DEBUG] Supervisor lookup failed for: ${supervisor_name} ${supervisor_lastName}`,
-        );
-
-        return res.status(404).json({
-          status: "Error",
-          message: "Supervisor not found!",
-        });
-      }
+      if (!supervisor) return sendError(res, "Supervisor not found!", 404);
       supervisorId = supervisor._id; // Get the supervisor ID
       console.log(`[ADD-USER-DEBUG] Supervisor found: ${supervisorId}`);
     } else {
@@ -666,12 +503,7 @@ export const addUser = async (req, res) => {
         name: { $regex: new RegExp(`^${department}$`, "i") },
       });
 
-      if (!userdepartment) {
-        return res.status(401).json({
-          status: "Error",
-          message: "Invalid Department!",
-        });
-      }
+      if (!userdepartment) return sendError(res, "Invalid Department!", 401);
       departmentId = userdepartment._id; // Get the department ID
       console.log(
         `[ADD-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
@@ -778,7 +610,41 @@ export const getAllUsers = async (req, res) => {
       .populate("department_id")
       .populate("supervisor_id");
 
-    res.status(200).json(users);
+    // Map users to a clean format
+    const cleanUsers = users.map((user) => ({
+      id: user._id,
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      bonus: user.bonus,
+      profileImageURL: user.profileImageURL,
+      bio: user.bio,
+      leaveBalance: user.leaveBalance,
+      socialStatus: user.socialStatus,
+      hasChildren: user.hasChildren,
+      nbOfChildren: user.nbOfChildren,
+      status: user.status,
+      isAvailable: user.isAvailable,
+      joinDate: user.joinDate,
+      position: user.position,
+      role: user.role_id
+        ? { id: user.role_id._id, name: user.role_id.name }
+        : null,
+      department: user.department_id
+        ? { id: user.department_id._id, name: user.department_id.name }
+        : null,
+      supervisor: user.supervisor_id
+        ? {
+          id: user.supervisor_id._id,
+          name: user.supervisor_id.name,
+          lastName: user.supervisor_id.lastName,
+        }
+        : null,
+    }));
+
+    res.status(200).json(cleanUsers);
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -795,14 +661,42 @@ export const getUserById = async (req, res) => {
       .populate("department_id")
       .populate("supervisor_id");
 
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
+    // Format the user data
+    const formattedUser = {
+      id: user._id,
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      bonus: user.bonus,
+      profileImageURL: user.profileImageURL,
+      bio: user.bio,
+      leaveBalance: user.leaveBalance,
+      socialStatus: user.socialStatus,
+      hasChildren: user.hasChildren,
+      nbOfChildren: user.nbOfChildren,
+      status: user.status,
+      isAvailable: user.isAvailable,
+      joinDate: user.joinDate,
+      position: user.position,
+      role: user.role_id
+        ? { id: user.role_id._id, name: user.role_id.name }
+        : null,
+      department: user.department_id
+        ? { id: user.department_id._id, name: user.department_id.name }
+        : null,
+      supervisor: user.supervisor_id
+        ? {
+          id: user.supervisor_id._id,
+          name: user.supervisor_id.name,
+          lastName: user.supervisor_id.lastName,
+        }
+        : null,
+    };
 
-    res.status(200).json(user);
+    res.status(200).json(formattedUser);
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -814,25 +708,16 @@ export const getUserById = async (req, res) => {
 // Update User (Only the Admin can do it)
 export const updateUser = async (req, res) => {
   try {
-    const { id } = req.params; // Get the user ID
-    const updateData = { ...req.body }; // Get the updated data
-    console.log(
-      `[UPDATE-USER-DEBUG] Update Request for user ${id}, Target Role: ${updateData.role}`,
-    );
+    const { id } = req.params;
+    const updateData = { ...req.body };
 
     // Input Validation
     const errors = [];
     if (updateData.email && !isValidEmail(updateData.email))
       errors.push({ field: "email", message: "Invalid email format" });
-    if (
-      updateData.phoneNumber &&
-      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) ===
-        null
-    )
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
+    if (updateData.phoneNumber && validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null) {
+      errors.push({ field: "phoneNumber", message: "Invalid phone number format" });
+    }
     if (updateData.bio && !isWithinRange(updateData.bio, 0, 500))
       errors.push({
         field: "bio",
@@ -858,21 +743,11 @@ export const updateUser = async (req, res) => {
       });
 
     if (errors.length > 0) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Input validation failed!",
-        errors,
-      });
+      return res.status(400).json({ status: "Error", message: "Input validation failed!", errors });
     }
 
-    // Check for the user existence
     const existingUser = await User.findById(id).populate("role_id");
-    if (!existingUser) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!existingUser) return sendError(res, "User not found!", 404);
 
     let roleChanged = false;
     let newPasswordRaw = "";
@@ -891,12 +766,7 @@ export const updateUser = async (req, res) => {
           name: { $regex: new RegExp(`^${newRoleName}$`, "i") },
         });
 
-        if (!roleDoc) {
-          return res.status(400).json({
-            status: "Error",
-            message: "Invalid Role!",
-          });
-        }
+        if (!roleDoc) return sendError(res, "Invalid Role!");
 
         updateData.role_id = roleDoc._id; // Get the new role ID
 
@@ -921,12 +791,7 @@ export const updateUser = async (req, res) => {
           name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
         });
 
-        if (!dept) {
-          return res.status(400).json({
-            status: "Error",
-            message: "Invalid Department!",
-          });
-        }
+        if (!dept) return sendError(res, "Invalid Department!");
 
         updateData.department_id = dept._id; // Get the new department ID
       }
@@ -946,34 +811,35 @@ export const updateUser = async (req, res) => {
         const lastName = parts.slice(1).join(" ");
 
         const supervisor = await User.findOne({ name: firstName, lastName });
-        if (!supervisor) {
-          return res.status(400).json({
-            status: "Error",
-            message: "Invalid Supervisor!",
-          });
-        }
+        if (!supervisor) return sendError(res, "Invalid Supervisor!");
 
         updateData.supervisor_id = supervisor._id; // Get the new supervisor ID
       }
     }
 
     // Get the full validated phone number
-    updateData.phoneNumber = validatePhoneNumber(
-      updateData.countryCode,
-      updateData.phoneNumber,
-    );
+    if (updateData.phoneNumber) {
+      updateData.phoneNumber = validatePhoneNumber(
+        updateData.countryCode,
+        updateData.phoneNumber,
+      );
+    }
 
-    // Generate NEW password and a NEW OTP code
-    newPasswordRaw = generateRandomCode();
-    const newCode = generateRandomCode(6);
+    // Only generate NEW password and a NEW OTP code if the role actually changed
+    let newCode = "";
+    if (roleChanged) {
+      newPasswordRaw = generateRandomCode();
+      newCode = generateRandomCode(6);
 
-    // Hash the new password and OTP Code
-    updateData.password = await bcrypt.hash(newPasswordRaw, 10);
-    updateData.verificationCode = await bcrypt.hash(newCode, 10);
-    updateData.verificationCodeExpires = new Date(
-      Date.now() + 24 * 60 * 60 * 1000,
-    ); // 24 hours
-    updateData.status = "Pending";
+      // Hash the new password and OTP Code
+      updateData.password = await bcrypt.hash(newPasswordRaw, 10);
+      updateData.verificationCode = await bcrypt.hash(newCode, 10);
+      updateData.verificationCodeExpires = new Date(
+        Date.now() + 24 * 60 * 60 * 1000,
+      ); // 24 hours
+      updateData.status = "Pending";
+      updateData.mustResetPassword = true;
+    }
 
     // Update the user
     const user = await User.findByIdAndUpdate(id, updateData, {
@@ -1035,13 +901,7 @@ export const deleteUser = async (req, res) => {
     const { id } = req.params;
     const user = await User.findByIdAndDelete(id);
 
-    // Check for user existence
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found",
-      });
-    }
+    if (!user) return sendError(res, "User not found", 404);
 
     res.status(200).json({
       status: "Success",
@@ -1106,12 +966,7 @@ export const filterUsers = async (req, res) => {
         name: { $regex: `^${role}$`, $options: "i" },
       });
 
-      if (!roleDoc) {
-        return res.status(400).json({
-          status: "Error",
-          message: "Role not found!",
-        });
-      }
+      if (!roleDoc) return sendError(res, "Role not found!");
       roleId = roleDoc._id;
     }
 
@@ -1122,12 +977,7 @@ export const filterUsers = async (req, res) => {
         name: { $regex: `^${department}$`, $options: "i" },
       });
 
-      if (!deptDoc) {
-        return res.status(400).json({
-          status: "Error",
-          message: "Department not found!",
-        });
-      }
+      if (!deptDoc) return sendError(res, "Department not found!");
       departmentId = deptDoc._id;
     }
 
@@ -1149,15 +999,9 @@ export const filterUsers = async (req, res) => {
       .populate("supervisor_id", "name lastName email")
       .lean(); // Convert to plain JSON for the frontend later
 
-    res.status(200).json({
-      status: "Success",
-      data: users,
-    });
+    res.status(200).json({ status: "Success", data: users });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    return handleError(res, err);
   }
 };
 
@@ -1167,13 +1011,7 @@ export const toggleUserStatus = async (req, res) => {
     const { id } = req.params;
     const user = await User.findById(id);
 
-    // Check for user existence
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!user) return sendError(res, "User not found!", 404);
 
     // Toggle the user's status
     user.status = user.status === "Active" ? "Inactive" : "Active";
@@ -1219,6 +1057,7 @@ export const exportUsersToCSV = async (req, res) => {
       lastName: user.lastName,
       email: user.email,
       phoneNumber: user.phoneNumber,
+      position: user.position,
       role: user.role_id?.name,
       department: user.department_id?.name,
       isActive: user.status,
@@ -1232,6 +1071,7 @@ export const exportUsersToCSV = async (req, res) => {
       "email",
       "address",
       "phoneNumber",
+      "position",
       "role",
       "department",
       "status",
@@ -1271,6 +1111,7 @@ export const exportUsersToExcel = async (req, res) => {
       { header: "Email", key: "email", width: 30 },
       { header: "Address", key: "address", width: 15 },
       { header: "Phone", key: "phoneNumber", width: 15 },
+      { header: "Position", key: "position", width: 20 },
       { header: "Role", key: "role", width: 15 },
       { header: "Department", key: "department", width: 20 },
       { header: "Status", key: "status", width: 10 },
@@ -1307,22 +1148,10 @@ export const uploadProfileImage = async (req, res) => {
   try {
     const userId = req.params.id;
 
-    // Check for user existence
     const existingUser = await User.findById(userId);
-    if (!existingUser) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
-      });
-    }
+    if (!existingUser) return sendError(res, "User not found!", 404);
 
-    // Check if the image is provided
-    if (!req.file) {
-      return res.status(400).json({
-        status: "Error",
-        message: "No file uploaded!",
-      });
-    }
+    if (!req.file) return sendError(res, "No file uploaded!");
 
     // Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
