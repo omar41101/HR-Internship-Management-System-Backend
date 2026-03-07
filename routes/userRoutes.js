@@ -23,13 +23,16 @@ import authorizeRole from "../middleware/rolePermission.js";
 
 const router = express.Router();
 
+// ----------------------------------- AUTH ROUTES ----------------------------------- //
+// Route to log the user
 /**
  * @swagger
  * /api/users/login:
  *   post:
+ *     summary: User Login
  *     tags:
  *       - Auth
- *     summary: User Login
+ *     description: Allows a user to enter his dashboard based on his credentials
  *     requestBody:
  *       required: true
  *       content:
@@ -38,16 +41,200 @@ const router = express.Router();
  *             $ref: '#/components/schemas/LoginRequest'
  *     responses:
  *       200:
- *         description: Successful login
- *       404:
- *         description: User not found
+ *         description: Successful login (Could include OTP verification and/or Reset Password after login)
  *       401:
- *         description: Invalid credentials
+ *         description: Invalid Credentials
+ *       403:
+ *         description: Account Blocked 
+ *       404:
+ *         description: User not found | User Role not found
  *       500:
  *         description: Server error
  */
 router.post("/login", login);
 
+// Route to verify user's OTP code
+/**
+ * @swagger
+ * /users/verify-user:
+ *   post:
+ *     summary: Verify user's OTP code
+ *     tags: 
+ *       - Auth
+ *     description: Verifies the OTP code sent to the user's email and activates the account.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - code
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: User email
+ *               code:
+ *                 type: string
+ *                 description: OTP verification code sent to the email
+ *     responses:
+ *       200:
+ *         description: Account verified successfully
+ *       400:
+ *         description: Invalid OTP code | OTP Code expired
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
+router.post("/users/verify-user", verifyUser);
+
+// Route to resend OTP code
+/**
+ * @swagger
+ * /users/resend-verification:
+ *   post:
+ *     summary: Resend OTP verification code
+ *     tags: 
+ *      - Auth
+ *     description: Sends a new OTP code to the user's email if the resend limit is not exceeded.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: User email
+ *     responses:
+ *       200:
+ *         description: OTP code resent successfully
+ *       400:
+ *         description: Account already verified 
+ *       404:
+ *         description: User not found
+ *       429:
+ *         description: Maximum resend limit reached (Too many requests)
+ *       500:
+ *         description: Server Error
+ */
+router.post("/users/resend-verification", resendVerificationCode);
+
+// Route to reset password
+/**
+ * @swagger
+ * /users/reset-password:
+ *   post:
+ *     summary: Reset password after account verification
+ *     tags: 
+ *      - Auth
+ *     description: Allows a verified user to set a new password after first login.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: User email
+ *               newPassword:
+ *                 type: string
+ *                 description: New password for the account
+ *     responses:
+ *       200:
+ *         description: Password Reset successfully
+ *       400:
+ *         description: Invalid password format
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
+router.post("/users/reset-password", resetPassword);
+
+// Route to forget password request
+/**
+ * @swagger
+ * /users/request-password-reset:
+ *   post:
+ *     summary: Request password reset link
+ *     tags: 
+ *        - Auth
+ *     description: Sends a password reset link to the user's email.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: User email address
+ *     responses:
+ *       200:
+ *         description: Password reset link sent successfully
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
+router.post("/users/request-password-reset", requestPasswordReset);
+
+// Route to forget password reset
+/**
+ * @swagger
+ * /users/forget-password:
+ *   post:
+ *     summary: Reset password using reset token
+ *     tags: 
+ *      - Auth
+ *     description: Allows a user to reset their password using the reset token received via email.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - token
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 description: User email
+ *               token:
+ *                 type: string
+ *                 description: Password reset token received via email
+ *               newPassword:
+ *                 type: string
+ *                 description: New password for the account
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid or expired token | Invalid password format
+ *       404:
+ *         description: User not found
+ */
+router.post("/users/forget-password", forgetPassword);
+
+
+// ----------------------------------- USER MANAGEMENT ROUTES ----------------------------------- //
+// Route to Add user
 /**
  * @swagger
  * /api/users:
@@ -69,31 +256,17 @@ router.post("/login", login);
  *       400:
  *         description: Failed Input validation
  *       401:
- *         description: Unauthorized (User existing or invalid/missing token)
+ *         description: Unauthorized (User existing, Invalid Role, Invalid Department or Invalid/missing token)
  *       403:
- *         description: Forbidden (insufficient permissions)
+ *         description: Forbidden (Insufficient permissions)
  *       404:
- *         description: User/Role/Department/Supervisor not found
+ *         description: Supervisor not found
  *       500:
  *         description: Server error
  */
 router.post("/users", authorizeRole("Admin"), addUser);
 
-// Route to verify user's OTP code
-router.post("/users/verify-user", verifyUser);
-
-// Route to resend OTP code
-router.post("/users/resend-verification", resendVerificationCode);
-
-// Route to reset password
-router.post("/users/reset-password", resetPassword);
-
-// Route to forget password request
-router.post("/users/request-password-reset", requestPasswordReset);
-
-// Route to forget password reset
-router.post("/users/forget-password", forgetPassword);
-
+// Route to Update user
 /**
  * @swagger
  * /api/users/{id}:
@@ -120,7 +293,9 @@ router.post("/users/forget-password", forgetPassword);
  *       200:
  *         description: User updated successfully
  *       400:
- *         description: Validation failed
+ *         description: Input Validation failed, Invalid Role, Invalid Department, Invalid Supervisor or Invalid/missing token
+ *       403:
+ *         description: Forbidden (Insufficient permissions)
  *       404:
  *         description: User not found
  *       500:
@@ -128,6 +303,7 @@ router.post("/users/forget-password", forgetPassword);
  */
 router.put("/users/:id", authorizeRole("Admin"), updateUser);
 
+// Route to Delete user
 /**
  * @swagger
  * /api/users/{id}:
@@ -154,6 +330,7 @@ router.put("/users/:id", authorizeRole("Admin"), updateUser);
  */
 router.delete("/users/:id", authorizeRole("Admin"), deleteUser);
 
+// Route to get all users
 /**
  * @swagger
  * /api/users:
@@ -171,13 +348,16 @@ router.delete("/users/:id", authorizeRole("Admin"), deleteUser);
  */
 router.get("/users", authorizeRole("Admin"), getAllUsers);
 
+// Route to get user by ID
 /**
  * @swagger
  * /api/users/{id}:
  *   get:
  *     tags:
  *       - Users
- *     summary: Get a user by ID
+ *     summary: Get a user by ID (Admin and the user himself)
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - name: id
  *         in: path
@@ -195,6 +375,7 @@ router.get("/users", authorizeRole("Admin"), getAllUsers);
  */
 router.get("/users/:id", getUserById);
 
+// Route to search users
 /**
  * @swagger
  * /api/users/search:
@@ -219,6 +400,7 @@ router.get("/users/:id", getUserById);
  */
 router.get("/search", authorizeRole("Admin"), searchUser);
 
+// Route to filter users
 /**
  * @swagger
  * /api/users/filter:
@@ -241,24 +423,25 @@ router.get("/search", authorizeRole("Admin"), searchUser);
  *         in: query
  *         schema:
  *           type: string
- *           enum: [Active, Inactive]
+ *           enum: [Active, Inactive, Pending, Blocked]
  *     responses:
  *       200:
  *         description: Returns filtered users
  *       400:
- *         description: Invalid role or department
+ *         description: Invalid Role or Department
  *       500:
  *         description: Server error
  */
 router.get("/filter", authorizeRole("Admin"), filterUsers);
 
+// Route to toggle user status
 /**
  * @swagger
  * /api/users/{id}/toggle-status:
  *   put:
  *     tags:
  *       - Users
- *     summary: Toggle user active/inactive status (Admin only)
+ *     summary: Toggle user Active/Inactive status (Admin only)
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -277,6 +460,7 @@ router.get("/filter", authorizeRole("Admin"), filterUsers);
  */
 router.put("/users/:id/toggle-status", authorizeRole("Admin"), toggleUserStatus);
 
+// Route to export users to CSV
 /**
  * @swagger
  * /api/users/export/csv:
@@ -294,6 +478,7 @@ router.put("/users/:id/toggle-status", authorizeRole("Admin"), toggleUserStatus)
  */
 router.get("/users/export/csv", authorizeRole("Admin"), exportUsersToCSV);
 
+// Route to export users to Excel
 /**
  * @swagger
  * /api/users/export/excel:
@@ -311,6 +496,7 @@ router.get("/users/export/csv", authorizeRole("Admin"), exportUsersToCSV);
  */
 router.get("/users/export/excel", authorizeRole("Admin"), exportUsersToExcel);
 
+// Route to upload profile image
 /**
  * @swagger
  * /api/users/{id}/profile-image:
@@ -339,7 +525,7 @@ router.get("/users/export/excel", authorizeRole("Admin"), exportUsersToExcel);
  *                 format: binary
  *     responses:
  *       200:
- *         description: Profile image uploaded successfully
+ *         description: Profile Image uploaded successfully
  *       400:
  *         description: No file uploaded
  *       404:

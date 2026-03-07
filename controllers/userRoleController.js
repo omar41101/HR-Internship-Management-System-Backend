@@ -2,7 +2,7 @@ import UserRole from "../models/UserRole.js";
 import User from "../models/User.js";
 import { logAuditAction } from "../utils/logger.js";
 
-// Add new Role Functionnality
+// Add new Role Functionnality 
 export const addUserRole = async (req, res) => {
   // Get the new role credentials
   const { name, description } = req.body; 
@@ -16,15 +16,6 @@ export const addUserRole = async (req, res) => {
   }
 
   try {
-    // Check for role existence
-    const existingRole = await UserRole.findOne({ name: name.trim() });
-    if (existingRole) {
-      return res.status(400).json({
-        status: "Error",
-        message: "User Role already existing!",
-      });
-    }
-
     // Check for user role name existence
     const existingUserRoleName = await UserRole.findOne({ name: name.trim() });
     if (
@@ -33,7 +24,7 @@ export const addUserRole = async (req, res) => {
     ) {
       return res.status(400).json({
         status: "Error",
-        message: "User Role name already exists!",
+        message: "User Role already exists!",
       });
     }
 

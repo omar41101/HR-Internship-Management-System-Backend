@@ -15,6 +15,7 @@ export const isEmpty = (field) => {
   return !field || field.trim().length === 0;
 }
 
+// Phone number validation 
 export const validatePhoneNumber = (code, number) => {
   if (!number) return null;
   console.log(`[Phone-Validation-Start] Code: ${code}, Number: ${number}`);
@@ -43,17 +44,6 @@ export const validatePhoneNumber = (code, number) => {
     return null;
   }
 };
-
-// Basic URL validation (For the profile image urls)
-export const isValidURL = (url) => {
-  if (!url) return true; // Optional field
-  try {
-    new URL(url);
-    return true;
-  } catch (_) {
-    return false;
-  }
-}
 
 // Length check (For the Bio)
 export const isWithinRange = (str, min, max) => {

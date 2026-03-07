@@ -301,7 +301,7 @@ export const requestPasswordReset = async (req, res) => {
 
     if (validateUserStatus(user, res)) return;
 
-    const token = crypto.randomBytes(32).toString("hex");
+    const token = crypto.randomBytes(32).toString("hex");    
     user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
@@ -602,109 +602,6 @@ export const addUser = async (req, res) => {
   }
 };
 
-// Get All Users Functionnality (Only the Admin can do it)
-export const getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find()
-      .populate("role_id")
-      .populate("department_id")
-      .populate("supervisor_id");
-
-    // Map users to a clean format
-    const cleanUsers = users.map((user) => ({
-      id: user._id,
-      name: user.name,
-      lastName: user.lastName,
-      email: user.email,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      bonus: user.bonus,
-      profileImageURL: user.profileImageURL,
-      bio: user.bio,
-      leaveBalance: user.leaveBalance,
-      socialStatus: user.socialStatus,
-      hasChildren: user.hasChildren,
-      nbOfChildren: user.nbOfChildren,
-      status: user.status,
-      isAvailable: user.isAvailable,
-      joinDate: user.joinDate,
-      position: user.position,
-      role: user.role_id
-        ? { id: user.role_id._id, name: user.role_id.name }
-        : null,
-      department: user.department_id
-        ? { id: user.department_id._id, name: user.department_id.name }
-        : null,
-      supervisor: user.supervisor_id
-        ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
-        : null,
-    }));
-
-    res.status(200).json(cleanUsers);
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
-  }
-};
-
-// Get a User by Id
-export const getUserById = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id)
-      .populate("role_id")
-      .populate("department_id")
-      .populate("supervisor_id");
-
-    if (!user) return sendError(res, "User not found!", 404);
-    // Format the user data
-    const formattedUser = {
-      id: user._id,
-      name: user.name,
-      lastName: user.lastName,
-      email: user.email,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      bonus: user.bonus,
-      profileImageURL: user.profileImageURL,
-      bio: user.bio,
-      leaveBalance: user.leaveBalance,
-      socialStatus: user.socialStatus,
-      hasChildren: user.hasChildren,
-      nbOfChildren: user.nbOfChildren,
-      status: user.status,
-      isAvailable: user.isAvailable,
-      joinDate: user.joinDate,
-      position: user.position,
-      role: user.role_id
-        ? { id: user.role_id._id, name: user.role_id.name }
-        : null,
-      department: user.department_id
-        ? { id: user.department_id._id, name: user.department_id.name }
-        : null,
-      supervisor: user.supervisor_id
-        ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
-        : null,
-    };
-
-    res.status(200).json(formattedUser);
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
-  }
-};
-
 // Update User (Only the Admin can do it)
 export const updateUser = async (req, res) => {
   try {
@@ -917,6 +814,110 @@ export const deleteUser = async (req, res) => {
       targetName: `${user.name} ${user.lastName}`,
       ipAddress: req.ip,
     });
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Get All Users Functionnality (Only the Admin can do it)
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find()
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id");
+
+    // Map users to a clean format
+    const cleanUsers = users.map((user) => ({
+      id: user._id,
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      bonus: user.bonus,
+      profileImageURL: user.profileImageURL,
+      bio: user.bio,
+      leaveBalance: user.leaveBalance,
+      socialStatus: user.socialStatus,
+      hasChildren: user.hasChildren,
+      nbOfChildren: user.nbOfChildren,
+      status: user.status,
+      isAvailable: user.isAvailable,
+      joinDate: user.joinDate,
+      position: user.position,
+      role: user.role_id
+        ? { id: user.role_id._id, name: user.role_id.name }
+        : null,
+      department: user.department_id
+        ? { id: user.department_id._id, name: user.department_id.name }
+        : null,
+      supervisor: user.supervisor_id
+        ? {
+          id: user.supervisor_id._id,
+          name: user.supervisor_id.name,
+          lastName: user.supervisor_id.lastName,
+        }
+        : null,
+    }));
+
+    res.status(200).json(cleanUsers);
+  } catch (err) {
+    res.status(500).json({
+      status: "Error",
+      message: err.message,
+    });
+  }
+};
+
+// Get a User by Id
+export const getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id");
+
+    if (!user) return sendError(res, "User not found!", 404);
+    
+    // Format the user data
+    const formattedUser = {
+      id: user._id,
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      bonus: user.bonus,
+      profileImageURL: user.profileImageURL,
+      bio: user.bio,
+      leaveBalance: user.leaveBalance,
+      socialStatus: user.socialStatus,
+      hasChildren: user.hasChildren,
+      nbOfChildren: user.nbOfChildren,
+      status: user.status,
+      isAvailable: user.isAvailable,
+      joinDate: user.joinDate,
+      position: user.position,
+      role: user.role_id
+        ? { id: user.role_id._id, name: user.role_id.name }
+        : null,
+      department: user.department_id
+        ? { id: user.department_id._id, name: user.department_id.name }
+        : null,
+      supervisor: user.supervisor_id
+        ? {
+          id: user.supervisor_id._id,
+          name: user.supervisor_id.name,
+          lastName: user.supervisor_id.lastName,
+        }
+        : null,
+    };
+
+    res.status(200).json(formattedUser);
   } catch (err) {
     res.status(500).json({
       status: "Error",

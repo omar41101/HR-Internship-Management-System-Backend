@@ -5,7 +5,7 @@ import { logAuditAction } from "../utils/logger.js";
 // Add new Department Functionnality
 export const addDepartment = async (req, res) => {
   const { name, description } = req.body; // Get the new department credentials
-
+ 
   // Check empty name field (required)
   if (!name || name.trim() === "") {
     return res.status(400).json({

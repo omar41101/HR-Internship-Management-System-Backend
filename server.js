@@ -43,9 +43,9 @@ export default app;
 // Start the server only if not in test environment
 if (process.env.NODE_ENV !== "test") {
   app.listen(PORT, () => {
-    console.log("##################################################");
-    console.log(`### SERVER STARTED AT: ${new Date().toISOString()} ###`);
-    console.log(`### LISTENING ON PORT: ${PORT}                ###`);
-    console.log("##################################################");
+    console.log("==================================================");
+    console.log(`=== SERVER STARTED AT: ${new Date().toISOString()} ===`);
+    console.log(`=== LISTENING ON PORT: ${PORT}                ===`);
+    console.log("==================================================");
   });
 }

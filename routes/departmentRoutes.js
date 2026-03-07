@@ -9,15 +9,16 @@ import {
 import authorizeRole from "../middleware/rolePermission.js";
 
 const router = express.Router();
-
+ 
 // Route to add new department
 /**
  * @swagger
  * /api/departments:
  *   post:
+ *     summary: Create a new department (Admin Only)
  *     tags:
  *       - Departments
- *     summary: Create a new department
+ *     description: Allows an Admin to create a new department.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -33,7 +34,15 @@ const router = express.Router();
  *                 type: string
  *     responses:
  *       201:
- *         description: Department created
+ *         description: Department created successfully
+ *       400:
+ *         description: Invalid Input | Department already exists
+ *       401:
+ *         description: Missing Token
+ *       403: 
+ *         description: Unauthorized
+ *       500:
+ *         description: Server Error
  */
 router.post("/departments", authorizeRole("Admin"), addDepartment);
 
@@ -42,47 +51,64 @@ router.post("/departments", authorizeRole("Admin"), addDepartment);
  * @swagger
  * /api/departments:
  *   get:
+ *     summary: Get all departments (Admin Only)
  *     tags:
  *       - Departments
- *     summary: Get all departments
+ *     description : Allows an Admin to get the list of all departments.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: List of departments
+ *       401:
+ *         description: Missing Token
+ *       403: 
+ *         description: Unauthorized
+ *       500:
+ *         description: Server Error
  */
-router.get("/departments", getAllDepartments); 
+router.get("/departments", authorizeRole("Admin"), getAllDepartments); 
 
 // Route to get a department by Id
 /**
  * @swagger
  * /api/departments/{id}:
  *   get:
+ *     summary: Get a single department by ID (Admin Only)
  *     tags:
  *       - Departments
- *     summary: Get a single department by ID
+ *     description: Allows an Admin to get the details of a single department (Admin Only)
  *     parameters:
  *       - in: path
  *         name: id
  *         required: true
  *         schema:
  *           type: string
+ *     security:
+ *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Department details
+ *       401:
+ *         description: Missing Token
+ *       403: 
+ *         description: Unauthorized
  *       404:
  *         description: Department not found
+ *       500:
+ *         description: Server Error
  */
-router.get("/departments/:id", getDepartmentById);
+router.get("/departments/:id", authorizeRole("Admin"), getDepartmentById);
 
 // Route to delete a department
 /**
  * @swagger
  * /api/departments/{id}:
  *   delete:
+ *     summary: Delete a department (Admin only)
  *     tags:
  *       - Departments
- *     summary: Delete a department
+ *     description: Allows an Admin to delete a department.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -94,8 +120,14 @@ router.get("/departments/:id", getDepartmentById);
  *     responses:
  *       200:
  *         description: Department deleted
+ *       401:
+ *         description: Missing Token
+ *       403: 
+ *         description: Unauthorized
  *       404:
  *         description: Department not found
+ *       500:
+ *         description: Server Error
  */
 router.delete("/departments/:id", authorizeRole("Admin"), deleteDepartment);
 
@@ -104,9 +136,10 @@ router.delete("/departments/:id", authorizeRole("Admin"), deleteDepartment);
  * @swagger
  * /api/departments/{id}:
  *   put:
+ *     summary: Update a department (Admin only)
  *     tags:
  *       - Departments
- *     summary: Update a department
+ *     description: Allows an Admin to update a department.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -129,8 +162,16 @@ router.delete("/departments/:id", authorizeRole("Admin"), deleteDepartment);
  *     responses:
  *       200:
  *         description: Department updated
+ *       400:
+ *         description: Invalid Input | Department already exists
+ *       401:
+ *         description: Missing Token
+ *       403: 
+ *         description: Unauthorized
  *       404:
  *         description: Department not found
+ *       500:
+ *         description: Server Error
  */
 router.put("/departments/:id", authorizeRole("Admin"), updateDepartment);
 

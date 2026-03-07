@@ -15,9 +15,10 @@ const router = express.Router();
  * @swagger
  * /api/roles:
  *   post:
+ *     summary: Create a new user role (Admin Only)
  *     tags:
  *       - UserRoles
- *     summary: Add a new user role (Admin only)
+ *     description: Allows the Admin to add new user role.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -26,7 +27,7 @@ const router = express.Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: 
+ *             required:
  *               - name
  *             properties:
  *               name:
@@ -36,6 +37,14 @@ const router = express.Router();
  *     responses:
  *       201:
  *         description: Role created successfully
+ *       400:
+ *         description: Role Name must be filled | Role already exists
+ *       401:
+ *         description: Missing Token
+ *       403:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server Error
  */
 router.post("/roles", authorizeRole("Admin"), addUserRole);
 
@@ -44,14 +53,21 @@ router.post("/roles", authorizeRole("Admin"), addUserRole);
  * @swagger
  * /api/roles:
  *   get:
+ *     summary: Get all user roles (Admin only)
  *     tags:
  *       - UserRoles
- *     summary: Get all user roles
+ *     description: Allows an Admin to get the list of all user roles.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
  *         description: Returns list of roles
+ *       401:
+ *         description: Missing Token
+ *       403:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server Error
  */
 router.get("/roles", authorizeRole("Admin"), getAllUserRoles);
 
@@ -60,9 +76,10 @@ router.get("/roles", authorizeRole("Admin"), getAllUserRoles);
  * @swagger
  * /api/roles/{id}:
  *   get:
+ *     summary: Get a user role by ID (Admin only)
  *     tags:
  *       - UserRoles
- *     summary: Get a single user role by ID
+ *     description: Allows an Admin to get the details of a user role.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -74,9 +91,15 @@ router.get("/roles", authorizeRole("Admin"), getAllUserRoles);
  *           type: string
  *     responses:
  *       200:
- *         description: Returns the user role
+ *         description: Returns the user role details
+ *       401:
+ *         description: Missing Token
+ *       403:
+ *         description: Unauthorized
  *       404:
  *         description: Role not found
+ *       500:
+ *         description: Server Error
  */
 router.get("/roles/:id", authorizeRole("Admin"), getUserRoleById);
 
@@ -85,9 +108,10 @@ router.get("/roles/:id", authorizeRole("Admin"), getUserRoleById);
  * @swagger
  * /api/roles/{id}:
  *   put:
+ *     summary: Update a user role (Admin only)
  *     tags:
  *       - UserRoles
- *     summary: Update a user role (Admin only)
+ *     description: Allows an Admin to update the details of a user role.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -112,9 +136,15 @@ router.get("/roles/:id", authorizeRole("Admin"), getUserRoleById);
  *       200:
  *         description: Role updated successfully
  *       400:
- *         description: Invalid input
+ *         description: Invalid input | User Role already exists
+ *       401:
+ *         description: Missing Token
+ *       403:
+ *         description: Unauthorized
  *       404:
- *         description: Role not found
+ *         description: User Role not found
+ *       500:
+ *         description: Server Error
  */
 router.put("/roles/:id", authorizeRole("Admin"), updateUserRole);
 
@@ -123,9 +153,10 @@ router.put("/roles/:id", authorizeRole("Admin"), updateUserRole);
  * @swagger
  * /api/roles/{id}:
  *   delete:
+ *     summary: Delete a user role (Admin only)
  *     tags:
  *       - UserRoles
- *     summary: Delete a user role (Admin only)
+ *     description: Allows an Admin to delete a user role.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -137,9 +168,15 @@ router.put("/roles/:id", authorizeRole("Admin"), updateUserRole);
  *           type: string
  *     responses:
  *       200:
- *         description: Role deleted successfully
+ *         description: User Role deleted successfully
+ *       401:
+ *         description: Missing Token
+ *       403:
+ *         description: Unauthorized
  *       404:
- *         description: Role not found
+ *         description: User Role not found
+ *       500:
+ *         description: Server Error
  */
 router.delete("/roles/:id", authorizeRole("Admin"), deleteUserRole);
 
