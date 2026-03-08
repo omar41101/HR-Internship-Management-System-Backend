@@ -515,9 +515,15 @@ export const addUser = async (req, res) => {
 
     // Generate password (length = 8)
     const password = generateRandomCode();
+    console.log(
+        `[ADD-USER-DEBUG] Password generated: ${password}`,
+    );
 
     // Generate OTP code (length = 6)
     const otpCode = generateRandomCode(6);
+    console.log(
+        `[ADD-USER-DEBUG] OTP code generated: ${otpCode}`,
+    );
 
     // Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
