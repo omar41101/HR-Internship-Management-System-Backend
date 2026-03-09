@@ -1,28 +1,21 @@
-import Department from "../models/Department.js";
 import User from "../models/User.js";
+import Department from "../models/Department.js";
 import { logAuditAction } from "../utils/logger.js";
+import AppError from "../utils/AppError.js";
 
 // Add new Department Functionnality
-export const addDepartment = async (req, res) => {
+export const addDepartment = async (req, res, next) => {
   const { name, description } = req.body; // Get the new department credentials
- 
+
   // Check empty name field (required)
   if (!name || name.trim() === "") {
-    return res.status(400).json({
-      status: "Error",
-      message: "The department name field must be filled!",
-    });
+    throw new AppError("The department name field must be filled!", 400);
   }
 
   try {
     // Check for department existence
     const existingDepartment = await Department.findOne({ name: name.trim() });
-    if (existingDepartment) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Department already existing!",
-      });
-    }
+    if (existingDepartment) throw new AppError("Department already existing!", 400);
 
     // Check for department name existence
     const existingDepartmentName = await Department.findOne({ name: name.trim() });
@@ -30,10 +23,7 @@ export const addDepartment = async (req, res) => {
       existingDepartmentName &&
       existingDepartmentName._id.toString() !== req.params.id
     ) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Department name already exists!",
-      });
+      throw new AppError("Department name already exists!", 400);
     }
 
     // Save the new department in the Database
@@ -57,57 +47,38 @@ export const addDepartment = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Get All Departments Functionnality
-export const getAllDepartments = async (req, res) => {
+export const getAllDepartments = async (req, res, next) => {
   try {
     const departments = await Department.find();
     res.status(200).json(departments);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Get a Department by Id
-export const getDepartmentById = async (req, res) => {
+export const getDepartmentById = async (req, res, next) => {
   try {
     const department = await Department.findById(req.params.id);
-    if (!department) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Department not found!",
-      });
-    }
+    if (!department) throw new AppError("Department not found!", 404);
 
     res.status(200).json(department);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Delete a Department (All admins can do it)
-export const deleteDepartment = async (req, res) => {
+export const deleteDepartment = async (req, res, next) => {
   try {
     // Check for department existence
     const department = await Department.findById(req.params.id);
-    if (!department) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Department is not found!",
-      });
-    }
+    if (!department) throw new AppError("Department is not found!", 404);
 
     // Find the "Not assigned" department and create it if it doesn't exist
     let notAssignedDepartment = await Department.findOne({
@@ -143,34 +114,23 @@ export const deleteDepartment = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Update a Department
-export const updateDepartment = async (req, res) => {
+export const updateDepartment = async (req, res, next) => {
   const { name, description } = req.body;
 
   // Check for empty name field (required)
   if (!name || name.trim() === "") {
-    return res.status(400).json({
-      status: "Error",
-      message: "The name field must be filled!",
-    });
+    throw new AppError("The name field must be filled!", 400);
   }
 
   try {
     // Check for department existence
     const department = await Department.findById(req.params.id);
-    if (!department) {
-      return res.status(404).json({
-        status: "Error",
-        message: "Department not found!",
-      });
-    }
+    if (!department) throw new AppError("Department not found!", 404);
 
     // Check for department name existence
     const existingDepartment = await Department.findOne({ name: name.trim() });
@@ -178,10 +138,7 @@ export const updateDepartment = async (req, res) => {
       existingDepartment &&
       existingDepartment._id.toString() !== req.params.id
     ) {
-      return res.status(400).json({
-        status: "Error",
-        message: "Department name already exists!",
-      });
+      throw new AppError("Department name already exists!", 400);
     }
 
     // Get the old department name
@@ -215,9 +172,6 @@ export const updateDepartment = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };

@@ -8,6 +8,9 @@ import connectMongo from "./config/db.js";
 import userRoutes from "./routes/userRoutes.js";
 import UserRoleRoutes from "./routes/userRoleRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
+import auditLogRoutes from "./routes/auditLogRoutes.js";
+import testRoutes from "./routes/testRoutes.js";
+import errorHandler from "./middleware/errorHandler.js";
 
 // Creation of an express app
 const app = express();
@@ -33,6 +36,11 @@ connectMongo();
 app.use('/api', userRoutes);
 app.use('/api', UserRoleRoutes);
 app.use('/api', departmentRoutes);
+app.use('/api', auditLogRoutes);
+app.use('/api', testRoutes);
+
+// GLOBAL ERROR HANDLER - Must be last!
+app.use(errorHandler);
 
 // Define our PORT
 const PORT = process.env.PORT || 3000;
