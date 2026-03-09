@@ -19,7 +19,8 @@ import {
   forgetPassword
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
-import authorizeRole from "../middleware/rolePermission.js";
+import authenticate from "../middleware/authenticate.js";
+import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
@@ -264,7 +265,7 @@ router.post("/users/forget-password", forgetPassword);
  *       500:
  *         description: Server error
  */
-router.post("/users", authorizeRole("Admin"), addUser);
+router.post("/users", authenticate, authorize(["Admin"]), addUser);
 
 // Route to Update user
 /**
@@ -301,7 +302,7 @@ router.post("/users", authorizeRole("Admin"), addUser);
  *       500:
  *         description: Server error
  */
-router.put("/users/:id", authorizeRole("Admin"), updateUser);
+router.put("/users/:id", authenticate, authorize(["Admin"]), updateUser);
 
 // Route to Delete user
 /**
@@ -328,7 +329,7 @@ router.put("/users/:id", authorizeRole("Admin"), updateUser);
  *       500:
  *         description: Server error
  */
-router.delete("/users/:id", authorizeRole("Admin"), deleteUser);
+router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
 
 // Route to get all users
 /**
@@ -346,7 +347,7 @@ router.delete("/users/:id", authorizeRole("Admin"), deleteUser);
  *       500:
  *         description: Server error
  */
-router.get("/users", authorizeRole("Admin"), getAllUsers);
+router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
 
 // Route to get user by ID
 /**
@@ -373,7 +374,12 @@ router.get("/users", authorizeRole("Admin"), getAllUsers);
  *       500:
  *         description: Server error
  */
-router.get("/users/:id", getUserById);
+router.get(
+  "/users/:id",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
+  getUserById
+);
 
 // Route to search users
 /**
@@ -398,7 +404,7 @@ router.get("/users/:id", getUserById);
  *       500:
  *         description: Server error
  */
-router.get("/search", authorizeRole("Admin"), searchUser);
+router.get("/search", authenticate, authorize(["Admin"]), searchUser);
 
 // Route to filter users
 /**
@@ -432,7 +438,7 @@ router.get("/search", authorizeRole("Admin"), searchUser);
  *       500:
  *         description: Server error
  */
-router.get("/filter", authorizeRole("Admin"), filterUsers);
+router.get("/filter", authenticate, authorize(["Admin"]), filterUsers);
 
 // Route to toggle user status
 /**
@@ -458,7 +464,7 @@ router.get("/filter", authorizeRole("Admin"), filterUsers);
  *       500:
  *         description: Server error
  */
-router.put("/users/:id/toggle-status", authorizeRole("Admin"), toggleUserStatus);
+router.put("/users/:id/toggle-status", authenticate, authorize(["Admin"]), toggleUserStatus);
 
 // Route to export users to CSV
 /**
@@ -476,7 +482,7 @@ router.put("/users/:id/toggle-status", authorizeRole("Admin"), toggleUserStatus)
  *       500:
  *         description: Server error
  */
-router.get("/users/export/csv", authorizeRole("Admin"), exportUsersToCSV);
+router.get("/users/export/csv", authenticate, authorize(["Admin"]), exportUsersToCSV);
 
 // Route to export users to Excel
 /**
@@ -494,7 +500,7 @@ router.get("/users/export/csv", authorizeRole("Admin"), exportUsersToCSV);
  *       500:
  *         description: Server error
  */
-router.get("/users/export/excel", authorizeRole("Admin"), exportUsersToExcel);
+router.get("/users/export/excel", authenticate, authorize(["Admin"]), exportUsersToExcel);
 
 // Route to upload profile image
 /**
@@ -533,6 +539,12 @@ router.get("/users/export/excel", authorizeRole("Admin"), exportUsersToExcel);
  *       500:
  *         description: Server error
  */
-router.post("/users/:id/profile-image", upload.single("profileImage"), uploadProfileImage);
+router.post(
+  "/users/:id/profile-image",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  upload.single("profileImage"),
+  uploadProfileImage
+);
 
 export default router;

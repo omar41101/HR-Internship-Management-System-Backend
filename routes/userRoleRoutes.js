@@ -6,7 +6,8 @@ import {
   updateUserRole,
   deleteUserRole,
 } from "../controllers/userRoleController.js";
-import authorizeRole from "../middleware/rolePermission.js";
+import authenticate from "../middleware/authenticate.js";
+import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
@@ -46,7 +47,7 @@ const router = express.Router();
  *       500:
  *         description: Server Error
  */
-router.post("/roles", authorizeRole("Admin"), addUserRole);
+router.post("/roles", authenticate, authorize(["Admin"]), addUserRole);
 
 // Get all roles
 /**
@@ -69,7 +70,7 @@ router.post("/roles", authorizeRole("Admin"), addUserRole);
  *       500:
  *         description: Server Error
  */
-router.get("/roles", authorizeRole("Admin"), getAllUserRoles);
+router.get("/roles", authenticate, authorize(["Admin"]), getAllUserRoles);
 
 // Get a role by ID
 /**
@@ -101,7 +102,7 @@ router.get("/roles", authorizeRole("Admin"), getAllUserRoles);
  *       500:
  *         description: Server Error
  */
-router.get("/roles/:id", authorizeRole("Admin"), getUserRoleById);
+router.get("/roles/:id", authenticate, authorize(["Admin"]), getUserRoleById);
 
 // Update a role
 /**
@@ -146,7 +147,7 @@ router.get("/roles/:id", authorizeRole("Admin"), getUserRoleById);
  *       500:
  *         description: Server Error
  */
-router.put("/roles/:id", authorizeRole("Admin"), updateUserRole);
+router.put("/roles/:id", authenticate, authorize(["Admin"]), updateUserRole);
 
 // Delete a role
 /**
@@ -178,6 +179,6 @@ router.put("/roles/:id", authorizeRole("Admin"), updateUserRole);
  *       500:
  *         description: Server Error
  */
-router.delete("/roles/:id", authorizeRole("Admin"), deleteUserRole);
+router.delete("/roles/:id", authenticate, authorize(["Admin"]), deleteUserRole);
 
 export default router;

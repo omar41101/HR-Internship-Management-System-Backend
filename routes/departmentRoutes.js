@@ -6,7 +6,8 @@ import {
     deleteDepartment,
     updateDepartment
 } from "../controllers/departmentController.js";
-import authorizeRole from "../middleware/rolePermission.js";
+import authenticate from "../middleware/authenticate.js";
+import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
  
@@ -44,7 +45,7 @@ const router = express.Router();
  *       500:
  *         description: Server Error
  */
-router.post("/departments", authorizeRole("Admin"), addDepartment);
+router.post("/departments", authenticate, authorize(["Admin"]), addDepartment);
 
 // Route to get all the departments
 /**
@@ -67,7 +68,7 @@ router.post("/departments", authorizeRole("Admin"), addDepartment);
  *       500:
  *         description: Server Error
  */
-router.get("/departments", authorizeRole("Admin"), getAllDepartments); 
+router.get("/departments", authenticate, authorize(["Admin"]), getAllDepartments); 
 
 // Route to get a department by Id
 /**
@@ -98,7 +99,7 @@ router.get("/departments", authorizeRole("Admin"), getAllDepartments);
  *       500:
  *         description: Server Error
  */
-router.get("/departments/:id", authorizeRole("Admin"), getDepartmentById);
+router.get("/departments/:id", authenticate, authorize(["Admin"]), getDepartmentById);
 
 // Route to delete a department
 /**
@@ -129,7 +130,7 @@ router.get("/departments/:id", authorizeRole("Admin"), getDepartmentById);
  *       500:
  *         description: Server Error
  */
-router.delete("/departments/:id", authorizeRole("Admin"), deleteDepartment);
+router.delete("/departments/:id", authenticate, authorize(["Admin"]), deleteDepartment);
 
 // Route to update a department
 /**
@@ -173,6 +174,6 @@ router.delete("/departments/:id", authorizeRole("Admin"), deleteDepartment);
  *       500:
  *         description: Server Error
  */
-router.put("/departments/:id", authorizeRole("Admin"), updateDepartment);
+router.put("/departments/:id", authenticate, authorize(["Admin"]), updateDepartment);
 
 export default router;

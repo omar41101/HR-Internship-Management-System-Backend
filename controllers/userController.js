@@ -36,7 +36,11 @@ const handleError = (res, err) => {
 
 const validateUserStatus = (user, res) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
-    return sendError(res, `Your Account is ${user.status}. Please contact the Administration!`, 403);
+    return sendError(
+      res,
+      `Your Account is ${user.status}. Please contact the Administration!`,
+      403,
+    );
   }
   return null;
 };
@@ -82,7 +86,11 @@ export const login = async (req, res) => {
       if (user.loginAttempts >= 3) {
         user.status = "Blocked";
         await user.save();
-        return sendError(res, "Your Account is now Blocked. Please contact the Administration!", 403);
+        return sendError(
+          res,
+          "Your Account is now Blocked. Please contact the Administration!",
+          403,
+        );
       }
       await user.save();
 
@@ -144,7 +152,8 @@ export const verifyUser = async (req, res) => {
 
     if (validateUserStatus(user, res)) return;
 
-    if (user.status === "Active") return sendError(res, "Account Already Verified!");
+    if (user.status === "Active")
+      return sendError(res, "Account Already Verified!");
 
     if (!(await bcrypt.compare(code, user.verificationCode))) {
       return sendError(res, "Invalid OTP Code!");
@@ -164,7 +173,7 @@ export const verifyUser = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: userRole?.name || "Employee" },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     res.status(200).json({
@@ -175,7 +184,7 @@ export const verifyUser = async (req, res) => {
         userId: user._id,
         role: userRole?.name || "Employee",
         requiresPasswordChange: user.mustResetPassword,
-      }
+      },
     });
   } catch (err) {
     return res.status(500).json({
@@ -196,7 +205,8 @@ export const resendVerificationCode = async (req, res) => {
 
     if (validateUserStatus(user, res)) return;
 
-    if (user.status === "Active") return sendError(res, "Account Already Verified!");
+    if (user.status === "Active")
+      return sendError(res, "Account Already Verified!");
 
     const today = new Date();
     const lastResend = user.resendDate ? new Date(user.resendDate) : null;
@@ -209,7 +219,8 @@ export const resendVerificationCode = async (req, res) => {
     if (user.resendCount >= 3) {
       return res.status(429).json({
         status: "Error",
-        message: "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+        message:
+          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
       });
     }
 
@@ -259,7 +270,10 @@ export const resetPassword = async (req, res) => {
     if (isEmpty(newPassword)) return sendError(res, "New Password Missing!");
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return sendError(res, "Password must be at least 8 characters long, and contain at least one capital letter!");
+      return sendError(
+        res,
+        "Password must be at least 8 characters long, and contain at least one capital letter!",
+      );
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -271,7 +285,7 @@ export const resetPassword = async (req, res) => {
     const token = jwt.sign(
       { id: user._id, role: userRole?.name || "Employee" },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     res.status(200).json({
@@ -281,7 +295,7 @@ export const resetPassword = async (req, res) => {
         token,
         userId: user._id,
         role: userRole?.name || "Employee",
-      }
+      },
     });
   } catch (err) {
     res.status(500).json({
@@ -301,8 +315,15 @@ export const requestPasswordReset = async (req, res) => {
 
     if (validateUserStatus(user, res)) return;
 
-    const token = crypto.randomBytes(32).toString("hex");    
-    user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
+    const token = crypto.randomBytes(32).toString("hex");
+    console.log(
+      `[FOREGET-PASSWORD-DEBUG] Password reset request for: ${user.email}: ${token}`,
+    );
+
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
 
@@ -340,14 +361,18 @@ export const forgetPassword = async (req, res) => {
       resetPasswordExpires: { $gt: Date.now() },
     });
 
-    if (!user) return sendError(res, "Invalid or Expired password reset token!");
+    if (!user)
+      return sendError(res, "Invalid or Expired password reset token!");
 
     if (validateUserStatus(user, res)) return;
 
     if (isEmpty(newPassword)) return sendError(res, "Missing Password!");
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return sendError(res, "Password must be at least 8 characters long, and contain at least one capital letter!");
+      return sendError(
+        res,
+        "Password must be at least 8 characters long, and contain at least one capital letter!",
+      );
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -362,7 +387,7 @@ export const forgetPassword = async (req, res) => {
     const tokenGen = jwt.sign(
       { id: user._id, role: userRole?.name || "Employee" },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" }
+      { expiresIn: "24h" },
     );
 
     res.status(200).json({
@@ -372,7 +397,7 @@ export const forgetPassword = async (req, res) => {
         token: tokenGen,
         userId: user._id,
         role: userRole?.name || "Employee",
-      }
+      },
     });
   } catch (err) {
     res.status(500).json({
@@ -416,21 +441,42 @@ export const addUser = async (req, res) => {
     // Validate the field inputs
     const errors = [];
 
-    if (isEmpty(name)) errors.push({ field: "name", message: "First name is required" });
-    if (isEmpty(lastName)) errors.push({ field: "lastName", message: "Last name is required" });
-    if (isEmpty(address)) errors.push({ field: "address", message: "Address is required" });
-    if (isEmpty(position)) errors.push({ field: "position", message: "Position is required" });
+    if (isEmpty(name))
+      errors.push({ field: "name", message: "First name is required" });
+    if (isEmpty(lastName))
+      errors.push({ field: "lastName", message: "Last name is required" });
+    if (isEmpty(address))
+      errors.push({ field: "address", message: "Address is required" });
+    if (isEmpty(position))
+      errors.push({ field: "position", message: "Position is required" });
 
-    if (!isValidEmail(email)) errors.push({ field: "email", message: "Invalid email format" });
+    if (!isValidEmail(email))
+      errors.push({ field: "email", message: "Invalid email format" });
     if (validatePhoneNumber(countryCode, phoneNumber) === null) {
-      errors.push({ field: "phoneNumber", message: "Invalid phone number format" });
+      errors.push({
+        field: "phoneNumber",
+        message: "Invalid phone number format",
+      });
     }
 
-    if (bio && !isWithinRange(bio, 0, 500)) errors.push({ field: "bio", message: "Bio must be under 500 characters" });
+    if (bio && !isWithinRange(bio, 0, 500))
+      errors.push({
+        field: "bio",
+        message: "Bio must be under 500 characters",
+      });
 
-    if (hasChildren && nbOfChildren <= 0) errors.push({ field: "nbOfChildren", message: "Please specify the number of children" });
-    if (nbOfChildren < 0) errors.push({ field: "nbOfChildren", message: "Number of children cannot be negative" });
-    if (bonus < 0) errors.push({ field: "bonus", message: "Bonus cannot be negative" });
+    if (hasChildren && nbOfChildren <= 0)
+      errors.push({
+        field: "nbOfChildren",
+        message: "Please specify the number of children",
+      });
+    if (nbOfChildren < 0)
+      errors.push({
+        field: "nbOfChildren",
+        message: "Number of children cannot be negative",
+      });
+    if (bonus < 0)
+      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
 
     if (errors.length > 0) {
       console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
@@ -515,15 +561,11 @@ export const addUser = async (req, res) => {
 
     // Generate password (length = 8)
     const password = generateRandomCode();
-    console.log(
-        `[ADD-USER-DEBUG] Password generated: ${password}`,
-    );
+    console.log(`[ADD-USER-DEBUG] Password generated: ${password}`);
 
     // Generate OTP code (length = 6)
     const otpCode = generateRandomCode(6);
-    console.log(
-        `[ADD-USER-DEBUG] OTP code generated: ${otpCode}`,
-    );
+    console.log(`[ADD-USER-DEBUG] OTP code generated: ${otpCode}`);
 
     // Hash Password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -618,8 +660,15 @@ export const updateUser = async (req, res) => {
     const errors = [];
     if (updateData.email && !isValidEmail(updateData.email))
       errors.push({ field: "email", message: "Invalid email format" });
-    if (updateData.phoneNumber && validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null) {
-      errors.push({ field: "phoneNumber", message: "Invalid phone number format" });
+    if (
+      updateData.phoneNumber &&
+      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) ===
+        null
+    ) {
+      errors.push({
+        field: "phoneNumber",
+        message: "Invalid phone number format",
+      });
     }
     if (updateData.bio && !isWithinRange(updateData.bio, 0, 500))
       errors.push({
@@ -646,7 +695,9 @@ export const updateUser = async (req, res) => {
       });
 
     if (errors.length > 0) {
-      return res.status(400).json({ status: "Error", message: "Input validation failed!", errors });
+      return res
+        .status(400)
+        .json({ status: "Error", message: "Input validation failed!", errors });
     }
 
     const existingUser = await User.findById(id).populate("role_id");
@@ -863,10 +914,10 @@ export const getAllUsers = async (req, res) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
         : null,
     }));
 
@@ -888,7 +939,7 @@ export const getUserById = async (req, res) => {
       .populate("supervisor_id");
 
     if (!user) return sendError(res, "User not found!", 404);
-    
+
     // Format the user data
     const formattedUser = {
       id: user._id,
@@ -916,10 +967,10 @@ export const getUserById = async (req, res) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
         : null,
     };
 
@@ -1183,13 +1234,6 @@ export const uploadProfileImage = async (req, res) => {
       { returnDocument: "after" },
     );
 
-    res.status(200).json({
-      status: "Success",
-      message: "Profile image updated successfully!",
-      profileImageURL: result.secure_url,
-      user,
-    });
-
     // Logging the action
     await logAuditAction({
       adminId: req.user.id,
@@ -1198,6 +1242,13 @@ export const uploadProfileImage = async (req, res) => {
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
       ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Profile image updated successfully!",
+      profileImageURL: result.secure_url,
+      user,
     });
   } catch (err) {
     res.status(500).json({
