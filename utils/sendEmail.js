@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { wrapEmailContent } from "./emailLayout.js";
 import { getAddUserContent, getUpdateUserContent, getResendOTPContent, getForgetPasswordValidationContent } from "./emailContent.js";
 
-export const sendEmail = async ({ to, subject, type, name, password, code, resetLink }) => {
+export const sendEmail = async ({ to, subject, type, name, password, code, resetLink, newRole }) => {
   let bodyHtml;
 
   // Decide the content based on type
@@ -12,7 +12,7 @@ export const sendEmail = async ({ to, subject, type, name, password, code, reset
       break;
 
     case "updateUser":
-      bodyHtml = getUpdateUserContent({ name, password, code });
+      bodyHtml = getUpdateUserContent({ name, password, code, newRole });
       break;
     
     case "resendOTP":

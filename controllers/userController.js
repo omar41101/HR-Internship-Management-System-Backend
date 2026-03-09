@@ -814,6 +814,7 @@ export const updateUser = async (req, res) => {
           name: user.name,
           password: newPasswordRaw,
           code: newCode,
+          newRole: newRoleName
         });
       } catch (emailErr) {
         console.log(
