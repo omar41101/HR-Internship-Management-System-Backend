@@ -1,4 +1,5 @@
 // Importations
+import { uploadToCloudinary } from "../utils/cloudinaryHelper.js";
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
@@ -8,7 +9,6 @@ import dotenv from "dotenv";
 import { sendEmail } from "../utils/sendEmail.js";
 import { Parser } from "json2csv";
 import ExcelJS from "exceljs";
-import cloudinary from "../config/cloudinary.js";
 import crypto from "crypto";
 import {
   isValidEmail,
@@ -18,31 +18,19 @@ import {
   generateRandomCode,
 } from "../middleware/UserValidation.js";
 import { logAuditAction } from "../utils/logger.js";
+import AppError from "../utils/AppError.js";
 
 dotenv.config();
 
 // --------------------------------------------------------------------------- //
-// --------------------------------- HELPERS --------------------------------- //
-// --------------------------------------------------------------------------- //
 
-const sendError = (res, message, code = 400) => {
-  return res.status(code).json({ status: "Error", message });
-};
-
-const handleError = (res, err) => {
-  console.error(err);
-  return res.status(500).json({ status: "Error", message: err.message });
-};
-
-const validateUserStatus = (user, res) => {
+const validateUserStatus = (user) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
-    return sendError(
-      res,
+    throw new AppError(
       `Your Account is ${user.status}. Please contact the Administration!`,
       403,
     );
   }
-  return null;
 };
 
 // --------------------------------------------------------------------------- //
@@ -50,7 +38,7 @@ const validateUserStatus = (user, res) => {
 // --------------------------------------------------------------------------- //
 
 // Login Functionality (All users can do it)
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
     const trimmedEmail = (email || "").trim().toLowerCase();
@@ -61,18 +49,20 @@ export const login = async (req, res) => {
     // Check the User existence
     const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
-      console.log(`[LOGIN-DEBUG] User not found: ${trimmedEmail}`);
-      return sendError(res, "User not found!", 404);
+      throw new AppError(
+        "User not found!",
+        404,
+        "Verify that you have used the correct email address.",
+      );
     }
 
     // Check if status blocked or inactive
-    if (validateUserStatus(user, res)) return;
+    validateUserStatus(user);
 
     // Get the user role
     const userRole = await UserRole.findById(user.role_id);
     if (!userRole) {
-      console.log(`[LOGIN-DEBUG] Role not found for user: ${trimmedEmail}`);
-      return sendError(res, "User role not found!", 404);
+      throw new AppError("User role not found!", 404);
     }
 
     // Compare password - hashPassword in DB
@@ -86,17 +76,19 @@ export const login = async (req, res) => {
       if (user.loginAttempts >= 3) {
         user.status = "Blocked";
         await user.save();
-        return sendError(
-          res,
+        throw new AppError(
           "Your Account is now Blocked. Please contact the Administration!",
           403,
         );
       }
       await user.save();
 
-      return sendError(res, "Invalid Email or password!", 401);
+      throw new AppError(
+        "Invalid Email or password!",
+        401,
+        "Please check your credentials and try again.",
+      );
     }
-    console.log(`[LOGIN-DEBUG] Password match for: ${trimmedEmail}`);
 
     // For the Frontend, if the account is not verified, we redirect to the OTP code form
     if (user.status !== "Active") {
@@ -135,32 +127,29 @@ export const login = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Verify User's OTP code
-export const verifyUser = async (req, res) => {
+export const verifyUser = async (req, res, next) => {
   try {
     const { email, code } = req.body;
 
     const user = await User.findOne({ email });
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
-    if (validateUserStatus(user, res)) return;
+    validateUserStatus(user);
 
     if (user.status === "Active")
-      return sendError(res, "Account Already Verified!");
+      throw new AppError("Account Already Verified!", 400);
 
     if (!(await bcrypt.compare(code, user.verificationCode))) {
-      return sendError(res, "Invalid OTP Code!");
+      throw new AppError("Invalid OTP Code!", 400);
     }
 
     if (user.verificationCodeExpires < Date.now()) {
-      return sendError(res, "OTP Code expired!");
+      throw new AppError("OTP Code expired!", 400);
     }
 
     user.status = "Active";
@@ -187,26 +176,23 @@ export const verifyUser = async (req, res) => {
       },
     });
   } catch (err) {
-    return res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Resend OTP Code
-export const resendVerificationCode = async (req, res) => {
+export const resendVerificationCode = async (req, res, next) => {
   try {
     const { email } = req.body;
     const trimmedEmail = (email || "").trim().toLowerCase();
 
     const user = await User.findOne({ email: trimmedEmail });
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
-    if (validateUserStatus(user, res)) return;
+    validateUserStatus(user);
 
     if (user.status === "Active")
-      return sendError(res, "Account Already Verified!");
+      throw new AppError("Account Already Verified!", 400);
 
     const today = new Date();
     const lastResend = user.resendDate ? new Date(user.resendDate) : null;
@@ -217,11 +203,10 @@ export const resendVerificationCode = async (req, res) => {
     }
 
     if (user.resendCount >= 3) {
-      return res.status(429).json({
-        status: "Error",
-        message:
-          "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
-      });
+      throw new AppError(
+        "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+        429,
+      );
     }
 
     const otpCode = generateRandomCode(6);
@@ -246,33 +231,30 @@ export const resendVerificationCode = async (req, res) => {
       message: "OTP code resent successfully!",
     });
   } catch (err) {
-    return res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Reset Password
-export const resetPassword = async (req, res) => {
+export const resetPassword = async (req, res, next) => {
   try {
     const { email, newPassword } = req.body;
 
     const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
-    if (validateUserStatus(user, res)) return;
+    validateUserStatus(user);
 
     if (!user.mustResetPassword) {
-      return sendError(res, "Password Reset not required for this account!");
+      throw new AppError("Password Reset not required for this account!", 400);
     }
 
-    if (isEmpty(newPassword)) return sendError(res, "New Password Missing!");
+    if (isEmpty(newPassword)) throw new AppError("New Password Missing!", 400);
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return sendError(
-        res,
+      throw new AppError(
         "Password must be at least 8 characters long, and contain at least one capital letter!",
+        400,
       );
     }
 
@@ -298,22 +280,19 @@ export const resetPassword = async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Forget Password Request
-export const requestPasswordReset = async (req, res) => {
+export const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body;
 
     const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
-    if (validateUserStatus(user, res)) return;
+    validateUserStatus(user);
 
     const token = crypto.randomBytes(32).toString("hex");
     console.log(
@@ -324,6 +303,7 @@ export const requestPasswordReset = async (req, res) => {
       .createHash("sha256")
       .update(token)
       .digest("hex");
+
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
 
@@ -342,15 +322,12 @@ export const requestPasswordReset = async (req, res) => {
       message: "Password reset link sent to your email!",
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Forget Password Reset
-export const forgetPassword = async (req, res) => {
+export const forgetPassword = async (req, res, next) => {
   try {
     const { email, token, newPassword } = req.body;
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
@@ -412,7 +389,7 @@ export const forgetPassword = async (req, res) => {
 // --------------------------------------------------------------------------- //
 
 // Add User Functionnality (Only the Admin can do it)
-export const addUser = async (req, res) => {
+export const addUser = async (req, res, next) => {
   try {
     const {
       name,
@@ -434,6 +411,7 @@ export const addUser = async (req, res) => {
       role,
       department,
       supervisor_full_name,
+      profileImageURL,
     } = req.body;
 
     const trimmedEmail = (email || "").trim().toLowerCase();
@@ -492,18 +470,27 @@ export const addUser = async (req, res) => {
     if (errors.length > 0) {
       console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
 
-      return res.status(400).json({
-        status: "Error",
-        message: "Input validation failed!",
-        errors,
-      });
+      throw new AppError(
+        "Input validation failed!",
+        400,
+        "Please check the highlighted fields and correct the errors.",
+      );
     }
+
+    // Check user existence
+    console.log(
+      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
+    );
+
+    console.log(
+      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
+    );
 
     // Check Role validity
     const userrole = await UserRole.findOne({
       name: { $regex: new RegExp(`^${role}$`, "i") },
     });
-    if (!userrole) return sendError(res, "Invalid Role!", 401);
+    if (!userrole) throw new AppError("Invalid Role!", 400);
 
     // Get the role ID
     const roleId = userrole._id;
@@ -532,7 +519,7 @@ export const addUser = async (req, res) => {
         lastName: supervisor_lastName,
       });
 
-      if (!supervisor) return sendError(res, "Supervisor not found!", 404);
+      if (!supervisor) throw new AppError("Supervisor not found!", 404);
       supervisorId = supervisor._id; // Get the supervisor ID
       console.log(`[ADD-USER-DEBUG] Supervisor found: ${supervisorId}`);
     } else {
@@ -549,7 +536,7 @@ export const addUser = async (req, res) => {
         name: { $regex: new RegExp(`^${department}$`, "i") },
       });
 
-      if (!userdepartment) return sendError(res, "Invalid Department!", 401);
+      if (!userdepartment) throw new AppError("Invalid Department!", 400);
       departmentId = userdepartment._id; // Get the department ID
       console.log(
         `[ADD-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
@@ -572,6 +559,50 @@ export const addUser = async (req, res) => {
 
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+    // Handle profile image upload if provided as base64
+    let finalProfileImageURL =
+      typeof profileImageURL === "string" &&
+      !profileImageURL.startsWith("data:image")
+        ? profileImageURL
+        : "";
+
+    if (
+      profileImageURL &&
+      typeof profileImageURL === "string" &&
+      profileImageURL.startsWith("data:image")
+    ) {
+      try {
+        console.log(
+          `[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
+        );
+        const uploadResult = await uploadToCloudinary(
+          profileImageURL,
+          "hrcom/profile_images",
+        );
+
+        if (uploadResult && uploadResult.secure_url) {
+          finalProfileImageURL = uploadResult.secure_url;
+          console.log(
+            `[ADD-USER-DEBUG] Upload success: ${finalProfileImageURL}`,
+          );
+        } else {
+          console.error(
+            "[ADD-USER-DEBUG] Upload result missing secure_url:",
+            uploadResult,
+          );
+        }
+      } catch (uploadErr) {
+        console.error(
+          "[ADD-USER-DEBUG] Cloudinary upload failed:",
+          uploadErr.message,
+        );
+      }
+    } else {
+      console.log(
+        `[ADD-USER-DEBUG] No base64 image detected in req.body.profileImageURL`,
+      );
+    }
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -597,6 +628,7 @@ export const addUser = async (req, res) => {
       role_id: roleId,
       department_id: departmentId,
       supervisor_id: supervisorId,
+      profileImageURL: finalProfileImageURL,
     });
     console.log(`[ADD-USER-DEBUG] User created successfully! ID: ${user._id}`);
 
@@ -643,15 +675,12 @@ export const addUser = async (req, res) => {
       result: user,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Update User (Only the Admin can do it)
-export const updateUser = async (req, res) => {
+export const updateUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
@@ -695,13 +724,15 @@ export const updateUser = async (req, res) => {
       });
 
     if (errors.length > 0) {
-      return res
-        .status(400)
-        .json({ status: "Error", message: "Input validation failed!", errors });
+      throw new AppError(
+        "Input validation failed!",
+        400,
+        "Please check the highlighted fields and correct the errors.",
+      );
     }
 
     const existingUser = await User.findById(id).populate("role_id");
-    if (!existingUser) return sendError(res, "User not found!", 404);
+    if (!existingUser) throw new AppError("User not found!", 404);
 
     let roleChanged = false;
     let newPasswordRaw = "";
@@ -720,7 +751,7 @@ export const updateUser = async (req, res) => {
           name: { $regex: new RegExp(`^${newRoleName}$`, "i") },
         });
 
-        if (!roleDoc) return sendError(res, "Invalid Role!");
+        if (!roleDoc) throw new AppError("Invalid Role!", 400);
 
         updateData.role_id = roleDoc._id; // Get the new role ID
 
@@ -745,7 +776,7 @@ export const updateUser = async (req, res) => {
           name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
         });
 
-        if (!dept) return sendError(res, "Invalid Department!");
+        if (!dept) throw new AppError("Invalid Department!", 400);
 
         updateData.department_id = dept._id; // Get the new department ID
       }
@@ -765,7 +796,7 @@ export const updateUser = async (req, res) => {
         const lastName = parts.slice(1).join(" ");
 
         const supervisor = await User.findOne({ name: firstName, lastName });
-        if (!supervisor) return sendError(res, "Invalid Supervisor!");
+        if (!supervisor) throw new AppError("Invalid Supervisor!", 400);
 
         updateData.supervisor_id = supervisor._id; // Get the new supervisor ID
       }
@@ -793,6 +824,42 @@ export const updateUser = async (req, res) => {
       ); // 24 hours
       updateData.status = "Pending";
       updateData.mustResetPassword = true;
+    }
+
+    // Handle profile image upload if provided as base64
+    if (
+      updateData.profileImageURL &&
+      typeof updateData.profileImageURL === "string" &&
+      updateData.profileImageURL.startsWith("data:image")
+    ) {
+      try {
+        console.log(
+          `[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
+        );
+        const uploadResult = await uploadToCloudinary(
+          updateData.profileImageURL,
+          "hrcom/profile_images",
+        );
+
+        if (uploadResult && uploadResult.secure_url) {
+          updateData.profileImageURL = uploadResult.secure_url;
+          console.log(
+            `[UPDATE-USER-DEBUG] Upload success: ${updateData.profileImageURL}`,
+          );
+        } else {
+          console.error(
+            "[UPDATE-USER-DEBUG] Upload result missing secure_url:",
+            uploadResult,
+          );
+          delete updateData.profileImageURL; // Don't save base64 if upload fails
+        }
+      } catch (uploadErr) {
+        console.error(
+          "[UPDATE-USER-DEBUG] Cloudinary upload failed:",
+          uploadErr.message,
+        );
+        delete updateData.profileImageURL; // Don't save base64 if upload fails
+      }
     }
 
     // Update the user
@@ -843,20 +910,16 @@ export const updateUser = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Delete User (Only for Admins)
-export const deleteUser = async (req, res) => {
+export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
     const user = await User.findByIdAndDelete(id);
-
-    if (!user) return sendError(res, "User not found", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
     res.status(200).json({
       status: "Success",
@@ -873,16 +936,22 @@ export const deleteUser = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
-// Get All Users Functionnality (Only the Admin can do it)
-export const getAllUsers = async (req, res) => {
+// Get all Users (Only for Admins) - with Filtering & Pagination
+export const getAllUsers = async (req, res, next) => {
   try {
+    const {
+      page = 1,
+      limit = 10,
+      department,
+      role,
+      status,
+      search,
+    } = req.query;
+
     const users = await User.find()
       .populate("role_id")
       .populate("department_id")
@@ -924,22 +993,20 @@ export const getAllUsers = async (req, res) => {
 
     res.status(200).json(cleanUsers);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
-// Get a User by Id
-export const getUserById = async (req, res) => {
+// Get User by ID
+export const getUserById = async (req, res, next) => {
   try {
-    const user = await User.findById(req.params.id)
+    const { id } = req.params;
+    const user = await User.findById(id)
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
 
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
     // Format the user data
     const formattedUser = {
@@ -977,15 +1044,12 @@ export const getUserById = async (req, res) => {
 
     res.status(200).json(formattedUser);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Search User (Only for Admins)
-export const searchUser = async (req, res) => {
+export const searchUser = async (req, res, next) => {
   try {
     // The user query (Search by name/lastname and email)
     const { q } = req.query;
@@ -1012,7 +1076,7 @@ export const searchUser = async (req, res) => {
 };
 
 // Filter users by Role, Department or status (only for Admins)
-export const filterUsers = async (req, res) => {
+export const filterUsers = async (req, res, next) => {
   try {
     const { role, department, status } = req.query; // Get the filters wanted
 
@@ -1064,13 +1128,29 @@ export const filterUsers = async (req, res) => {
   }
 };
 
+// Get Current User (the one logged in)
+export const getCurrentUser = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId).populate("role_id");
+    if (!user) throw new AppError("User not found!", 404);
+
+    res.status(200).json({
+      status: "Success",
+      data: user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Toggle User Status(Active/Inactive) (Only for Admins)
-export const toggleUserStatus = async (req, res) => {
+export const toggleUserStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id);
 
-    if (!user) return sendError(res, "User not found!", 404);
+    if (!user) throw new AppError("User not found!", 404);
 
     // Toggle the user's status
     user.status = user.status === "Active" ? "Inactive" : "Active";
@@ -1093,15 +1173,12 @@ export const toggleUserStatus = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Export User to CSV format (Only for Admins)
-export const exportUsersToCSV = async (req, res) => {
+export const exportUsersToCSV = async (req, res, next) => {
   try {
     // Get the list of users
     const users = await User.find()
@@ -1144,15 +1221,12 @@ export const exportUsersToCSV = async (req, res) => {
     res.attachment("users.csv");
     res.send(csv);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Export User to Excel format (Only for Admins)
-export const exportUsersToExcel = async (req, res) => {
+export const exportUsersToExcel = async (req, res, next) => {
   try {
     // Get the list of users
     const users = await User.find()
@@ -1195,41 +1269,27 @@ export const exportUsersToExcel = async (req, res) => {
     await workbook.xlsx.write(res);
     res.end();
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Upload Profile Image to Cloudinary
-export const uploadProfileImage = async (req, res) => {
+export const uploadProfileImage = async (req, res, next) => {
   try {
     const userId = req.params.id;
 
     console.log("[UPLOAD-IMAGE-PROFILE] User Id:", req.params.id);
 
     const existingUser = await User.findById(userId);
-    if (!existingUser) return sendError(res, "User not found!", 404);
+    if (!existingUser) throw new AppError("User not found!", 404);
 
     if (!req.file) return sendError(res, "No file uploaded!");
-    console.log("[UPLOAD-IMAGE-PROFILE] File:", req.file);
 
-    // Upload to Cloudinary
-    const result = await new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        {
-          folder: "hrcom/profile_images",
-          resource_type: "image",
-        },
-        (error, uploadResult) => {
-          if (error) reject(error);
-          else resolve(uploadResult);
-        },
-      );
-
-      stream.end(req.file.buffer); // Upload buffer directly
-    });
+    // Upload to Cloudinary using utility
+    const result = await uploadToCloudinary(
+      req.file.buffer,
+      "hrcom/profile_images",
+    );
 
     // Update the user's profileImageURL
     const user = await User.findByIdAndUpdate(
@@ -1245,6 +1305,7 @@ export const uploadProfileImage = async (req, res) => {
       targetType: "User",
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
+      details: { profileImageURL: result.secure_url },
       ipAddress: req.ip,
     });
 
@@ -1255,9 +1316,6 @@ export const uploadProfileImage = async (req, res) => {
       user,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };

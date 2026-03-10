@@ -11,6 +11,13 @@ import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   - name: UserRoles
+ *     description: Endpoints for the user roles CRUDs
+ */
+
 // Add new role
 /**
  * @swagger

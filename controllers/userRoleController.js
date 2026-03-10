@@ -1,18 +1,16 @@
-import UserRole from "../models/UserRole.js";
 import User from "../models/User.js";
+import UserRole from "../models/UserRole.js";
 import { logAuditAction } from "../utils/logger.js";
+import AppError from "../utils/AppError.js";
 
 // Add new Role Functionnality 
-export const addUserRole = async (req, res) => {
+export const addUserRole = async (req, res, next) => {
   // Get the new role credentials
-  const { name, description } = req.body; 
+  const { name, description } = req.body;
 
   // Check for empty name field (required)
   if (!name || name.trim() === "") {
-    return res.status(400).json({
-      status: "Error",
-      message: "The name field must be filled!",
-    });
+    throw new AppError("The name field must be filled!", 400);
   }
 
   try {
@@ -22,10 +20,7 @@ export const addUserRole = async (req, res) => {
       existingUserRoleName &&
       existingUserRoleName._id.toString() !== req.params.id
     ) {
-      return res.status(400).json({
-        status: "Error",
-        message: "User Role already exists!",
-      });
+      throw new AppError("User Role already exists!", 400);
     }
 
     // Save the new user role in the Database
@@ -49,57 +44,38 @@ export const addUserRole = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Get All Roles Functionnality
-export const getAllUserRoles = async (req, res) => {
+export const getAllUserRoles = async (req, res, next) => {
   try {
     const userRoles = await UserRole.find();
     res.status(200).json(userRoles);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Get a Role by Id
-export const getUserRoleById = async (req, res) => {
+export const getUserRoleById = async (req, res, next) => {
   try {
     const userRole = await UserRole.findById(req.params.id);
-    if (!userRole) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User Role not found!",
-      });
-    }
+    if (!userRole) throw new AppError("User Role not found!", 404);
 
     res.status(200).json(userRole);
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Delete a User Role (All admins can do it)
-export const deleteUserRole = async (req, res) => {
+export const deleteUserRole = async (req, res, next) => {
   try {
     // Check for user role existence
     const userRole = await UserRole.findById(req.params.id);
-    if (!userRole) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User Role is not found!",
-      });
-    }
+    if (!userRole) throw new AppError("User Role is not found!", 404);
 
     // Find the role and create if missing
     let notAssignedRole = await UserRole.findOne({ name: "Not assigned" });
@@ -133,42 +109,28 @@ export const deleteUserRole = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };
 
 // Update a User Role
-export const updateUserRole = async (req, res) => {
+export const updateUserRole = async (req, res, next) => {
   const { name, description } = req.body;
 
   // Check for empty name field (required)
   if (!name || name.trim() === "") {
-    return res.status(400).json({
-      status: "Error",
-      message: "The name field must be filled!",
-    });
+    throw new AppError("The name field must be filled!", 400);
   }
 
   try {
     // Check for user role existence
     const userRole = await UserRole.findById(req.params.id);
-    if (!userRole) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User Role not found!",
-      });
-    }
+    if (!userRole) throw new AppError("User Role not found!", 404);
 
     // Check for user role name existence
     const existingUserRole = await UserRole.findOne({ name: name.trim() });
     if (existingUserRole && existingUserRole._id.toString() !== req.params.id) {
-      return res.status(400).json({
-        status: "Error",
-        message: "User Role name already exists!",
-      });
+      throw new AppError("User Role name already exists!", 400);
     }
 
     // Get the old role name
@@ -203,9 +165,6 @@ export const updateUserRole = async (req, res) => {
       ipAddress: req.ip,
     });
   } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    next(err);
   }
 };

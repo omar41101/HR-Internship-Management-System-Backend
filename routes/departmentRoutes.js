@@ -10,6 +10,13 @@ import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Departments
+ *     description: Endpoints for the Department CRUDs
+ */
  
 // Route to add new department
 /**

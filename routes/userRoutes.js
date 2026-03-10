@@ -24,6 +24,20 @@ import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * tags:
+ *   - name: Auth
+ *     description: Endpoints for the full authentification system
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Users
+ *     description: Endpoints for the users CRUDs
+ */
+
 // ----------------------------------- AUTH ROUTES ----------------------------------- //
 // Route to log the user
 /**
