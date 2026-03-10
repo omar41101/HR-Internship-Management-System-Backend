@@ -24,6 +24,14 @@ dotenv.config();
 
 // --------------------------------------------------------------------------- //
 
+const sendError = (res, message, code = 400) => {
+  return res.status(code).json({ status: "Error", message });
+};
+
+const handleError = (res, err) => {
+  console.error(err);
+  return res.status(500).json({ status: "Error", message: err.message });
+};
 const validateUserStatus = (user) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
     throw new AppError(`Your Account is ${user.status}. Please contact the Administration!`, 403);
@@ -70,8 +78,8 @@ export const login = async (req, res, next) => {
         user.status = "Blocked";
         await user.save();
         throw new AppError("Your Account is now Blocked. Please contact the Administration!", 403);
-
       }
+
       await user.save();
 
       throw new AppError("Invalid Email or password!", 401, "Please check your credentials and try again.");
@@ -180,7 +188,6 @@ export const resendVerificationCode = async (req, res, next) => {
 
     if (user.status === "Active") throw new AppError("Account Already Verified!", 400);
 
-
     const today = new Date();
     const lastResend = user.resendDate ? new Date(user.resendDate) : null;
 
@@ -281,7 +288,6 @@ export const requestPasswordReset = async (req, res, next) => {
     console.log(
       `[FOREGET-PASSWORD-DEBUG] Password reset request for: ${user.email}: ${token}`,
     );
-
     user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
 
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
