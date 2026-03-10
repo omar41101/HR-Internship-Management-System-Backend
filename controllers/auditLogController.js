@@ -22,6 +22,9 @@ const formatAuditLog = (log) => {
         case "UPLOAD_IMAGE":
             description = `Uploaded Document/Image`;
             break;
+        case "REMOVE_IMAGE":
+            description = `Removed Document/Image`;
+            break;
         case "UPDATE_USER":
             description = `Updated User ${log.target_name || log.target_id}`;
             break;
