@@ -87,10 +87,6 @@ export const getForgetPasswordValidationContent = ({ name, resetLink }) => {
         Reset Password
       </a>
     </div>
-
-    <p><strong>Please note that this link will expire in 1 Hour!</strong></p>
-    
-    <p>If you did not request this, please ignore this email.</p>
   
     <p><strong>Please note that this link will expire in 1 Hour!</strong></p>
     

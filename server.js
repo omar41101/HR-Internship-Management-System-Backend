@@ -39,7 +39,7 @@ app.use('/api', departmentRoutes);
 app.use('/api', auditLogRoutes);
 app.use('/api', testRoutes);
 
-// GLOBAL ERROR HANDLER - Must be last!
+// GLOBAL ERROR HANDLER
 app.use(errorHandler);
 
 // Define our PORT

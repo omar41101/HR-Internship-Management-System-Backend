@@ -12,6 +12,7 @@ import {
   exportUsersToCSV,
   exportUsersToExcel,
   uploadProfileImage,
+  removeProfileImage,
   verifyUser,
   resendVerificationCode,
   resetPassword,
@@ -23,6 +24,20 @@ import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Auth
+ *     description: Endpoints for the full authentification system
+ */
+
+/**
+ * @swagger
+ * tags:
+ *   - name: Users
+ *     description: Endpoints for the users CRUDs
+ */
 
 // ----------------------------------- AUTH ROUTES ----------------------------------- //
 // Route to log the user
@@ -302,7 +317,7 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
  *       500:
  *         description: Server error
  */
-router.put("/users/:id", authenticate, authorize(["Admin"]), updateUser);
+router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true }), updateUser);
 
 // Route to Delete user
 /**
@@ -545,6 +560,42 @@ router.post(
   authorize(["Admin"], { allowSelf: true }),
   upload.single("profileImage"),
   uploadProfileImage
+);
+
+// Route to delete profile image
+/**
+ * @swagger
+ * /api/users/{id}/profile-image:
+ *   delete:
+ *     summary: Remove a user's profile image (Admin Only and the user himself)
+ *     description: Deletes the user's profile image from Cloudinary and removes it from the user's profile.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: ID of the user whose profile image will be removed
+ *         schema:
+ *           type: string
+ *           example: 6652b9b7c87f2a8a4f5d1a2c
+  *     responses:
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized (Insufficient permissions)
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
+router.delete(
+  "/users/:id/profile-image",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  removeProfileImage
 );
 
 export default router;

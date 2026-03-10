@@ -15,10 +15,13 @@ export const addDepartment = async (req, res, next) => {
   try {
     // Check for department existence
     const existingDepartment = await Department.findOne({ name: name.trim() });
-    if (existingDepartment) throw new AppError("Department already existing!", 400);
+    if (existingDepartment)
+      throw new AppError("Department already existing!", 400);
 
     // Check for department name existence
-    const existingDepartmentName = await Department.findOne({ name: name.trim() });
+    const existingDepartmentName = await Department.findOne({
+      name: name.trim(),
+    });
     if (
       existingDepartmentName &&
       existingDepartmentName._id.toString() !== req.params.id

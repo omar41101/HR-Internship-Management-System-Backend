@@ -1,5 +1,8 @@
 // Importations
-import { uploadToCloudinary } from "../utils/cloudinaryHelper.js";
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinaryHelper.js";
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
@@ -34,7 +37,10 @@ const handleError = (res, err) => {
 };
 const validateUserStatus = (user) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
-    throw new AppError(`Your Account is ${user.status}. Please contact the Administration!`, 403);
+    throw new AppError(
+      `Your Account is ${user.status}. Please contact the Administration!`,
+      403,
+    );
   }
 };
 
@@ -54,7 +60,11 @@ export const login = async (req, res, next) => {
     // Check the User existence
     const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
-      throw new AppError("User not found!", 404, "Verify that you have used the correct email address.");
+      throw new AppError(
+        "User not found!",
+        404,
+        "Verify that you have used the correct email address.",
+      );
     }
 
     // Check if status blocked or inactive
@@ -77,12 +87,19 @@ export const login = async (req, res, next) => {
       if (user.loginAttempts >= 3) {
         user.status = "Blocked";
         await user.save();
-        throw new AppError("Your Account is now Blocked. Please contact the Administration!", 403);
+        throw new AppError(
+          "Your Account is now Blocked. Please contact the Administration!",
+          403,
+        );
       }
 
       await user.save();
 
-      throw new AppError("Invalid Email or password!", 401, "Please check your credentials and try again.");
+      throw new AppError(
+        "Invalid Email or password!",
+        401,
+        "Please check your credentials and try again.",
+      );
     }
 
     // For the Frontend, if the account is not verified, we redirect to the OTP code form
@@ -136,8 +153,8 @@ export const verifyUser = async (req, res, next) => {
 
     validateUserStatus(user);
 
-    if (user.status === "Active") throw new AppError("Account Already Verified!", 400);
-
+    if (user.status === "Active")
+      throw new AppError("Account Already Verified!", 400);
 
     if (!(await bcrypt.compare(code, user.verificationCode))) {
       throw new AppError("Invalid OTP Code!", 400);
@@ -186,7 +203,8 @@ export const resendVerificationCode = async (req, res, next) => {
 
     validateUserStatus(user);
 
-    if (user.status === "Active") throw new AppError("Account Already Verified!", 400);
+    if (user.status === "Active")
+      throw new AppError("Account Already Verified!", 400);
 
     const today = new Date();
     const lastResend = user.resendDate ? new Date(user.resendDate) : null;
@@ -197,8 +215,10 @@ export const resendVerificationCode = async (req, res, next) => {
     }
 
     if (user.resendCount >= 3) {
-      throw new AppError("Maximum OTP resend limit reached for today (3). Try again tomorrow.", 429);
-
+      throw new AppError(
+        "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
+        429,
+      );
     }
 
     const otpCode = generateRandomCode(6);
@@ -244,8 +264,10 @@ export const resetPassword = async (req, res, next) => {
     if (isEmpty(newPassword)) throw new AppError("New Password Missing!", 400);
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      throw new AppError("Password must be at least 8 characters long, and contain at least one capital letter!", 400);
-
+      throw new AppError(
+        "Password must be at least 8 characters long, and contain at least one capital letter!",
+        400,
+      );
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
@@ -288,7 +310,10 @@ export const requestPasswordReset = async (req, res, next) => {
     console.log(
       `[FOREGET-PASSWORD-DEBUG] Password reset request for: ${user.email}: ${token}`,
     );
-    user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(token)
+      .digest("hex");
 
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
@@ -402,6 +427,17 @@ export const addUser = async (req, res, next) => {
 
     const trimmedEmail = (email || "").trim().toLowerCase();
 
+    // Check user existence
+    console.log(
+      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
+    );
+    const existingUser = await User.findOne({ email: trimmedEmail });
+    if (existingUser) return sendError(res, "User Already Existing!", 401);
+
+    console.log(
+      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
+    );
+
     // Validate the field inputs
     const errors = [];
 
@@ -445,15 +481,17 @@ export const addUser = async (req, res, next) => {
     if (errors.length > 0) {
       console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
 
-      throw new AppError("Input validation failed!", 400, "Please check the highlighted fields and correct the errors.");
+      throw new AppError(
+        "Input validation failed!",
+        400,
+        "Please check the highlighted fields and correct the errors.",
+      );
     }
 
     // Check user existence
     console.log(
       `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
     );
-    const existingUser = await User.findOne({ email: trimmedEmail });
-    if (existingUser) throw new AppError("User Already Existing!", 409);
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
@@ -534,24 +572,47 @@ export const addUser = async (req, res, next) => {
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
     // Handle profile image upload if provided as base64
-    let finalProfileImageURL = (typeof profileImageURL === 'string' && !profileImageURL.startsWith("data:image")) ? profileImageURL : "";
+    let finalProfileImageURL =
+      typeof profileImageURL === "string" &&
+        !profileImageURL.startsWith("data:image")
+        ? profileImageURL
+        : "";
 
-    if (profileImageURL && typeof profileImageURL === 'string' && profileImageURL.startsWith("data:image")) {
+    if (
+      profileImageURL &&
+      typeof profileImageURL === "string" &&
+      profileImageURL.startsWith("data:image")
+    ) {
       try {
-        console.log(`[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`);
-        const uploadResult = await uploadToCloudinary(profileImageURL, "hrcom/profile_images");
+        console.log(
+          `[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
+        );
+        const uploadResult = await uploadToCloudinary(
+          profileImageURL,
+          "hrcom/profile_images",
+        );
 
         if (uploadResult && uploadResult.secure_url) {
           finalProfileImageURL = uploadResult.secure_url;
-          console.log(`[ADD-USER-DEBUG] Upload success: ${finalProfileImageURL}`);
+          console.log(
+            `[ADD-USER-DEBUG] Upload success: ${finalProfileImageURL}`,
+          );
         } else {
-          console.error("[ADD-USER-DEBUG] Upload result missing secure_url:", uploadResult);
+          console.error(
+            "[ADD-USER-DEBUG] Upload result missing secure_url:",
+            uploadResult,
+          );
         }
       } catch (uploadErr) {
-        console.error("[ADD-USER-DEBUG] Cloudinary upload failed:", uploadErr.message);
+        console.error(
+          "[ADD-USER-DEBUG] Cloudinary upload failed:",
+          uploadErr.message,
+        );
       }
     } else {
-      console.log(`[ADD-USER-DEBUG] No base64 image detected in req.body.profileImageURL`);
+      console.log(
+        `[ADD-USER-DEBUG] No base64 image detected in req.body.profileImageURL`,
+      );
     }
 
     // Create user
@@ -674,8 +735,11 @@ export const updateUser = async (req, res, next) => {
       });
 
     if (errors.length > 0) {
-      throw new AppError("Input validation failed!", 400, "Please check the highlighted fields and correct the errors.");
-
+      throw new AppError(
+        "Input validation failed!",
+        400,
+        "Please check the highlighted fields and correct the errors.",
+      );
     }
 
     const existingUser = await User.findById(id).populate("role_id");
@@ -774,20 +838,37 @@ export const updateUser = async (req, res, next) => {
     }
 
     // Handle profile image upload if provided as base64
-    if (updateData.profileImageURL && typeof updateData.profileImageURL === 'string' && updateData.profileImageURL.startsWith("data:image")) {
+    if (
+      updateData.profileImageURL &&
+      typeof updateData.profileImageURL === "string" &&
+      updateData.profileImageURL.startsWith("data:image")
+    ) {
       try {
-        console.log(`[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`);
-        const uploadResult = await uploadToCloudinary(updateData.profileImageURL, "hrcom/profile_images");
+        console.log(
+          `[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
+        );
+        const uploadResult = await uploadToCloudinary(
+          updateData.profileImageURL,
+          "hrcom/profile_images",
+        );
 
         if (uploadResult && uploadResult.secure_url) {
           updateData.profileImageURL = uploadResult.secure_url;
-          console.log(`[UPDATE-USER-DEBUG] Upload success: ${updateData.profileImageURL}`);
+          console.log(
+            `[UPDATE-USER-DEBUG] Upload success: ${updateData.profileImageURL}`,
+          );
         } else {
-          console.error("[UPDATE-USER-DEBUG] Upload result missing secure_url:", uploadResult);
+          console.error(
+            "[UPDATE-USER-DEBUG] Upload result missing secure_url:",
+            uploadResult,
+          );
           delete updateData.profileImageURL; // Don't save base64 if upload fails
         }
       } catch (uploadErr) {
-        console.error("[UPDATE-USER-DEBUG] Cloudinary upload failed:", uploadErr.message);
+        console.error(
+          "[UPDATE-USER-DEBUG] Cloudinary upload failed:",
+          uploadErr.message,
+        );
         delete updateData.profileImageURL; // Don't save base64 if upload fails
       }
     }
@@ -811,7 +892,7 @@ export const updateUser = async (req, res, next) => {
           name: user.name,
           password: newPasswordRaw,
           code: newCode,
-          newRole: newRoleName
+          newRole: newRoleName,
         });
       } catch (emailErr) {
         console.log(
@@ -873,7 +954,14 @@ export const deleteUser = async (req, res, next) => {
 // Get all Users (Only for Admins) - with Filtering & Pagination
 export const getAllUsers = async (req, res, next) => {
   try {
-    const { page = 1, limit = 10, department, role, status, search } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      department,
+      role,
+      status,
+      search,
+    } = req.query;
 
     const users = await User.find()
       .populate("role_id")
@@ -930,7 +1018,6 @@ export const getUserById = async (req, res, next) => {
       .populate("supervisor_id");
 
     if (!user) throw new AppError("User not found!", 404);
-
 
     // Format the user data
     const formattedUser = {
@@ -1202,18 +1289,31 @@ export const uploadProfileImage = async (req, res, next) => {
   try {
     const userId = req.params.id;
 
+    console.log("[UPLOAD-IMAGE-PROFILE] User Id:", req.params.id);
+
     const existingUser = await User.findById(userId);
     if (!existingUser) throw new AppError("User not found!", 404);
 
-    if (!req.file) throw new AppError("No file uploaded!", 400);
+    if (!req.file) return sendError(res, "No file uploaded!");
+
+    // Delete the old profile image first from cloudinary if it exists
+    if (existingUser.profileImagePublicId) {
+      await deleteFromCloudinary(existingUser.profileImagePublicId);
+    }
 
     // Upload to Cloudinary using utility
-    const result = await uploadToCloudinary(req.file.buffer, "hrcom/profile_images");
+    const result = await uploadToCloudinary(
+      req.file.buffer,
+      "hrcom/profile_images",
+    );
 
     // Update the user's profileImageURL
     const user = await User.findByIdAndUpdate(
       userId,
-      { profileImageURL: result.secure_url },
+      {
+        profileImageURL: result.secure_url,
+        profileImagePublicId: result.public_id,
+      },
       { returnDocument: "after" },
     );
 
@@ -1224,7 +1324,10 @@ export const uploadProfileImage = async (req, res, next) => {
       targetType: "User",
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
-      details: { profileImageURL: result.secure_url },
+      details: {
+        profileImageURL: result.secure_url,
+        profileImagePublicId: result.public_id,
+      },
       ipAddress: req.ip,
     });
 
@@ -1232,6 +1335,48 @@ export const uploadProfileImage = async (req, res, next) => {
       status: "Success",
       message: "Profile image updated successfully!",
       profileImageURL: result.secure_url,
+      profileImagePublicId: result.public_id,
+      user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Remove Profile Image
+export const removeProfileImage = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    const existingUser = await User.findById(userId);
+    if (!existingUser) throw new AppError("User not found!", 404);
+
+    // Delete image from Cloudinary
+    if (existingUser.profileImagePublicId) {
+      await deleteFromCloudinary(existingUser.profileImagePublicId);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        profileImageURL: "",
+        profileImagePublicId: "",
+      },
+      { returnDocument: "after" },
+    );
+
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "REMOVE_IMAGE",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Profile Image removed successfully!",
       user,
     });
   } catch (err) {

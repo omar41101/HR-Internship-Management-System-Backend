@@ -1,5 +1,3 @@
-import AppError from "../utils/AppError.js";
-
 /**
  * Global Error Handling Middleware
  */

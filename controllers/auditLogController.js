@@ -11,7 +11,7 @@ const formatAuditLog = (log) => {
     // Format description based on action and target
     switch (log.action) {
         case "DELETE_USER":
-            description = `Deleted User #${log.target_id}`;
+            description = `Deleted User #${log.target_name}`;
             break;
         case "UPDATE_ROLE":
             description = `Updated Role Permissions for ${log.target_name || log.target_id}`;
