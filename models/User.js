@@ -81,6 +81,10 @@ const userSchema = mongoose.Schema(
       type: String,
       default: "",
     },
+    profileImagePublicId : { // Cloudinary public ID of each profileimage used for deletion
+      type: String,
+      default: "",
+    },
     bio: {
       type: String,
     },

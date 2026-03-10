@@ -33,3 +33,10 @@ export const uploadToCloudinary = async (fileSource, folder = "hrcom/general") =
         }
     });
 };
+
+// Delete an image from cloudinary
+export const deleteFromCloudinary = async (publicId) => {
+  if (!publicId) return;
+
+  return await cloudinary.uploader.destroy(publicId);
+};

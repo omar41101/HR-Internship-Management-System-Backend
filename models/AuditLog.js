@@ -22,6 +22,7 @@ const auditLogSchema = mongoose.Schema(
                 "UPDATE_ROLE",
                 "DELETE_ROLE",
                 "UPLOAD_IMAGE",
+                "REMOVE_IMAGE",
             ],
         },
         target_type: {

@@ -261,7 +261,36 @@ describe("Audit Logging Tests", () => {
     expect(log.target_name).toBe("New Employee");
   }, 15000);
 
-  // SCENARIO6: CREATE_ROLE AUDIT LOG
+  // SCENARIO6: REMOVE_IMAGE AUDIT LOG
+  it("Should create an audit log entry when a user's profile image is removed", async () => {
+    // Create Employee
+    const user = await createEmployee();
+
+    // Upload an image to the user
+    await request(app)
+      .post(`/api/users/${user._id}/profile-image`)
+      .set("Authorization", `Bearer ${adminToken}`)
+      .attach("profileImage", "tests/Me2.png");
+
+    // Remove the image
+    const res = await request(app)
+      .delete(`/api/users/${user._id}/profile-image`)
+      .set("Authorization", `Bearer ${adminToken}`);
+
+    if (res.statusCode !== 200) {
+      console.log("Remove Image Error:", res.body);
+    }
+
+    expect(res.statusCode).toBe(200);
+
+    const log = await AuditLog.findOne({ action: "REMOVE_IMAGE" });
+
+    expect(log).not.toBeNull();
+    expect(log.target_id.toString()).toBe(user._id.toString());
+    expect(log.target_name).toBe("New Employee");
+  }, 15000);
+
+  // SCENARIO7: CREATE_ROLE AUDIT LOG
   it("Should create an audit log entry when a role is created", async () => {
     const newRole = {
       name: "Intern",
@@ -287,7 +316,7 @@ describe("Audit Logging Tests", () => {
     expect(log.target_name).toBe("Intern");
   });
 
-  // SCENARIO7: DELETE_ROLE AUDIT LOG
+  // SCENARIO8: DELETE_ROLE AUDIT LOG
   it("Should create an audit log entry when a role is deleted", async () => {
     const role = await UserRole.create({
       name: "TempRole",
@@ -312,7 +341,7 @@ describe("Audit Logging Tests", () => {
     expect(log.target_name).toBe("TempRole");
   });
 
-  // SCENARIO8: UPDATE_ROLE AUDIT LOG
+  // SCENARIO9: UPDATE_ROLE AUDIT LOG
   it("Should create an audit log entry when a role is updated", async () => {
     const newRole = {
       name: "Intern",
@@ -343,7 +372,7 @@ describe("Audit Logging Tests", () => {
     });
   });
 
-  // SCENARIO9: CREATE_DEPARTMENT AUDIT LOG
+  // SCENARIO10: CREATE_DEPARTMENT AUDIT LOG
   it("Should create an audit log entry when a department is created", async () => {
     const newDept = {
       name: "Law",
@@ -369,7 +398,7 @@ describe("Audit Logging Tests", () => {
     expect(log.target_name).toBe("Law");
   });
 
-  // SCENARIO10: DELETE_DEPARTMENT AUDIT LOG
+  // SCENARIO11: DELETE_DEPARTMENT AUDIT LOG
   it("Should create an audit log entry when a department is deleted", async () => {
     const dept = await Department.create({
       name: "TempDept",
@@ -394,7 +423,7 @@ describe("Audit Logging Tests", () => {
     expect(log.target_name).toBe("TempDept");
   });
 
-  // SCENARIO11: UPDATE_DEPARTMENT AUDIT LOG
+  // SCENARIO12: UPDATE_DEPARTMENT AUDIT LOG
   it("Should create an audit log entry when a department is updated", async () => {
     const newDept = {
       name: "Law",

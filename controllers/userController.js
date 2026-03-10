@@ -1,5 +1,8 @@
 // Importations
-import { uploadToCloudinary } from "../utils/cloudinaryHelper.js";
+import {
+  uploadToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinaryHelper.js";
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
@@ -1285,6 +1288,11 @@ export const uploadProfileImage = async (req, res, next) => {
 
     if (!req.file) return sendError(res, "No file uploaded!");
 
+    // Delete the old profile image first from cloudinary if it exists
+    if (existingUser.profileImagePublicId) {
+      await deleteFromCloudinary(existingUser.profileImagePublicId);
+    }
+
     // Upload to Cloudinary using utility
     const result = await uploadToCloudinary(
       req.file.buffer,
@@ -1294,7 +1302,10 @@ export const uploadProfileImage = async (req, res, next) => {
     // Update the user's profileImageURL
     const user = await User.findByIdAndUpdate(
       userId,
-      { profileImageURL: result.secure_url },
+      {
+        profileImageURL: result.secure_url,
+        profileImagePublicId: result.public_id,
+      },
       { returnDocument: "after" },
     );
 
@@ -1305,7 +1316,10 @@ export const uploadProfileImage = async (req, res, next) => {
       targetType: "User",
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
-      details: { profileImageURL: result.secure_url },
+      details: {
+        profileImageURL: result.secure_url,
+        profileImagePublicId: result.public_id,
+      },
       ipAddress: req.ip,
     });
 
@@ -1313,6 +1327,48 @@ export const uploadProfileImage = async (req, res, next) => {
       status: "Success",
       message: "Profile image updated successfully!",
       profileImageURL: result.secure_url,
+      profileImagePublicId: result.public_id,
+      user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Remove Profile Image
+export const removeProfileImage = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    const existingUser = await User.findById(userId);
+    if (!existingUser) throw new AppError("User not found!", 404);
+
+    // Delete image from Cloudinary
+    if (existingUser.profileImagePublicId) {
+      await deleteFromCloudinary(existingUser.profileImagePublicId);
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      {
+        profileImageURL: "",
+        profileImagePublicId: "",
+      },
+      { returnDocument: "after" },
+    );
+
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "REMOVE_IMAGE",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "Profile Image removed successfully!",
       user,
     });
   } catch (err) {
