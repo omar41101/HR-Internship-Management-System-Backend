@@ -302,7 +302,7 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
  *       500:
  *         description: Server error
  */
-router.put("/users/:id", authenticate, authorize(["Admin"]), updateUser);
+router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true }), updateUser);
 
 // Route to Delete user
 /**

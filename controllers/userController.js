@@ -438,6 +438,17 @@ export const addUser = async (req, res) => {
 
     const trimmedEmail = (email || "").trim().toLowerCase();
 
+    // Check user existence
+    console.log(
+      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
+    );
+    const existingUser = await User.findOne({ email: trimmedEmail });
+    if (existingUser) return sendError(res, "User Already Existing!", 401);
+
+    console.log(
+      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
+    );
+
     // Validate the field inputs
     const errors = [];
 
@@ -487,17 +498,6 @@ export const addUser = async (req, res) => {
         errors,
       });
     }
-
-    // Check user existence
-    console.log(
-      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
-    );
-    const existingUser = await User.findOne({ email: trimmedEmail });
-    if (existingUser) return sendError(res, "User Already Existing!", 401);
-
-    console.log(
-      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
-    );
 
     // Check Role validity
     const userrole = await UserRole.findOne({
@@ -814,7 +814,7 @@ export const updateUser = async (req, res) => {
           name: user.name,
           password: newPasswordRaw,
           code: newCode,
-          newRole: newRoleName
+          newRole: newRoleName,
         });
       } catch (emailErr) {
         console.log(
@@ -1207,10 +1207,13 @@ export const uploadProfileImage = async (req, res) => {
   try {
     const userId = req.params.id;
 
+    console.log("[UPLOAD-IMAGE-PROFILE] User Id:", req.params.id);
+
     const existingUser = await User.findById(userId);
     if (!existingUser) return sendError(res, "User not found!", 404);
 
     if (!req.file) return sendError(res, "No file uploaded!");
+    console.log("[UPLOAD-IMAGE-PROFILE] File:", req.file);
 
     // Upload to Cloudinary
     const result = await new Promise((resolve, reject) => {
