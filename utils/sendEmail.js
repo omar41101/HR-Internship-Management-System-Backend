@@ -1,8 +1,22 @@
 import nodemailer from "nodemailer";
 import { wrapEmailContent } from "./emailLayout.js";
-import { getAddUserContent, getUpdateUserContent, getResendOTPContent, getForgetPasswordValidationContent } from "./emailContent.js";
+import {
+  getAddUserContent,
+  getUpdateUserContent,
+  getResendOTPContent,
+  getForgetPasswordValidationContent,
+} from "./emailContent.js";
 
-export const sendEmail = async ({ to, subject, type, name, password, code, resetLink, newRole }) => {
+export const sendEmail = async ({
+  to,
+  subject,
+  type,
+  name,
+  password,
+  code,
+  resetLink,
+  newRole,
+}) => {
   let bodyHtml;
 
   // Decide the content based on type
@@ -14,7 +28,7 @@ export const sendEmail = async ({ to, subject, type, name, password, code, reset
     case "updateUser":
       bodyHtml = getUpdateUserContent({ name, password, code, newRole });
       break;
-    
+
     case "resendOTP":
       bodyHtml = getResendOTPContent({ name, code });
       break;
@@ -31,14 +45,16 @@ export const sendEmail = async ({ to, subject, type, name, password, code, reset
 
   try {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
+      host: "smtp.ethereal.email",
       port: 587,
-      secure: false,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      auth: {
+        user: process.env.ETHEREAL_USER,
+        pass: process.env.ETHEREAL_PASS,
+      },
     });
 
     await transporter.sendMail({
-      from: `"HRcoM" <${process.env.SMTP_USER}>`,
+      from: `"HRcoM" <${process.env.ETHEREAL_USER}>`,
       to,
       subject,
       html: htmlContent,
