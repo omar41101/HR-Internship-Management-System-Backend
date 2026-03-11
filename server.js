@@ -11,6 +11,7 @@ import departmentRoutes from "./routes/departmentRoutes.js";
 import auditLogRoutes from "./routes/auditLogRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import errorHandler from "./middleware/errorHandler.js";
+import documentTypeRoutes from "./routes/documentTypeRoutes.js";
 
 // Creation of an express app
 const app = express();
@@ -38,6 +39,7 @@ app.use('/api', UserRoleRoutes);
 app.use('/api', departmentRoutes);
 app.use('/api', auditLogRoutes);
 app.use('/api', testRoutes);
+app.use('/api', documentTypeRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
