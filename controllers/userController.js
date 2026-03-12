@@ -136,6 +136,7 @@ export const login = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole.name,
+        requiresFaceEnrollment: !user.faceEnrolled,
       },
     });
   } catch (err) {
@@ -185,6 +186,7 @@ export const verifyUser = async (req, res, next) => {
         userId: user._id,
         role: userRole?.name || "Employee",
         requiresPasswordChange: user.mustResetPassword,
+        requiresFaceEnrollment: !user.faceEnrolled,
       },
     });
   } catch (err) {
@@ -289,6 +291,7 @@ export const resetPassword = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole?.name || "Employee",
+        requiresFaceEnrollment: !user.faceEnrolled,
       },
     });
   } catch (err) {
@@ -385,6 +388,7 @@ export const forgetPassword = async (req, res, next) => {
         token: tokenGen,
         userId: user._id,
         role: userRole?.name || "Employee",
+        requiresFaceEnrollment: !user.faceEnrolled,
       },
     });
   } catch (err) {
@@ -987,6 +991,8 @@ export const getAllUsers = async (req, res, next) => {
       isAvailable: user.isAvailable,
       joinDate: user.joinDate,
       position: user.position,
+      faceEnrolled: user.faceEnrolled,
+      faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
         : null,
@@ -1038,6 +1044,8 @@ export const getUserById = async (req, res, next) => {
       isAvailable: user.isAvailable,
       joinDate: user.joinDate,
       position: user.position,
+      faceEnrolled: user.faceEnrolled,
+      faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
         : null,
@@ -1378,6 +1386,54 @@ export const removeProfileImage = async (req, res, next) => {
       status: "Success",
       message: "Profile Image removed successfully!",
       user,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Face Enrollment functionality
+export const enrollFace = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { descriptors } = req.body;
+
+    if (!descriptors || !Array.isArray(descriptors) || descriptors.length === 0) {
+      throw new AppError("Face descriptors missing or invalid!", 400);
+    }
+
+    const user = await User.findById(id);
+    if (!user) throw new AppError("User not found!", 404);
+
+    // Save the descriptors to the user's profile
+    user.faceDescriptors = descriptors;
+    user.faceEnrolled = true;
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Face enrolled successfully!",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+// Face reset functionality
+export const resetFace = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+    if (!user) throw new AppError("User not found!", 404);
+
+    // Clear face descriptors and set faceEnrolled to false
+    user.faceDescriptors = [];
+    user.faceEnrolled = false;
+    await user.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: "Face ID reset successfully!",
     });
   } catch (err) {
     next(err);
