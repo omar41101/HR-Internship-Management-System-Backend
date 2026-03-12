@@ -441,6 +441,89 @@ const options = {
               type: "string",
               description: "IP address from which the action was performed.",
             },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the document was created.",
+            },
+          },
+        },
+
+        // ================== Document Schemas ==================
+        Document: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique identifier for each document.",
+            },
+            title: { type: "string", description: "Title of the document." },
+            format: {
+              type: "string",
+              description: "Format of the document.",
+              enum: ["PDF", "Word", "Excel", "JPEG", "PNG", "WEBP", "Other"],
+            },
+            size: {
+              type: "number",
+              description: "Size of the document in bytes.",
+            },
+            uploadDate: {
+              type: "string",
+              format: "date-time",
+              description: "Date when the document was uploaded.",
+            },
+            fileURL: {
+              type: "string",
+              description: "Cloudinary URL of the document.",
+            },
+            isConfidential: {
+              type: "boolean",
+              description: "Indicates if the document is confidential.",
+            },
+            documentType_id: {
+              type: "string",
+              description: "ID of the document type.",
+            },
+            user_id: {
+              type: "string",
+              description: "ID of the user to whom the document belongs.",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the document was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the document was last updated.",
+            },
+          },
+        },
+
+        // ================== DocumentType Schemas ==================
+        DocumentType: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique identifier for each document type.",
+            },
+            name: { type: "string", description: "Name of the document type." },
+            description: {
+              type: "string",
+              description: "Description of the document type.",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the document type was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the document type was last updated.",
+            },
           },
         },
       },
