@@ -558,7 +558,7 @@ router.post(
   "/users/:id/profile-image",
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
-  upload.single("profileImage"),
+  upload("image").single("profileImage"),
   uploadProfileImage
 );
 

@@ -9,7 +9,7 @@ const documentSchema = new mongoose.Schema(
     format: {
       type: String,
       required: true,
-      enum: ["PDF", "Word", "Excel", "Image", "Other"],
+      enum: ["PDF", "Word", "Excel", "JPEG", "PNG", "WEBP", "Other"],
     },
     size: {
       type: Number, // Size in bytes

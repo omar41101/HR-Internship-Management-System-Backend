@@ -1,42 +1,52 @@
 import cloudinary from "../config/cloudinary.js";
+import path from "path";
 
-/**
- * Uploads an image to Cloudinary.
- * Handles both base64 strings and file buffers.
- * 
- * @param {string|Buffer} fileSource - The source of the file (base64 string or Buffer).
- * @param {string} folder - The destination folder in Cloudinary.
- * @returns {Promise<object>} - The upload result from Cloudinary.
- */
-export const uploadToCloudinary = async (fileSource, folder = "hrcom/general") => {
-    return new Promise((resolve, reject) => {
-        const uploadOptions = {
-            folder,
-            resource_type: "image",
-        };
+// Upload an Image to Cloudinary
+export const uploadImageToCloudinary = async (fileBuffer, originalName, folder = "hrcom/profile_images") => {
+  return new Promise((resolve, reject) => {
+    const uploadOptions = { folder, resource_type: "image" };
 
-        if (Buffer.isBuffer(fileSource)) {
-            // Handle Buffer (mostly from multer)
-            const stream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-            });
-            stream.end(fileSource);
-        } else if (typeof fileSource === "string" && fileSource.startsWith("data:image")) {
-            // Handle base64 string
-            cloudinary.uploader.upload(fileSource, uploadOptions, (error, result) => {
-                if (error) reject(error);
-                else resolve(result);
-            });
-        } else {
-            reject(new Error("Invalid file source. Expected Buffer or base64 string."));
-        }
+    const stream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+      if (error) reject(error);
+      else resolve(result);
     });
+
+    stream.end(fileBuffer);
+  });
 };
 
-// Delete an image from cloudinary
-export const deleteFromCloudinary = async (publicId) => {
+// Upload a Document to Cloudinary
+export const uploadDocToCloudinary = async (fileBuffer, originalName, folder = "hrcom/docs") => {
+  return new Promise((resolve, reject) => {
+    if (!Buffer.isBuffer(fileBuffer)) {
+      return reject(new Error("Invalid document source. Expected Buffer!"));
+    }
+
+    const uploadOptions = {
+      folder,
+      resource_type: "raw",
+      public_id: originalName,  
+      use_filename: true,
+      unique_filename: false
+    };
+
+    const stream = cloudinary.uploader.upload_stream(uploadOptions, (error, result) => {
+      if (error) reject(error);
+      else resolve(result);
+    });
+
+    stream.end(fileBuffer);
+  });
+};
+
+// Delete a file (image or document) from Cloudinary by publicId
+export const deleteFromCloudinary = async (publicId, type) => {
   if (!publicId) return;
 
-  return await cloudinary.uploader.destroy(publicId);
+  // Decide resource type automatically if not passed in the arguments
+  const rawExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
+  const ext = path.extname(publicId).toLowerCase();
+  const resource_type = type || (rawExtensions.includes(ext) ? "raw" : "image");
+
+  return await cloudinary.uploader.destroy(publicId, { resource_type });
 };

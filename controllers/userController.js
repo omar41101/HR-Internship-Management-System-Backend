@@ -1,6 +1,6 @@
 // Importations
 import {
-  uploadToCloudinary,
+  uploadImageToCloudinary,
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
 import User from "../models/User.js";
@@ -1281,35 +1281,30 @@ export const uploadProfileImage = async (req, res, next) => {
   try {
     const userId = req.params.id;
 
-    console.log("[UPLOAD-IMAGE-PROFILE] User Id:", req.params.id);
-
     const existingUser = await User.findById(userId);
     if (!existingUser) throw new AppError("User not found!", 404);
 
     if (!req.file) return sendError(res, "No file uploaded!");
 
-    // Delete the old profile image first from cloudinary if it exists
+    // Delete the old profile image from Cloudinary if it exists
     if (existingUser.profileImagePublicId) {
-      await deleteFromCloudinary(existingUser.profileImagePublicId);
+      await deleteFromCloudinary(existingUser.profileImagePublicId, "image");
     }
+    
+    // Upload new profile image to Cloudinary
+    const result = await uploadImageToCloudinary(req.file.buffer, "hrcom/profile_images");
 
-    // Upload to Cloudinary using utility
-    const result = await uploadToCloudinary(
-      req.file.buffer,
-      "hrcom/profile_images",
-    );
-
-    // Update the user's profileImageURL
+    // Update the user's profile image info
     const user = await User.findByIdAndUpdate(
       userId,
       {
         profileImageURL: result.secure_url,
         profileImagePublicId: result.public_id,
       },
-      { returnDocument: "after" },
+      { returnDocument: "after" }
     );
 
-    // Logging the action
+    // Audit log
     await logAuditAction({
       adminId: req.user.id,
       action: "UPLOAD_IMAGE",
@@ -1330,6 +1325,7 @@ export const uploadProfileImage = async (req, res, next) => {
       profileImagePublicId: result.public_id,
       user,
     });
+
   } catch (err) {
     next(err);
   }
