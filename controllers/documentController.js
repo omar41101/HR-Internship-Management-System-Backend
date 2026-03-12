@@ -118,13 +118,7 @@ export const deletePersonalDocument = async (req, res, next) => {
   }
 };
 
-
-
-
-
-
-
-// Download Personal Document (User himself or Admin)
+// Download Personal Document (User himself or Admin or the user's supervisor)
 export const downloadPersonalDocument = async (req, res, next) => {
   try {
     const documentId = req.params.id;
@@ -132,10 +126,13 @@ export const downloadPersonalDocument = async (req, res, next) => {
     // Check document existance
     const document = await Document.findById(documentId);
     if (!document) throw new AppError("Document not found!", 404);
-    // Check if personalType
+    
+    // Check the personalType existance
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
+    
+    // Check if the doc is personal
     if (!document.documentType_id.equals(personalType._id)) {
       throw new AppError("This is not a personal document!", 403);
     }
@@ -151,7 +148,7 @@ export const downloadPersonalDocument = async (req, res, next) => {
   }
 };
 
-// Consult Personal Document: ADD THE IS CONFIDENTIAL DETAIL LATER
+// Consult Personal Document (User himself or Admin or the user's supervisor)
 export const consultPersonalDocument = async (req, res, next) => {
   try {
     const documentId = req.params.id;
@@ -160,21 +157,14 @@ export const consultPersonalDocument = async (req, res, next) => {
     const document = await Document.findById(documentId);
     if (!document) throw new AppError("Document not found!", 404);
 
-    // Check Personal document type
+    // Check the PersonalType existance
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
 
+    // Check if the document is personal
     if (!document.documentType_id.equals(personalType._id)) {
       throw new AppError("This is not a personal document!", 403);
-    }
-
-    // Authorization: Admin OR owner
-    if (req.user.role !== "Admin" && !document.user_id.equals(req.user.id)) {
-      throw new AppError(
-        "You are not authorized to access this document!",
-        403,
-      );
     }
 
     // Open the file in the browser
@@ -184,25 +174,27 @@ export const consultPersonalDocument = async (req, res, next) => {
   }
 };
 
-// Get all personal documents of a user (User himself or Admin) : TO RECTIFYYYY
-export const getPersonalDocuments = async (req, res, next) => {
+// Get all personal documents of a user including the confidential docs (User himself or Admin)
+export const getAllPersonalDocuments = async (req, res, next) => {
   try {
+    // Get the Owner of docs's Id
     const targetUserId = req.params.id;
-    // Check Personal document type
+
+    // Check the user's existance
+    const user = await User.findById(targetUserId);
+    if (!user) throw new AppError("User not found!", 404);
+
+    // Check the existance of Personal document type
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
-    // Authorization: Admin OR owner
-    if (req.user.role !== "Admin" && targetUserId !== req.user.id) {
-      throw new AppError(
-        "You are not authorized to access these documents!",
-        403,
-      );
-    }
+
+    // Get the list of documents
     const documents = await Document.find({
       user_id: targetUserId,
       documentType_id: personalType._id,
     }).select("-filePublicId -fileHash"); // Exclude sensitive fields
+    
     res.status(200).json({
       status: "Success",
       documents,
@@ -212,30 +204,28 @@ export const getPersonalDocuments = async (req, res, next) => {
   }
 };
 
-// Get the non-confidential personal documents of a user (User himself or Admin or his supervisor): TO RECTIFFYYY
+// Get the non-confidential personal documents of a user (User himself or Admin or his supervisor)
 export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
   try {
+    // Get the owner Id
     const targetUserId = req.params.id;
-    // Check Personal document type
+
+    // Check the user's existance
+    const user = await User.findById(targetUserId);
+    if (!user) throw new AppError("User not found!", 404);
+
+    // Check Personal document type existance
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
-    // Authorization: Admin OR owner OR supervisor
-    if (
-      req.user.role !== "Admin" &&
-      targetUserId !== req.user.id &&
-      !req.user.supervisedEmployees.includes(targetUserId)
-    ) {
-      throw new AppError(
-        "You are not authorized to access these documents!",
-        403,
-      );
-    }
+    
+    // Get the list of non-confidential documents
     const documents = await Document.find({
       user_id: targetUserId,
       documentType_id: personalType._id,
-      isConfidential: false, // Only non-confidential documents
+      isConfidential: false,
     }).select("-filePublicId -fileHash"); // Exclude sensitive fields
+    
     res.status(200).json({
       status: "Success",
       documents,
