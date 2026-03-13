@@ -579,7 +579,7 @@ export const addUser = async (req, res, next) => {
         console.log(
           `[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
         );
-        const uploadResult = await uploadToCloudinary(
+        const uploadResult = await uploadImageToCloudinary(
           profileImageURL,
           "hrcom/profile_images",
         );
@@ -839,7 +839,7 @@ export const updateUser = async (req, res, next) => {
         console.log(
           `[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
         );
-        const uploadResult = await uploadToCloudinary(
+        const uploadResult = await uploadImageToCloudinary(
           updateData.profileImageURL,
           "hrcom/profile_images",
         );

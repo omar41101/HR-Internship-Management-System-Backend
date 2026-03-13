@@ -33,7 +33,6 @@ const documentSchema = new mongoose.Schema(
       // Hash of the file for integrity checks (Also prevents duplicate uploads)
       type: String,
       required: true,
-      unique: true,
     },
     isConfidential: {
       type: Boolean,
@@ -53,6 +52,12 @@ const documentSchema = new mongoose.Schema(
   {
     timestamps: true,
   },
+);
+
+// Compound index to prevent duplicate uploads of the same file by the same user
+documentSchema.index(
+  { fileHash: 1, user_id: 1 },
+  { unique: true }
 );
 
 export default mongoose.model("Document", documentSchema);

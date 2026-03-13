@@ -9,12 +9,17 @@ import {
 } from "../utils/cloudinaryHelper.js";
 import crypto from "crypto";
 import { DOC_MIME_TYPES } from "../middleware/upload.js";
+import fetch from "node-fetch"; // make sure node-fetch is installed
+import { pipeline } from "stream/promises";
 
 // Upload Personal Document (User himself or Admin)
 export const uploadPersonalDocument = async (req, res, next) => {
   try {
     // Get the doc's owner's ID
     const targetUserId = req.params.id;
+
+    // Get the isConfidential flag
+    const isConfidential = req.body.isConfidential === "true";
 
     // Check if the target user exists
     const user = await User.findById(targetUserId);
@@ -64,6 +69,7 @@ export const uploadPersonalDocument = async (req, res, next) => {
       documentType_id: personalType._id,
       user_id: targetUserId,
       fileHash,
+      isConfidential,
     });
 
     res.status(201).json({
@@ -103,7 +109,10 @@ export const deletePersonalDocument = async (req, res, next) => {
     // Delete from Cloudinary
     if (document.filePublicId) {
       const result = await deleteFromCloudinary(document.filePublicId, type);
-      console.log("[DELETE-PERSONAL-IMAGE] Cloudinary Deletion result:", result); // { result: "ok" } if successful deletion
+      console.log(
+        "[DELETE-PERSONAL-IMAGE] Cloudinary Deletion result:",
+        result,
+      ); // { result: "ok" } if successful deletion
     }
 
     // Remove from database
@@ -122,29 +131,54 @@ export const deletePersonalDocument = async (req, res, next) => {
 export const downloadPersonalDocument = async (req, res, next) => {
   try {
     const documentId = req.params.id;
-
-    // Check document existance
     const document = await Document.findById(documentId);
     if (!document) throw new AppError("Document not found!", 404);
-    
-    // Check the personalType existance
+
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
-    
-    // Check if the doc is personal
+
     if (!document.documentType_id.equals(personalType._id)) {
       throw new AppError("This is not a personal document!", 403);
     }
 
-    // Redirect to the file URL for download
-    const downloadURL = document.fileURL.replace(
-      "/upload/",
-      "/upload/fl_attachment/",
+    // ----------------------------
+    // NEW FILENAME LOGIC STARTS
+    const extMap = {
+      PDF: "pdf",
+      Word: "docx",
+      Excel: "xlsx",
+      JPEG: "jpeg",
+      PNG: "png",
+      WEBP: "webp",
+      Other: "bin",
+    };
+
+    // Strip any existing extension from title
+    const baseTitle = document.title.replace(/\.[^/.]+$/, "");
+
+    // Use the correct extension based on format
+    const ext = extMap[document.format] || "bin";
+
+    const fileName = `${baseTitle}.${ext}`;
+    // NEW FILENAME LOGIC ENDS
+    // ----------------------------
+
+    // Then continue with fetch + headers + streaming...
+    const cloudinaryResponse = await fetch(document.fileURL);
+    if (!cloudinaryResponse.ok)
+      throw new AppError("Failed to fetch document", 500);
+
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader(
+      "Content-Type",
+      cloudinaryResponse.headers.get("content-type") ||
+        "application/octet-stream",
     );
-    res.redirect(downloadURL);
+
+    await pipeline(cloudinaryResponse.body, res);
   } catch (err) {
-    next(err);
+    if (!res.headersSent) next(err);
   }
 };
 
@@ -168,7 +202,10 @@ export const consultPersonalDocument = async (req, res, next) => {
     }
 
     // Open the file in the browser
-    res.redirect(document.fileURL);
+    res.status(200).json({
+      status: "Success",
+      url: document.fileURL,
+    });
   } catch (err) {
     next(err);
   }
@@ -194,7 +231,7 @@ export const getAllPersonalDocuments = async (req, res, next) => {
       user_id: targetUserId,
       documentType_id: personalType._id,
     }).select("-filePublicId -fileHash"); // Exclude sensitive fields
-    
+
     res.status(200).json({
       status: "Success",
       documents,
@@ -218,17 +255,51 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
     const personalType = await DocumentType.findOne({ name: "Personal" });
     if (!personalType)
       throw new AppError("Personal document type not found!", 404);
-    
+
     // Get the list of non-confidential documents
     const documents = await Document.find({
       user_id: targetUserId,
       documentType_id: personalType._id,
       isConfidential: false,
     }).select("-filePublicId -fileHash"); // Exclude sensitive fields
-    
+
     res.status(200).json({
       status: "Success",
       documents,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Toggle Document Confidentiality (True/False) (User himself or Admin)
+export const toggleConfidentiality = async (req, res, next) => {
+  try {
+    // Get the document Id
+    const { id } = req.params; 
+
+    // Check the document existance
+    const document = await Document.findById(id);
+    if (!document) throw new AppError("Document not found!", 404);
+
+    // Check the Personal document type existance
+    const personalType = await DocumentType.findOne({ name: "Personal" });
+    if (!personalType)
+      throw new AppError("Personal document type not found!", 404);
+
+    // Check if it's a personal document
+    if (!document.documentType_id.equals(personalType._id)) {
+      throw new AppError("This is not a personal document!", 403);
+    }
+
+    // Toggle the document's confidentiality
+    document.isConfidential = document.isConfidential === true ? false : true;
+    await document.save();
+
+    res.status(200).json({
+      status: "Success",
+      message: `Document confidentiality has been toggled successfully!`,
+      data: { id: document._id, isConfidential: document.isConfidential },
     });
   } catch (err) {
     next(err);

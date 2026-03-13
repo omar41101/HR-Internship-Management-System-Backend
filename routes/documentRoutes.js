@@ -1,11 +1,12 @@
 import express from "express";
 import {
-    uploadPersonalDocument,
-    deletePersonalDocument,
-    downloadPersonalDocument,
-    consultPersonalDocument,
-    getAllPersonalDocuments,
-    getNonConfidentialPersonalDocuments
+  uploadPersonalDocument,
+  deletePersonalDocument,
+  downloadPersonalDocument,
+  consultPersonalDocument,
+  getAllPersonalDocuments,
+  getNonConfidentialPersonalDocuments,
+  toggleConfidentiality,
 } from "../controllers/documentController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -26,7 +27,7 @@ const router = express.Router();
  * /api/documents/personal-doc/{id}:
  *   post:
  *     summary: Upload a personal document
- *     tags: 
+ *     tags:
  *        - Personal Documents
  *     description: Upload a personal document for a user (Admin or the user himself).
  *     security:
@@ -68,11 +69,11 @@ const router = express.Router();
  *         description: Server Error
  */
 router.post(
-  "/documents/personal-doc/:id",  // :id = Target user's ID
+  "/documents/personal-doc/:id", // :id = Target user's ID
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
   upload("doc").single("personalDocument"),
-  uploadPersonalDocument
+  uploadPersonalDocument,
 );
 
 // Route to delete a personal document (The User himself and Admin)
@@ -81,7 +82,7 @@ router.post(
  * /api/documents/personal-doc/{id}:
  *   delete:
  *     summary: Delete a personal document
- *     tags: 
+ *     tags:
  *       - Personal Documents
  *     description: Delete a personal document (Admin or the user himself).
  *     security:
@@ -106,10 +107,10 @@ router.post(
  *         description: Server Error
  */
 router.delete(
-  "/documents/personal-doc/:id",  // :id = Document's ID
+  "/documents/personal-doc/:id", // :id = Document's ID
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
-  deletePersonalDocument
+  deletePersonalDocument,
 );
 
 // Route to Download a document (The User himself, Admin and the user's supervisor)
@@ -118,7 +119,7 @@ router.delete(
  * /api/documents/personal-doc/download/{id}:
  *   get:
  *     summary: Download a personal document
- *     tags: 
+ *     tags:
  *      - Personal Documents
  *     description: Download a personal document (Admin, user himself, or supervisor).
  *     security:
@@ -145,8 +146,8 @@ router.delete(
 router.get(
   "/documents/personal-doc/download/:id",
   authenticate,
-  authorize(["Admin"], { allowSelf: true , allowSupervisor: true }),
-  downloadPersonalDocument
+  authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
+  downloadPersonalDocument,
 );
 
 // Route to consult a document (The User himself, Admin and the user's supervisor)
@@ -155,7 +156,7 @@ router.get(
  * /api/documents/personal-doc/consult/{id}:
  *   get:
  *     summary: Consult a personal document
- *     tags: 
+ *     tags:
  *       - Personal Documents
  *     description: Open a personal document in the browser (Admin, user himself, or supervisor).
  *     security:
@@ -176,14 +177,14 @@ router.get(
  *         description: Not a personal document | Unauthorized (Admin, user himself, or supervisor only)
  *       404:
  *         description: Document not found
- *       500:  
+ *       500:
  *         description: Server Error
  */
 router.get(
   "/documents/personal-doc/consult/:id",
   authenticate,
-  authorize(["Admin"], { allowSelf: true , allowSupervisor: true }),
-  consultPersonalDocument
+  authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
+  consultPersonalDocument,
 );
 
 // Route to get all personal documents of a user (User himself or Admin)
@@ -192,7 +193,7 @@ router.get(
  * /api/documents/personal-docs/{id}:
  *   get:
  *     summary: Get all personal documents of a user
- *     tags: 
+ *     tags:
  *      - Personal Documents
  *     description: Retrieve all personal documents of a user including confidential ones (Admin or the user himself).
  *     security:
@@ -234,10 +235,10 @@ router.get(
  *                         type: boolean
  */
 router.get(
-  "/documents/personal-docs/:id",  // :id = Target user's ID
+  "/documents/personal-docs/:id", // :id = Target user's ID
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
-  getAllPersonalDocuments
+  getAllPersonalDocuments,
 );
 
 // Route to get all the non-confidential personal documents of a user (User himself or Admin or the supervisor)
@@ -246,7 +247,7 @@ router.get(
  * /api/documents/personal-docs/non-confidential/{id}:
  *   get:
  *     summary: Get non-confidential personal documents
- *     tags: 
+ *     tags:
  *      - Personal Documents
  *     description: Retrieve non-confidential personal documents of a user (Admin, user himself, or supervisor).
  *     security:
@@ -286,10 +287,45 @@ router.get(
  *                         type: string
  */
 router.get(
-  "/documents/personal-docs/non-confidential/:id",  // :id = Target user's ID
+  "/documents/personal-docs/non-confidential/:id", // :id = Target user's ID
   authenticate,
-  authorize(["Admin"], { allowSelf: true , allowSupervisor: true }),
-  getNonConfidentialPersonalDocuments
+  authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
+  getNonConfidentialPersonalDocuments,
+);
+
+// Route to toggle confidentiality of a personal document (The User himself and Admin)
+/**
+ * @swagger
+ * /api/documents/personal-doc/toggle-confidentiality/:id:
+ *   put:
+ *     tags:
+ *       - Documents
+ *     summary: Toggle document confidentiality (The user himself and Admin only)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Status toggled successfully
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Not a personal document | Unauthorized (Admin or the user himself only)
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server error
+ */
+router.put(
+  "/documents/personal-doc/toggle-confidentiality/:id", // :id = Document's ID
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  toggleConfidentiality,
 );
 
 export default router;
