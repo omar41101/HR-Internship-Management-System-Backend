@@ -123,6 +123,14 @@ const userSchema = mongoose.Schema(
       ref: "User",
       default: null,
     },
+    faceDescriptors: {
+      type: [[Number]],
+      default: [],
+    },
+    faceEnrolled: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

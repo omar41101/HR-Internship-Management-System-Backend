@@ -17,7 +17,9 @@ import {
   resendVerificationCode,
   resetPassword,
   requestPasswordReset,
-  forgetPassword
+  forgetPassword,
+  enrollFace,
+  resetFace
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -597,5 +599,70 @@ router.delete(
   authorize(["Admin"], { allowSelf: true }),
   removeProfileImage
 );
+
+// Route to enroll face descriptors
+/**
+ * @swagger
+ * /api/users/{id}/face-enrollment:
+ *   post:
+ *     summary: Enroll face descriptors for a user (Admin Only and the user himself)
+ *     description: Saves the face descriptors captured during enrollment to the user's profile.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: ID of the user to enroll face for
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - descriptors
+ *             properties:
+ *               descriptors:
+ *                 type: array
+ *                 items:
+ *                   type: array
+ *                   items:
+ *                     type: number
+ *                 description: Array of face descriptors (each is an array of 128 numbers)
+ *     responses:
+ *       200:
+ *         description: Face descriptors enrolled successfully
+ *       400:
+ *         description: Invalid descriptions data
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized (Insufficient permissions)
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ *     
+ */
+router.post(
+  "/users/:id/face-enrollment",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  enrollFace
+);
+
+// Route to reset face descriptors
+router.post(
+  "/users/:id/reset-face",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  resetFace
+);
+
 
 export default router;
