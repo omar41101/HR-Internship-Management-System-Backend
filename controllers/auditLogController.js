@@ -11,7 +11,7 @@ const formatAuditLog = (log) => {
   // Format description based on action and target
   switch (log.action) {
     case "DELETE_USER":
-      description = `Deleted User #${log.target_name}`;
+      description = `Deleted User ${log.target_name}`;
       break;
     case "UPDATE_ROLE":
       description = `Updated Role Permissions for ${log.target_name || log.target_id}`;
@@ -20,10 +20,10 @@ const formatAuditLog = (log) => {
       description = `Created ${log.target_name ? log.target_name + " " : ""}Account`;
       break;
     case "UPLOAD_IMAGE":
-      description = `Uploaded Document/Image`;
+      description = `Uploaded ${log.target_name || log.target_id}'s Profile Image`;
       break;
     case "REMOVE_IMAGE":
-      description = `Removed Document/Image`;
+      description = `Removed ${log.target_name || log.target_id}'s Profile Image`;
       break;
     case "UPDATE_USER":
       description = `Updated User ${log.target_name || log.target_id}`;
@@ -31,7 +31,7 @@ const formatAuditLog = (log) => {
     case "TOGGLE_STATUS":
       description = `Changed System Settings`;
       if (log.details && log.details.status) {
-        description = `Changed User Status to ${log.details.status}`;
+        description = `Changed ${log.target_name || log.target_id}'s Status to ${log.details.status}`;
       }
       break;
     case "CREATE_DEPARTMENT":
