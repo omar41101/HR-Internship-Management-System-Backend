@@ -10,7 +10,10 @@ export const getAddUserContent = ({ name, password, code }) => {
     <p>Your account has been created successfully! Please use the following credentials to login:</p>
     <p><strong style="color: #101D42;">Password:</strong> ${password}</p>
     <p><strong style="color: #101D42;">OTP Code:</strong> ${code}</p>
-    <p><strong style="color: #101D42;">Platform URL:</strong> ${process.env.PLATFORM_URL}</p>
+    <p>
+      <strong style="color: #101D42;">Platform URL:</strong> 
+      <a href=${process.env.PLATFORM_URL} target="_blank">HRcoM Platform</a>
+    </p>
 
     <p> <strong> Please note that for security reasons, this verification code will expire in 24 hours! </strong> </p>
   

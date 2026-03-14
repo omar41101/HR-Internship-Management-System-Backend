@@ -1,5 +1,5 @@
 import cloudinary from "../config/cloudinary.js";
-import path from "path";
+import path from "path"; // Allows us to work with file paths and extensions
 
 // Upload an Image to Cloudinary
 export const uploadImageToCloudinary = async (fileBuffer, originalName, folder = "hrcom/profile_images") => {
@@ -45,7 +45,7 @@ export const deleteFromCloudinary = async (publicId, type) => {
 
   // Decide resource type automatically if not passed in the arguments
   const rawExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
-  const ext = path.extname(publicId).toLowerCase();
+  const ext = path.extname(publicId).toLowerCase(); // Extract the file extension. Ex: .jpg
   const resource_type = type || (rawExtensions.includes(ext) ? "raw" : "image");
 
   return await cloudinary.uploader.destroy(publicId, { resource_type });

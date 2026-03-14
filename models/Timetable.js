@@ -13,7 +13,13 @@ const timetableSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["Morning Shift", "Evening Shift", "Full-time Shift", "Day Off", "Special Shift"],
+      enum: [
+        "Morning Shift",
+        "Evening Shift",
+        "Full-time Shift",
+        "Day Off",
+        "Special Shift",
+      ],
       required: true,
     },
     location: {
@@ -38,7 +44,7 @@ const timetableSchema = mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index to ensure one shift per user per day

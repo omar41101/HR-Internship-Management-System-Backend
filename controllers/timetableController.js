@@ -36,7 +36,6 @@ export const updateTimetableEntry = async (req, res, next) => {
       throw new AppError("Missing required fields (userId, date, type, location)", 400);
     }
 
-    // Use findOneAndUpdate with upsert to handle both create and update
     // Normalize date to midnight to ensure consistent indexing
     const normalizedDate = new Date(date);
     normalizedDate.setUTCHours(0, 0, 0, 0);
@@ -84,7 +83,8 @@ export const deleteTimetableEntry = async (req, res, next) => {
     next(err);
   }
 };
-// Bulk update or create timetable entries
+
+// Bulk update or create multiple timetable entries
 export const bulkUpdateTimetableEntries = async (req, res, next) => {
   try {
     const { userId, dates, type, location, color, duration } = req.body;

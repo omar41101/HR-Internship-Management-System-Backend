@@ -1,4 +1,4 @@
-// Cloudinary mock for jest (UPLOAD_IMAGE audit log test)
+// Cloudinary mock (Simulation) for jest (UPLOAD_IMAGE audit log test)
 export const v2 = {
   config: jest.fn(),
   uploader: {

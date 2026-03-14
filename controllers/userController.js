@@ -26,6 +26,8 @@ import AppError from "../utils/AppError.js";
 dotenv.config();
 
 // --------------------------------------------------------------------------- //
+// -------------------------- HELPER FUNCTIONS ------------------------------- //
+// --------------------------------------------------------------------------- //
 
 const sendError = (res, message, code = 400) => {
   return res.status(code).json({ status: "Error", message });

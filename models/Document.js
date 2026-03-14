@@ -55,9 +55,6 @@ const documentSchema = new mongoose.Schema(
 );
 
 // Compound index to prevent duplicate uploads of the same file by the same user
-documentSchema.index(
-  { fileHash: 1, user_id: 1 },
-  { unique: true }
-);
+documentSchema.index({ fileHash: 1, user_id: 1 }, { unique: true });
 
 export default mongoose.model("Document", documentSchema);

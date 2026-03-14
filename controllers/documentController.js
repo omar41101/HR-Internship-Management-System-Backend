@@ -2,15 +2,48 @@ import Document from "../models/Document.js";
 import User from "../models/User.js";
 import DocumentType from "../models/DocumentType.js";
 import AppError from "../utils/AppError.js";
+
 import {
   uploadImageToCloudinary,
   uploadDocToCloudinary,
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
+
 import crypto from "crypto";
 import { DOC_MIME_TYPES } from "../middleware/upload.js";
-import fetch from "node-fetch"; // make sure node-fetch is installed
-import { pipeline } from "stream/promises";
+import fetch from "node-fetch"; // Fetch API for downloading documents from Cloudinary
+import { pipeline } from "stream/promises"; // Connect multiple streams together
+
+// ---------------------------------------------------------------------------- //
+// ----------------------------- HELPER FUNCTIONS ----------------------------- //
+// ---------------------------------------------------------------------------- //
+
+// Check the existence of Personal document type
+const checkPersonalTypeExistence = async () => {
+  const personalType = await DocumentType.findOne({ name: "Personal" });
+  if (!personalType) {
+    throw new AppError("Personal document type not found!", 404);
+  }
+
+  return personalType;
+};
+
+// Check the document existence and if a document is a personal document
+const isPersonalDocument = async (documentId) => {
+  const personalType = await checkPersonalTypeExistence();
+
+  const document = await Document.findById(documentId);
+  if (!document) throw new AppError("Document not found!", 404);
+
+  if (!document.documentType_id.equals(personalType._id)) {
+    throw new AppError("This is not a personal document!", 404);
+  }
+  return document;
+};
+
+// ---------------------------------------------------------------------------- //
+// --------------------- PERSONAL DOCUMENTS MANAGEMENT ------------------------ //
+// ---------------------------------------------------------------------------- //
 
 // Upload Personal Document (User himself or Admin)
 export const uploadPersonalDocument = async (req, res, next) => {
@@ -25,10 +58,8 @@ export const uploadPersonalDocument = async (req, res, next) => {
     const user = await User.findById(targetUserId);
     if (!user) throw new AppError("User not found!", 404);
 
-    // Check Personal document type existence
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
+    // Get the personal document type
+    const personalType = await checkPersonalTypeExistence();
 
     // Check if a file is uploaded
     if (!req.file) throw new AppError("No file uploaded!", 400);
@@ -87,17 +118,8 @@ export const deletePersonalDocument = async (req, res, next) => {
   try {
     const documentId = req.params.id;
 
-    // Check the document existance
-    const document = await Document.findById(documentId);
-    if (!document) throw new AppError("Document not found!", 404);
-
-    // Check if it's a personal document
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
-    if (!document.documentType_id.equals(personalType._id)) {
-      throw new AppError("This is not a personal document!", 403);
-    }
+    // Get the document after its validation
+    const document = await isPersonalDocument(documentId);
 
     // Determine type: image or raw
     let type = "raw"; // Default type for documents
@@ -131,19 +153,11 @@ export const deletePersonalDocument = async (req, res, next) => {
 export const downloadPersonalDocument = async (req, res, next) => {
   try {
     const documentId = req.params.id;
-    const document = await Document.findById(documentId);
-    if (!document) throw new AppError("Document not found!", 404);
 
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
+    // Get the document after its validation
+    const document = await isPersonalDocument(documentId);
 
-    if (!document.documentType_id.equals(personalType._id)) {
-      throw new AppError("This is not a personal document!", 403);
-    }
-
-    // ----------------------------
-    // NEW FILENAME LOGIC STARTS
+    // Mapping format - extension
     const extMap = {
       PDF: "pdf",
       Word: "docx",
@@ -161,13 +175,11 @@ export const downloadPersonalDocument = async (req, res, next) => {
     const ext = extMap[document.format] || "bin";
 
     const fileName = `${baseTitle}.${ext}`;
-    // NEW FILENAME LOGIC ENDS
-    // ----------------------------
 
-    // Then continue with fetch + headers + streaming...
+    // Fetch the document from Cloudinary
     const cloudinaryResponse = await fetch(document.fileURL);
     if (!cloudinaryResponse.ok)
-      throw new AppError("Failed to fetch document", 500);
+      throw new AppError("Failed to fetch document from Cloudinary!", 500);
 
     res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
     res.setHeader(
@@ -188,18 +200,7 @@ export const consultPersonalDocument = async (req, res, next) => {
     const documentId = req.params.id;
 
     // Check document existence
-    const document = await Document.findById(documentId);
-    if (!document) throw new AppError("Document not found!", 404);
-
-    // Check the PersonalType existance
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
-
-    // Check if the document is personal
-    if (!document.documentType_id.equals(personalType._id)) {
-      throw new AppError("This is not a personal document!", 403);
-    }
+    const document = await isPersonalDocument(documentId);
 
     // Open the file in the browser
     res.status(200).json({
@@ -221,10 +222,8 @@ export const getAllPersonalDocuments = async (req, res, next) => {
     const user = await User.findById(targetUserId);
     if (!user) throw new AppError("User not found!", 404);
 
-    // Check the existance of Personal document type
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
+    // Get the Personal document type object
+    const personalType = await checkPersonalTypeExistence();
 
     // Get the list of documents
     const documents = await Document.find({
@@ -251,10 +250,8 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
     const user = await User.findById(targetUserId);
     if (!user) throw new AppError("User not found!", 404);
 
-    // Check Personal document type existance
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
+    // Get the Personal document type object
+    const personalType = await checkPersonalTypeExistence();
 
     // Get the list of non-confidential documents
     const documents = await Document.find({
@@ -276,21 +273,10 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
 export const toggleConfidentiality = async (req, res, next) => {
   try {
     // Get the document Id
-    const { id } = req.params; 
+    const { id } = req.params;
 
-    // Check the document existance
-    const document = await Document.findById(id);
-    if (!document) throw new AppError("Document not found!", 404);
-
-    // Check the Personal document type existance
-    const personalType = await DocumentType.findOne({ name: "Personal" });
-    if (!personalType)
-      throw new AppError("Personal document type not found!", 404);
-
-    // Check if it's a personal document
-    if (!document.documentType_id.equals(personalType._id)) {
-      throw new AppError("This is not a personal document!", 403);
-    }
+    // Get the document after its validation
+    const document = await isPersonalDocument(id);
 
     // Toggle the document's confidentiality
     document.isConfidential = document.isConfidential === true ? false : true;

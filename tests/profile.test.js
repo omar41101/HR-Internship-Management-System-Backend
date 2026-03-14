@@ -11,6 +11,7 @@ dotenv.config({ path: ".env.test" });
 
 const JWT_SECRET = process.env.JWT_SECRET || "HRCOOOM_TEST_2025_2026";
 
+// PROFILE TESTS
 describe("Profile Viewing Tests (GET /api/users/:id)", () => {
     let adminUser, regularUser1, regularUser2, supervisorUser;
     let adminToken, user1Token, supervisorToken;
