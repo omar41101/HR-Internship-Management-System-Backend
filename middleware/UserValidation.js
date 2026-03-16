@@ -1,3 +1,4 @@
+import { passportRules } from "./passportRules.js";
 import pkg from "google-libphonenumber";
 const { PhoneNumberUtil, PhoneNumberFormat } = pkg;
 
@@ -43,6 +44,29 @@ export const validatePhoneNumber = (code, number) => {
     console.error("[Phone-Validation-ERROR]", error.message);
     return null;
   }
+};
+
+// Tunisian CIN validation
+export const validateCIN = (cin) => {
+  const cinRegex = /^[0-1][0-9]{7}$/;
+  return cinRegex.test(cin);
+}
+
+// Passport validation based on country-specific rules
+export const validatePassport = (passportNumber, countryCode) => {
+  if (!passportNumber || !countryCode) return false;
+
+  // Normalize Input
+  passportNumber = passportNumber.trim().toUpperCase();
+
+  const rule = passportRules[countryCode];
+
+  if (!rule) {
+    // Fallback for unknown countries (Generic Rules)
+    return /^[A-Z0-9]{6,9}$/.test(passportNumber);
+  }
+
+  return rule.test(passportNumber);
 };
 
 // Length check (For the Bio)

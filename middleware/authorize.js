@@ -13,7 +13,10 @@ const authorize = (roles = [], options = {}) => {
 
       // Check if the user himself has self access
       if (options.allowSelf) {
-        if (user.id === req.params.id) {
+        const tokenUserId = (user.id || user._id || "").toString();
+        const targetId = (req.params.id || "").toString();
+
+        if (targetId === "current" || tokenUserId === targetId) {
           return next();
         }
       }
