@@ -6,6 +6,7 @@ import {
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
+import Document from "../models/Document.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
@@ -19,7 +20,10 @@ import {
   validatePhoneNumber,
   isWithinRange,
   generateRandomCode,
+  validateCIN,
+  validatePassport,
 } from "../middleware/UserValidation.js";
+import { countries } from "../middleware/countries.js"; // List of countries with their codes
 import { logAuditAction } from "../utils/logger.js";
 import AppError from "../utils/AppError.js";
 
@@ -37,6 +41,7 @@ const handleError = (res, err) => {
   console.error(err);
   return res.status(500).json({ status: "Error", message: err.message });
 };
+
 const validateUserStatus = (user) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
     throw new AppError(
@@ -412,9 +417,12 @@ export const addUser = async (req, res, next) => {
       name,
       lastName,
       email,
+      idType, // Passport or CIN
+      idCountryCode, // Passport or CIN country code
+      idNumber, // Passport or CIN number
       address,
       joinDate,
-      countryCode,
+      countryCode, // Country code for the phone number
       phoneNumber,
       position,
       bonus,
@@ -432,12 +440,15 @@ export const addUser = async (req, res, next) => {
     } = req.body;
 
     const trimmedEmail = (email || "").trim().toLowerCase();
+    const trimmedIdNumber = (idNumber || "").trim();
 
     // Check user existence
     console.log(
-      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
+      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail} - ${trimmedIdNumber}`,
     );
-    const existingUser = await User.findOne({ email: trimmedEmail });
+    const existingUser = await User.findOne({
+      $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
+    });
     if (existingUser) return sendError(res, "User Already Existing!", 401);
 
     console.log(
@@ -465,6 +476,43 @@ export const addUser = async (req, res, next) => {
       });
     }
 
+    // CIN/Passport validation
+    if (!["CIN", "Passport"].includes(idType)) {
+      errors.push({
+        field: "idType",
+        message: "ID Type must be either CIN or Passport!",
+      });
+    }
+
+    // P.S: The country code for the CIN is automatically = "TN"
+    switch (idType) {
+      case "CIN":
+        if (!validateCIN(trimmedIdNumber)) {
+          errors.push({ field: "idNumber", message: "Invalid CIN format!" });
+        }
+        break;
+
+      case "Passport":
+        if (
+          !idCountryCode ||
+          !countries.some((c) => c.code === idCountryCode)
+        ) {
+          errors.push({
+            field: "idCountryCode",
+            message: "Invalid country code for Passport!",
+          });
+        } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
+          errors.push({
+            field: "idNumber",
+            message:
+              "Invalid Passport format for the specified country: " +
+              idCountryCode +
+              "!",
+          });
+        }
+        break;
+    }
+
     if (bio && !isWithinRange(bio, 0, 500))
       errors.push({
         field: "bio",
@@ -487,21 +535,8 @@ export const addUser = async (req, res, next) => {
     if (errors.length > 0) {
       console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
 
-      throw new AppError(
-        "Input validation failed!",
-        400,
-        "Please check the highlighted fields and correct the errors.",
-      );
+      throw new AppError("Input validation failed!", 400, errors);
     }
-
-    // Check user existence
-    console.log(
-      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
-    );
-
-    console.log(
-      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
-    );
 
     // Check Role validity
     const userrole = await UserRole.findOne({
@@ -580,7 +615,7 @@ export const addUser = async (req, res, next) => {
     // Handle profile image upload if provided as base64
     let finalProfileImageURL =
       typeof profileImageURL === "string" &&
-        !profileImageURL.startsWith("data:image")
+      !profileImageURL.startsWith("data:image")
         ? profileImageURL
         : "";
 
@@ -627,6 +662,11 @@ export const addUser = async (req, res, next) => {
       name,
       lastName,
       email: trimmedEmail,
+      idType,
+      idNumber: {
+        number: trimmedIdNumber,
+        countryCode: idCountryCode,
+      },
       password: hashedPassword,
       verificationCode: hashedOTP,
       verificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
@@ -696,236 +736,98 @@ export const addUser = async (req, res, next) => {
   }
 };
 
-// Update User (Only the Admin can do it)
+// Update User (Only the Admin can do it) 
 export const updateUser = async (req, res, next) => {
   try {
+
     const { id } = req.params;
     const updateData = { ...req.body };
 
-    // Input Validation
     const errors = [];
+
     if (updateData.email && !isValidEmail(updateData.email))
       errors.push({ field: "email", message: "Invalid email format" });
+
     if (
       updateData.phoneNumber &&
-      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) ===
-      null
+      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null
     ) {
       errors.push({
         field: "phoneNumber",
         message: "Invalid phone number format",
       });
     }
-    if (updateData.bio && !isWithinRange(updateData.bio, 0, 500))
-      errors.push({
-        field: "bio",
-        message: "Bio must be under 500 characters",
-      });
-    if (updateData.bonus !== undefined && updateData.bonus < 0)
-      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
+    
+    const idNumber = updateData.idNumber?.number;
+    const idCountryCode = updateData.idNumber?.countryCode;
 
-    // Children validation
-    if (
-      updateData.hasChildren === true &&
-      (updateData.nbOfChildren === undefined || updateData.nbOfChildren <= 0)
-    ) {
+    if (updateData.idType && !["CIN", "Passport"].includes(updateData.idType)) {
       errors.push({
-        field: "nbOfChildren",
-        message: "Please specify the number of children",
+        field: "idType",
+        message: "ID Type must be either CIN or Passport!",
       });
     }
-    if (updateData.nbOfChildren !== undefined && updateData.nbOfChildren < 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Number of children cannot be negative",
-      });
+
+    switch (updateData.idType) {
+
+      case "CIN":
+
+        if (idNumber && !validateCIN(idNumber)) {
+          errors.push({
+            field: "idNumber",
+            message: "Invalid CIN format!",
+          });
+        }
+
+        if (updateData.idNumber) {
+          updateData.idNumber.countryCode = "TN";
+        }
+
+        break;
+
+      case "Passport":
+
+        if (
+          idCountryCode &&
+          !countries.some((c) => c.code === idCountryCode)
+        ) {
+          errors.push({
+            field: "idCountryCode",
+            message: "Invalid country code for Passport!",
+          });
+        }
+
+        else if (
+          idNumber &&
+          idCountryCode &&
+          !validatePassport(idNumber, idCountryCode)
+        ) {
+          errors.push({
+            field: "idNumber",
+            message:
+              "Invalid Passport format for the specified country: " +
+              idCountryCode +
+              "!",
+          });
+        }
+
+        break;
+    }
 
     if (errors.length > 0) {
-      throw new AppError(
-        "Input validation failed!",
-        400,
-        "Please check the highlighted fields and correct the errors.",
-      );
+      throw new AppError("Input validation failed!", 400, errors);
     }
 
-    const existingUser = await User.findById(id).populate("role_id");
-    if (!existingUser) throw new AppError("User not found!", 404);
-
-    let roleChanged = false;
-    let newPasswordRaw = "";
-
-    // Check for the role change validity
-    if (updateData.role) {
-      const newRoleName = updateData.role;
-      const currentRoleName = existingUser.role_id
-        ? existingUser.role_id.name
-        : "";
-
-      if (newRoleName.toLowerCase() !== currentRoleName.toLowerCase()) {
-        roleChanged = true;
-
-        const roleDoc = await UserRole.findOne({
-          name: { $regex: new RegExp(`^${newRoleName}$`, "i") },
-        });
-
-        if (!roleDoc) throw new AppError("Invalid Role!", 400);
-
-        updateData.role_id = roleDoc._id; // Get the new role ID
-
-        console.log(
-          `[UPDATE-USER-DEBUG] Role changed from "${currentRoleName}" to "${roleDoc.name}".`,
-        );
-      } else {
-        console.log(`[UPDATE-USER-DEBUG] Role unchanged: "${currentRoleName}"`);
-      }
-    }
-
-    // Check for the department change validity
-    if (updateData.department) {
-      if (
-        updateData.department === "Unassigned" ||
-        updateData.department === "" ||
-        updateData.department === "all"
-      ) {
-        updateData.department_id = null;
-      } else {
-        const dept = await Department.findOne({
-          name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
-        });
-
-        if (!dept) throw new AppError("Invalid Department!", 400);
-
-        updateData.department_id = dept._id; // Get the new department ID
-      }
-    }
-
-    // Check for the supervisor change validity
-    if (updateData.supervisor_full_name !== undefined) {
-      if (
-        updateData.supervisor_full_name === "" ||
-        updateData.supervisor_full_name === "Not assigned yet" ||
-        updateData.supervisor_full_name === null
-      ) {
-        updateData.supervisor_id = null;
-      } else {
-        const parts = updateData.supervisor_full_name.trim().split(/\s+/);
-        const firstName = parts[0];
-        const lastName = parts.slice(1).join(" ");
-
-        const supervisor = await User.findOne({ name: firstName, lastName });
-        if (!supervisor) throw new AppError("Invalid Supervisor!", 400);
-
-        updateData.supervisor_id = supervisor._id; // Get the new supervisor ID
-      }
-    }
-
-    // Get the full validated phone number
-    if (updateData.phoneNumber) {
-      updateData.phoneNumber = validatePhoneNumber(
-        updateData.countryCode,
-        updateData.phoneNumber,
-      );
-    }
-
-    // Only generate NEW password and a NEW OTP code if the role actually changed
-    let newCode = "";
-    if (roleChanged) {
-      newPasswordRaw = generateRandomCode();
-      newCode = generateRandomCode(6);
-
-      // Hash the new password and OTP Code
-      updateData.password = await bcrypt.hash(newPasswordRaw, 10);
-      updateData.verificationCode = await bcrypt.hash(newCode, 10);
-      updateData.verificationCodeExpires = new Date(
-        Date.now() + 24 * 60 * 60 * 1000,
-      ); // 24 hours
-      updateData.status = "Pending";
-      updateData.mustResetPassword = true;
-    }
-
-    // Handle profile image upload if provided as base64
-    if (
-      updateData.profileImageURL &&
-      typeof updateData.profileImageURL === "string" &&
-      updateData.profileImageURL.startsWith("data:image")
-    ) {
-      try {
-        console.log(
-          `[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
-        );
-        const uploadResult = await uploadImageToCloudinary(
-          updateData.profileImageURL,
-          "hrcom/profile_images",
-        );
-
-        if (uploadResult && uploadResult.secure_url) {
-          updateData.profileImageURL = uploadResult.secure_url;
-          console.log(
-            `[UPDATE-USER-DEBUG] Upload success: ${updateData.profileImageURL}`,
-          );
-        } else {
-          console.error(
-            "[UPDATE-USER-DEBUG] Upload result missing secure_url:",
-            uploadResult,
-          );
-          delete updateData.profileImageURL; // Don't save base64 if upload fails
-        }
-      } catch (uploadErr) {
-        console.error(
-          "[UPDATE-USER-DEBUG] Cloudinary upload failed:",
-          uploadErr.message,
-        );
-        delete updateData.profileImageURL; // Don't save base64 if upload fails
-      }
-    }
-
-    // Update the user
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
     });
 
-    // If role changed, send by Email the new credentials to the User
-    if (roleChanged) {
-      try {
-        console.log(
-          `[UPDATE-USER-DEBUG] Sending updated credentials to: ${user.email}`,
-        );
-
-        await sendEmail({
-          to: user.email,
-          subject: "HRcoM Account Update",
-          type: "updateUser",
-          name: user.name,
-          password: newPasswordRaw,
-          code: newCode,
-          newRole: newRoleName,
-        });
-      } catch (emailErr) {
-        console.log(
-          `[UPDATE-USER-DEBUG] Role updated but email failed:`,
-          emailErr.message,
-        );
-      }
-    }
-
     res.status(200).json({
       status: "Success",
-      message: roleChanged
-        ? "User role updated and new credentials sent."
-        : "User updated successfully.",
+      message: "User updated successfully.",
       data: user,
     });
 
-    // Logging the action
-    await logAuditAction({
-      adminId: req.user.id,
-      action: "UPDATE_USER",
-      targetType: "User",
-      targetId: user._id,
-      targetName: `${user.name} ${user.lastName}`,
-      details: req.body, // Log the changes requested
-      ipAddress: req.ip,
-    });
   } catch (err) {
     next(err);
   }
@@ -935,12 +837,29 @@ export const updateUser = async (req, res, next) => {
 export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const user = await User.findByIdAndDelete(id);
+
+    const user = await User.findById(id);
     if (!user) throw new AppError("User not found!", 404);
+
+    // Find all documents of the user
+    const documents = await Document.find({ user_id: id });
+
+    // Delete the user's document files from Cloudinary
+    for (const doc of documents) {
+      if (doc.filePublicId) {
+        await deleteFromCloudinary(doc.filePublicId);
+      }
+    }
+
+    // Delete documents from MongoDB
+    await Document.deleteMany({ user_id: id });
+
+    // Delete the user
+    await User.findByIdAndDelete(id);
 
     res.status(200).json({
       status: "Success",
-      message: "User deleted successfully",
+      message: "User and all associated documents deleted successfully!",
     });
 
     // Logging the action
@@ -1003,10 +922,10 @@ export const getAllUsers = async (req, res, next) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
         : null,
     }));
 
@@ -1027,43 +946,10 @@ export const getUserById = async (req, res, next) => {
 
     if (!user) throw new AppError("User not found!", 404);
 
-    // Format the user data
-    const formattedUser = {
-      id: user._id,
-      name: user.name,
-      lastName: user.lastName,
-      email: user.email,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      bonus: user.bonus,
-      profileImageURL: user.profileImageURL,
-      bio: user.bio,
-      leaveBalance: user.leaveBalance,
-      socialStatus: user.socialStatus,
-      hasChildren: user.hasChildren,
-      nbOfChildren: user.nbOfChildren,
-      status: user.status,
-      isAvailable: user.isAvailable,
-      joinDate: user.joinDate,
-      position: user.position,
-      faceEnrolled: user.faceEnrolled,
-      faceDescriptors: user.faceDescriptors,
-      role: user.role_id
-        ? { id: user.role_id._id, name: user.role_id.name }
-        : null,
-      department: user.department_id
-        ? { id: user.department_id._id, name: user.department_id.name }
-        : null,
-      supervisor: user.supervisor_id
-        ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
-        : null,
-    };
-
-    res.status(200).json(formattedUser);
+    res.status(200).json({
+      status: "Success",
+      data: user,
+    });
   } catch (err) {
     next(err);
   }
@@ -1308,9 +1194,12 @@ export const uploadProfileImage = async (req, res, next) => {
     if (existingUser.profileImagePublicId) {
       await deleteFromCloudinary(existingUser.profileImagePublicId, "image");
     }
-    
+
     // Upload new profile image to Cloudinary
-    const result = await uploadImageToCloudinary(req.file.buffer, "hrcom/profile_images");
+    const result = await uploadImageToCloudinary(
+      req.file.buffer,
+      "hrcom/profile_images",
+    );
 
     // Update the user's profile image info
     const user = await User.findByIdAndUpdate(
@@ -1319,7 +1208,7 @@ export const uploadProfileImage = async (req, res, next) => {
         profileImageURL: result.secure_url,
         profileImagePublicId: result.public_id,
       },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     );
 
     // Audit log
@@ -1343,7 +1232,6 @@ export const uploadProfileImage = async (req, res, next) => {
       profileImagePublicId: result.public_id,
       user,
     });
-
   } catch (err) {
     next(err);
   }
@@ -1396,7 +1284,11 @@ export const enrollFace = async (req, res, next) => {
     const { id } = req.params;
     const { descriptors } = req.body;
 
-    if (!descriptors || !Array.isArray(descriptors) || descriptors.length === 0) {
+    if (
+      !descriptors ||
+      !Array.isArray(descriptors) ||
+      descriptors.length === 0
+    ) {
       throw new AppError("Face descriptors missing or invalid!", 400);
     }
 
@@ -1416,6 +1308,7 @@ export const enrollFace = async (req, res, next) => {
     next(err);
   }
 };
+
 // Face reset functionality
 export const resetFace = async (req, res, next) => {
   try {

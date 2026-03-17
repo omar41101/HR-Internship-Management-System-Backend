@@ -16,7 +16,11 @@ const authorize = (roles = [], options = {}) => {
 
       // Check if the user himself has self access
       if (options.allowSelf) {
-        if (user.id === targetId) {
+        const tokenUserId = (user.id || user._id || "").toString();
+        // Use either targetUserId overlay or the id from params
+        const finalTargetId = (targetId || "").toString();
+
+        if (finalTargetId === "current" || tokenUserId === finalTargetId) {
           return next();
         }
       }

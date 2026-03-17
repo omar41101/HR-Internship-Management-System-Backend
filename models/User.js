@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { countries } from "../middleware/countries.js";
 
 const userSchema = mongoose.Schema(
   {
@@ -13,6 +14,25 @@ const userSchema = mongoose.Schema(
     email: {
       type: String,
       required: true,
+    },
+    idType: {
+      type: String,
+      enum: ["CIN", "Passport"],
+      required: true,
+    },
+    idNumber: {
+      number: {
+        type: String,
+        required: true,
+      },
+      countryCode: {
+        type: String,
+        required: true,
+        uppercase: true,
+        minlength: 2,
+        maxlength: 2,
+        enum: countries.map((c) => c.code), // Ensure It's a valid country code from the list of countries
+      },
     },
     password: {
       type: String,
@@ -81,7 +101,8 @@ const userSchema = mongoose.Schema(
       type: String,
       default: "",
     },
-    profileImagePublicId : { // Cloudinary public ID of each profileimage used for deletion
+    profileImagePublicId: {
+      // Cloudinary public ID of each profileimage used for deletion
       type: String,
       default: "",
     },
