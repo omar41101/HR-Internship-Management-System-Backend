@@ -58,19 +58,25 @@ const validateUserStatus = (user) => {
 // Login Functionality (All users can do it)
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const trimmedEmail = (email || "").trim().toLowerCase();
+    const { email, identifier: idFromReq, password } = req.body;
+    const identifier = (idFromReq || email || "").trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
 
-    console.log(`[LOGIN-DEBUG] Login attempt for: ${trimmedEmail}`);
+    console.log(`[LOGIN-DEBUG] Login attempt for identifier: ${identifier}`);
 
-    // Check the User existence
-    const user = await User.findOne({ email: trimmedEmail });
+    // Check the User existence by Email or CIN/Passport number
+    const user = await User.findOne({
+      $or: [
+        { email: identifier },
+        { "idNumber.number": identifier }
+      ]
+    });
+
     if (!user) {
       throw new AppError(
         "User not found!",
         404,
-        "Verify that you have used the correct email address.",
+        "Verify that you have used the correct email address or ID number.",
       );
     }
 
@@ -740,7 +746,10 @@ export const addUser = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   try {
 
-    const { id } = req.params;
+    let { id } = req.params;
+    if (id === "current") {
+      id = req.user.id;
+    }
     const updateData = { ...req.body };
 
     const errors = [];
@@ -938,7 +947,10 @@ export const getAllUsers = async (req, res, next) => {
 // Get User by ID
 export const getUserById = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
+    if (id === "current") {
+      id = req.user.id;
+    }
     const user = await User.findById(id)
       .populate("role_id")
       .populate("department_id")

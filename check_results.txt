@@ -1,0 +1,30 @@
+Total users found: 7
+
+User: malek@gmail.com
+  idType: CIN
+  idNumber: {"number":"14087650","countryCode":"TN"}
+
+User: hinidi@gmail.com
+  idType: CIN
+  idNumber: {"number":"82922081","countryCode":"TN"}
+
+User: kutie@gmail.com
+  idType: CIN
+  idNumber: {"number":"14093456","countryCode":"TN"}
+
+User: mj@gmail.com
+  idType: CIN
+  idNumber: {"number":"61105188","countryCode":"TN"}
+
+User: vini@gmail.com
+  idType: CIN
+  idNumber: {"number":"55886497","countryCode":"TN"}
+
+User: hanen@gmail.com
+  idType: CIN
+  idNumber: {"number":"56139612","countryCode":"TN"}
+
+User: bambi@gmail.com
+  idType: CIN
+  idNumber: {"number":"92522204","countryCode":"TN"}
+
