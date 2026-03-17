@@ -11,8 +11,23 @@ import {
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
 import { upload } from "../middleware/upload.js";
+import Document from "../models/Document.js";
+import AppError from "../utils/AppError.js";
 
 const router = express.Router();
+
+// Helper middleware to extract the document owner's ID
+// so that authorize() can check "allowSelf" correctly.
+const attachDocumentOwner = async (req, res, next) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return next(new AppError("Document not found", 404));
+    req.targetUserId = doc.user_id.toString();
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
 
 /**
  * @swagger
@@ -109,6 +124,7 @@ router.post(
 router.delete(
   "/documents/personal-doc/:id", // :id = Document's ID
   authenticate,
+  attachDocumentOwner,
   authorize(["Admin"], { allowSelf: true }),
   deletePersonalDocument,
 );
@@ -146,6 +162,7 @@ router.delete(
 router.get(
   "/documents/personal-doc/download/:id",
   authenticate,
+  attachDocumentOwner,
   authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
   downloadPersonalDocument,
 );
@@ -183,6 +200,7 @@ router.get(
 router.get(
   "/documents/personal-doc/consult/:id",
   authenticate,
+  attachDocumentOwner,
   authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
   consultPersonalDocument,
 );
@@ -324,6 +342,7 @@ router.get(
 router.put(
   "/documents/personal-doc/toggle-confidentiality/:id", // :id = Document's ID
   authenticate,
+  attachDocumentOwner,
   authorize(["Admin"], { allowSelf: true }),
   toggleConfidentiality,
 );
