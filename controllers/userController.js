@@ -814,6 +814,16 @@ export const updateUser = async (req, res, next) => {
       returnDocument: "after",
     });
 
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPDATE_USER",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      details: updateData,
+      ipAddress: req.ip,
+    });
+
     res.status(200).json({
       status: "Success",
       message: "User updated successfully.",
