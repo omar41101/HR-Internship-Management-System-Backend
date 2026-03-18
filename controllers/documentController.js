@@ -11,7 +11,9 @@ import {
 
 import crypto from "crypto";
 import { DOC_MIME_TYPES } from "../middleware/upload.js";
-import cloudinary from "../config/cloudinary.js";
+// import cloudinary from "../config/cloudinary.js";
+import { pipeline } from "stream/promises";
+import fetch from "node-fetch";
 
 // ---------------------------------------------------------------------------- //
 // ----------------------------- HELPER FUNCTIONS ----------------------------- //
@@ -159,27 +161,41 @@ export const downloadPersonalDocument = async (req, res, next) => {
     // Get the document after its validation
     const document = await isPersonalDocument(documentId);
 
+    // Get the file extension based on the document format
+    const extMap = {
+      PDF: "pdf",
+      Word: "docx",
+      Excel: "xlsx",
+      JPEG: "jpeg",
+      PNG: "png",
+      WEBP: "webp",
+      Other: "bin",
+    };
+
     // Strip any existing extension from title for a clean filename
     const baseTitle = document.title.replace(/\.[^/.]+$/, "");
 
-    // Safely URL-encode the attachment filename so spaces become %20
-    const safeAttachmentName = encodeURIComponent(baseTitle);
+    // Get the appropriate filename + extension for the downloaded file
+    const ext = extMap[document.format] || "bin";
+    const fileName = `${baseTitle}.${ext}`;
 
-    // For raw files with spaces, the public_id itself must be encoded 
-    // before signing, otherwise the signature will fail when the browser encodes it.
-    const safePublicId = document.filePublicId.replace(/ /g, "%20");
+    // Fetch the file from cloudinary with the fileURL
+    const cloudinaryResponse = await fetch(document.fileURL);
+    if (!cloudinaryResponse.ok)
+      throw new AppError("Failed to fetch document", 500);
 
-    // Use the official Cloudinary SDK to build a cryptographically signed URL.
-    const downloadUrl = cloudinary.url(safePublicId, {
-      resource_type: "raw",            // Critical for PDFs/Docs
-      flags: `attachment:${safeAttachmentName}`,
-      sign_url: true                   // Appends the s-- Signature
-    });
+    // Set the appropriate headers for file download
+    res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+    res.setHeader(
+      "Content-Type",
+      cloudinaryResponse.headers.get("content-type") ||
+        "application/octet-stream",
+    );
 
-    // Redirect the client directly to Cloudinary — no proxying needed.
-    return res.redirect(302, downloadUrl);
+    // Stream the file content directly to the client
+    await pipeline(cloudinaryResponse.body, res);
   } catch (err) {
-    next(err);
+    if (!res.headersSent) next(err);
   }
 };
 
