@@ -1,3 +1,0 @@
-﻿[dotenv@17.3.1] injecting env (18) from .env -- tip: ΓÜÖ∩╕Å  load multiple .env files with { path: ['.env.local', '.env'] }
-Connected to MongoDB
-Missing IDs: 0 / Total: 7

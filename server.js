@@ -1,4 +1,4 @@
-// Importations
+// Imports
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -21,7 +21,7 @@ import documentRoutes from "./routes/documentRoutes.js";
 // Creation of an express app
 const app = express();
 
-// Create HTTP server and attach Socket.io
+// Create HTTP server and attach Socket.io (mangage websocket connections)
 const httpServer = createServer(app);
 export const io = new Server(httpServer, {
   cors: {
@@ -46,8 +46,8 @@ if (process.env.NODE_ENV === "test") {
   dotenv.config();
 }
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ limit: "10mb", extended: true }));
+app.use(express.json({ limit: "10mb" })); // Handle JSON payloads (max size 10mb)
+app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data sent from HTML forms
 
 // Swagger API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

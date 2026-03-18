@@ -8,13 +8,16 @@ const attendanceSchema = mongoose.Schema(
       required: true,
     },
     date: {
+      // The date of the attendance record
       type: Date,
       required: true,
     },
     checkInTime: {
+      // The time the user checked in
       type: String,
     },
     checkOutTime: {
+      // The time the user checked out
       type: String,
     },
     status: {
@@ -27,12 +30,12 @@ const attendanceSchema = mongoose.Schema(
       enum: ["Remote", "Onsite"],
     },
     notes: {
-      type: String,
-    }
+      type: String, // Additional notes about the attendance record
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index to ensure one attendance record per user per day

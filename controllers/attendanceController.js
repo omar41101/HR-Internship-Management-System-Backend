@@ -10,17 +10,24 @@ const getStartOfDay = (date) => {
   return d;
 };
 
-// @desc    Check-in
-// @route   POST /api/attendance/check-in
-// @access  Private
+// Check-in function
 export const checkIn = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const { location } = req.body;
-    const now = new Date();
-    const today = getStartOfDay(now);
+    const { location } = req.body; // Get the user location (Remote/Onsite)
+    const now = new Date(); // The exact current date and time when the user clicked on the button Check in.
+    const today = getStartOfDay(now); // Today's date
 
-    // 1. Get user's shift for today to determine if they are late
+    // Get the user's existance
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+    
+    // Get the user's shift for today to determine if they are late
     const shift = await Timetable.findOne({ userId, date: today });
 
     let status = "present";
@@ -39,7 +46,7 @@ export const checkIn = async (req, res, next) => {
       hour12: true,
     });
 
-    // 2. Create or update attendance record
+    // Create or update attendance record
     const attendance = await Attendance.findOneAndUpdate(
       { userId, date: today },
       {
@@ -48,10 +55,10 @@ export const checkIn = async (req, res, next) => {
         location,
         checkOutTime: null,
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
 
-    // 3. Emit real-time event to all connected clients
+    // Emit (Sends a message) real-time event to all connected clients
     io.emit("attendanceUpdated", {
       action: "checkIn",
       userId: String(userId),
@@ -60,77 +67,66 @@ export const checkIn = async (req, res, next) => {
 
     res.status(200).json({
       status: "success",
+      message: "Checked in successfully!",
       result: attendance,
-      message: "Checked in successfully",
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Check-out
-// @route   POST /api/attendance/check-out
-// @access  Private
-export const checkOut = async (req, res, next) => {
+// Get the user's attendance status for today
+export const getMyStatus = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const now = new Date();
-    const today = getStartOfDay(now);
-    const checkOutTime = now.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const today = getStartOfDay(new Date());
 
-    const attendance = await Attendance.findOneAndUpdate(
-      { userId, date: today },
-      { checkOutTime },
-      { new: true }
-    );
-
-    if (!attendance) {
+    // Check the user's existance
+    const user = await User.findById(userId);
+    if (!user) {
       return res.status(404).json({
-        status: "fail",
-        message: "No attendance record found for today. Did you check in?",
+        status: "Error",
+        message: "User not found!",
       });
     }
 
-    // Emit real-time event to all connected clients
-    io.emit("attendanceUpdated", {
-      action: "checkOut",
-      userId: String(userId),
-      attendance,
-    });
+    // Get today's attendance record for the user
+    const attendance = await Attendance.findOne({ userId, date: today });
 
     res.status(200).json({
       status: "success",
       result: attendance,
-      message: "Checked out successfully",
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get attendance records
-// @route   GET /api/attendance
-// @access  Private (Admin/Supervisor, or self)
+// Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {
   try {
-    const { userId, department, startDate, endDate } = req.query;
-    const filter = {};
+    const { userId, startDate, endDate } = req.query;
+    const filter = {}; // Allow filtering
 
-    // 1. Authorization & Identity
-    if (
-      req.user.role.name === "Admin" ||
-      req.user.role.name === "Supervisor"
-    ) {
+    // Check for user existance if userId is provided
+    if (userId) {
+      const user = await User.findById(userId); 
+      if (!user) {  
+        return res.status(404).json({
+          status: "Error",
+          message: "User not found!",
+        });
+      }
+    }
+
+    // Authorization & Identity
+    if (req.user.role.name === "Admin" || req.user.role.name === "Supervisor") {
       if (userId) filter.userId = userId;
     } else {
       filter.userId = req.user._id;
     }
 
-    // 2. Date Filtering
+    // Date Filtering
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = getStartOfDay(startDate);
@@ -151,12 +147,10 @@ export const getAttendance = async (req, res, next) => {
   }
 };
 
-// @desc    Admin updates attendance record directly
-// @route   PATCH /api/attendance/:id
-// @access  Private (Admin/Supervisor)
+// Admin updates attendance record directly
 export const updateAttendance = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // Attendance record ID
     const updates = req.body;
 
     const attendance = await Attendance.findByIdAndUpdate(id, updates, {
@@ -164,9 +158,10 @@ export const updateAttendance = async (req, res, next) => {
     });
 
     if (!attendance) {
-      return res
-        .status(404)
-        .json({ status: "fail", message: "Attendance record not found" });
+      return res.status(404).json({
+        status: "Error",
+        message: "Attendance record not found!",
+      });
     }
 
     // Emit real-time event for admin updates too
@@ -178,26 +173,59 @@ export const updateAttendance = async (req, res, next) => {
     res.status(200).json({
       status: "success",
       result: attendance,
-      message: "Attendance updated successfully",
+      message: "Attendance updated successfully!",
     });
   } catch (error) {
     next(error);
   }
 };
 
-// @desc    Get current status for logged-in user
-// @route   GET /api/attendance/me
-// @access  Private
-export const getMyStatus = async (req, res, next) => {
+// Check-out
+export const checkOut = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const today = getStartOfDay(new Date());
+    const now = new Date();
+    const today = getStartOfDay(now);
 
-    const attendance = await Attendance.findOne({ userId, date: today });
+    // Check the user's existance
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    const checkOutTime = now.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+
+    const attendance = await Attendance.findOneAndUpdate(
+      { userId, date: today },
+      { checkOutTime },
+      { new: true },
+    );
+
+    if (!attendance) {
+      return res.status(404).json({
+        status: "Error",
+        message: "No attendance record found for today. Did you check in?",
+      });
+    }
+
+    // Emit real-time event to all connected clients
+    io.emit("attendanceUpdated", {
+      action: "checkOut",
+      userId: String(userId),
+      attendance,
+    });
 
     res.status(200).json({
       status: "success",
       result: attendance,
+      message: "Checked out successfully!",
     });
   } catch (error) {
     next(error);

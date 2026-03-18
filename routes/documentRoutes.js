@@ -317,7 +317,7 @@ router.get(
  * /api/documents/personal-doc/toggle-confidentiality/:id:
  *   put:
  *     tags:
- *       - Documents
+ *       - Personal Documents
  *     summary: Toggle document confidentiality (The user himself and Admin only)
  *     security:
  *       - bearerAuth: []

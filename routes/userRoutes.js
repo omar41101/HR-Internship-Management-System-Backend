@@ -657,12 +657,52 @@ router.post(
 );
 
 // Route to reset face descriptors
+/**
+ * @swagger
+ * /users/{id}/reset-face:
+ *   post:
+ *     summary: Reset a user's Face ID
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The ID of the user whose Face ID will be reset
+ *     description: |
+ *       Admins can reset the Face ID of any user. Users can reset their own Face ID if `allowSelf` is enabled.
+ *       This clears the `faceDescriptors` array and sets `faceEnrolled` to `false`.
+ *     responses:
+ *       200:
+ *         description: Face ID reset successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: Success
+ *                 message:
+ *                   type: string
+ *                   example: Face ID reset successfully!
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized 
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
 router.post(
   "/users/:id/reset-face",
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
   resetFace
 );
-
 
 export default router;

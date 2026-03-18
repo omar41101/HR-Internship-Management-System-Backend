@@ -1047,22 +1047,6 @@ export const filterUsers = async (req, res, next) => {
   }
 };
 
-// Get Current User (the one logged in)
-export const getCurrentUser = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const user = await User.findById(userId).populate("role_id");
-    if (!user) throw new AppError("User not found!", 404);
-
-    res.status(200).json({
-      status: "Success",
-      data: user,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
 // Toggle User Status(Active/Inactive) (Only for Admins)
 export const toggleUserStatus = async (req, res, next) => {
   try {
