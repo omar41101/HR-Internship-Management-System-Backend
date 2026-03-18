@@ -25,6 +25,7 @@ const router = express.Router();
  *     summary: Get a timetable for a specific user
  *     tags: 
  *        - Timetable
+ *     description: Retrieve the timetable for a specific user. Admins and Supervisors can access any user's timetable, while regular users can only access their own.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -86,6 +87,7 @@ router.get(
  *     summary: Update or create a timetable entry
  *     tags: 
  *        - Timetable
+ *     description: Update or create a timetable entry for a user (Admin only).
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -145,6 +147,7 @@ router.put(
  *     summary: Bulk update or create timetable entries
  *     tags: 
  *        - Timetable
+ *     description: Bulk update or create multiple timetable entries at the same time for a user (Admin only).
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -197,7 +200,9 @@ router.put(
  * /timetable:
  *   delete:
  *     summary: Delete a timetable entry
- *     tags: [Timetable]
+ *     tags: 
+ *        - Timetable
+ *     description: Delete a specific timetable entry for a user (Admin only).
  *     security:
  *       - bearerAuth: []
  *     requestBody:

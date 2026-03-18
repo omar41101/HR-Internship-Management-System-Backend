@@ -30,6 +30,7 @@ const router = express.Router();
  *     summary: Check in for today (All authenticated users)
  *     tags: 
  *       - Attendance
+ *     description: Check in for today. The system will automatically determine the attendance status (present, late, absent). The user must provide their location (Remote or Onsite) during the check-in.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -68,6 +69,7 @@ router.post("/attendance/check-in", authenticate, checkIn);
  *     summary: Check out for today
  *     tags: 
  *       - Attendance
+ *     description: Check out for today. The system will update the attendance record with the check-out time.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -94,11 +96,12 @@ router.post("/attendance/check-out", authenticate, checkOut);
  *     summary: Get the current user's attendance status for today
  *     tags: 
  *       - Attendance
+ *     description: Get the current user's attendance status for today, including check-in time, check-out time, attendance status (present, late, absent), and location (Remote or Onsite).
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: User's attendance record for today
+ *         description: User's attendance record for today (can be null if the user hasn't checked in yet)
  *         content:
  *           application/json:
  *             schema:
@@ -124,6 +127,7 @@ router.get("/attendance/me", authenticate, getMyStatus);
  *     summary: Get attendance records (Admin/Supervisor)
  *     tags: 
  *       - Attendance
+ *     description: Get attendance records with optional filters by user ID and date range. Admins can view all records, while Supervisors can only view records of their supervisees.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -186,6 +190,7 @@ router.get(
  *     summary: update an attendance record (Admin only)
  *     tags: 
  *       - Attendance
+ *     description: Allowd an Admin to update an attendance record.
  *     security:
  *       - bearerAuth: []
  *     parameters:

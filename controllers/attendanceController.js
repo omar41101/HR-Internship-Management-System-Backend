@@ -92,6 +92,13 @@ export const getMyStatus = async (req, res, next) => {
 
     // Get today's attendance record for the user
     const attendance = await Attendance.findOne({ userId, date: today });
+    if(!attendance) {
+      return res.status(200).json({
+        status: "success",
+        message: "No attendance record found for today. You haven't checked in yet!",
+        result: null,
+      });
+    }
 
     res.status(200).json({
       status: "success",

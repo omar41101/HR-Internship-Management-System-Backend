@@ -279,6 +279,8 @@ router.post("/users/forget-password", forgetPassword);
  *         description: Forbidden (Insufficient permissions)
  *       404:
  *         description: Supervisor not found
+ *       409:
+ *         description: User already exists in the DB
  *       500:
  *         description: Server error
  */
