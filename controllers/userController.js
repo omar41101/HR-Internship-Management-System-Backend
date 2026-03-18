@@ -58,22 +58,20 @@ const validateUserStatus = (user) => {
 // Login Functionality (All users can do it)
 export const login = async (req, res, next) => {
   try {
-    const { email, identifier: idFromReq, password } = req.body;
-    const identifier = (idFromReq || email || "").trim().toLowerCase();
+    const { email, password } = req.body;
+    const trimmedEmail = (email || "").trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
 
-    console.log(`[LOGIN-DEBUG] Login attempt for identifier: ${identifier}`);
+    console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
 
     // Check the User existence by Email or CIN/Passport number
-    const user = await User.findOne({
-      $or: [{ email: identifier }, { "idNumber.number": identifier }],
-    });
+    const user = await User.findOne({email: trimmedEmail });
 
     if (!user) {
       throw new AppError(
         "User not found!",
         404,
-        "Verify that you have used the correct email address or ID number.",
+        "Invalid Email or password provided!",
       );
     }
 
