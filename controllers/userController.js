@@ -66,10 +66,7 @@ export const login = async (req, res, next) => {
 
     // Check the User existence by Email or CIN/Passport number
     const user = await User.findOne({
-      $or: [
-        { email: identifier },
-        { "idNumber.number": identifier }
-      ]
+      $or: [{ email: identifier }, { "idNumber.number": identifier }],
     });
 
     if (!user) {
@@ -455,46 +452,50 @@ export const addUser = async (req, res, next) => {
     const existingUser = await User.findOne({
       $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
     });
-    if (existingUser) return sendError(res, "User Already Existing!", 401);
+    if (existingUser) return sendError(res, "User Already Existing!", 409);
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
     // Validate the field inputs
-    const errors = [];
-
     if (isEmpty(name))
-      errors.push({ field: "name", message: "First name is required" });
+      return sendError(res, "First name is required!", 400);
+    
     if (isEmpty(lastName))
-      errors.push({ field: "lastName", message: "Last name is required" });
+      return sendError(res, "Last name is required!", 400);
+
     if (isEmpty(address))
-      errors.push({ field: "address", message: "Address is required" });
-    if (isEmpty(position))
-      errors.push({ field: "position", message: "Position is required" });
+      return sendError(res, "Address is required!", 400);
+    
+      if (isEmpty(position))
+      return sendError(res, "Position is required!", 400);
 
     if (!isValidEmail(email))
-      errors.push({ field: "email", message: "Invalid email format" });
-    if (validatePhoneNumber(countryCode, phoneNumber) === null) {
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
+      return sendError(res, "Invalid Email Format!", 400);
+
+    // Phone number validation and checking phone number uniqueness
+    if (!validatePhoneNumber(countryCode, phoneNumber)) {
+      return sendError(res, "Invalid Phone Number Format!", 400);
+    }
+
+    const existingPhoneUser = await User.findOne({
+      phoneNumber: validatePhoneNumber(countryCode, phoneNumber),
+    });
+    if (existingPhoneUser) {
+      return sendError(res, "Phone number not available!", 400);
     }
 
     // CIN/Passport validation
     if (!["CIN", "Passport"].includes(idType)) {
-      errors.push({
-        field: "idType",
-        message: "ID Type must be either CIN or Passport!",
-      });
+      return sendError(res, "ID Type must be either CIN or Passport!", 400);
     }
 
     // P.S: The country code for the CIN is automatically = "TN"
     switch (idType) {
       case "CIN":
         if (!validateCIN(trimmedIdNumber)) {
-          errors.push({ field: "idNumber", message: "Invalid CIN format!" });
+          return sendError(res, "Invalid CIN format!", 400);
         }
         break;
 
@@ -503,46 +504,29 @@ export const addUser = async (req, res, next) => {
           !idCountryCode ||
           !countries.some((c) => c.code === idCountryCode)
         ) {
-          errors.push({
-            field: "idCountryCode",
-            message: "Invalid country code for Passport!",
-          });
+
+          return sendError(res, "Invalid country code for Passport!", 400);
         } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
-          errors.push({
-            field: "idNumber",
-            message:
-              "Invalid Passport format for the specified country: " +
-              idCountryCode +
-              "!",
-          });
+
+          return sendError(
+            res, 
+            "Invalid Passport format for the specified country: " + idCountryCode + "!",
+            400
+          );
         }
         break;
     }
 
     if (bio && !isWithinRange(bio, 0, 500))
-      errors.push({
-        field: "bio",
-        message: "Bio must be under 500 characters",
-      });
+      return sendError(res, "Bio must be under 500 characters!", 400);
 
     if (hasChildren && nbOfChildren <= 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Please specify the number of children",
-      });
+      return sendError(res, "Please specify the number of children!", 400);
     if (nbOfChildren < 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Number of children cannot be negative",
-      });
+      return sendError(res, "Invalid Number of children!", 400);
+
     if (bonus < 0)
-      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
-
-    if (errors.length > 0) {
-      console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
-
-      throw new AppError("Input validation failed!", 400, errors);
-    }
+      return sendError(res, "Invalid Bonus value!", 400);
 
     // Check Role validity
     const userrole = await UserRole.findOne({
@@ -742,89 +726,90 @@ export const addUser = async (req, res, next) => {
   }
 };
 
-// Update User (Only the Admin can do it) 
+// Update User (Only the Admin can do it)
 export const updateUser = async (req, res, next) => {
   try {
-
     let { id } = req.params;
     if (id === "current") {
       id = req.user.id;
     }
     const updateData = { ...req.body };
 
-    const errors = [];
-
     if (updateData.email && !isValidEmail(updateData.email))
-      errors.push({ field: "email", message: "Invalid email format" });
+      return sendError(res, "Invalid Email Format!", 400);
 
-    if (
-      updateData.phoneNumber &&
-      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) === null
-    ) {
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
+    // Check phone number validity and uniqueness
+    let updatedPhoneNumber = null;
+
+    if (updateData.phoneNumber) {
+      updatedPhoneNumber = validatePhoneNumber(
+        updateData.countryCode,
+        updateData.phoneNumber,
+      );
+
+      if (!updatedPhoneNumber) {
+        return sendError(res, "Invalid Phone Number!", 400);
+      } else {
+        // Check phone number uniqueness
+        const existingPhoneUser = await User.findOne({
+          phoneNumber: updatedPhoneNumber,
+        });
+
+        if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
+          return sendError(res, "Phone number not available!", 400);  
+        }
+
+        // Save the updated version
+        updateData.phoneNumber = updatedPhoneNumber;
+      }
     }
-    
+
+    // Check ID number uniqueness and validity
     const idNumber = updateData.idNumber?.number;
     const idCountryCode = updateData.idNumber?.countryCode;
 
     if (updateData.idType && !["CIN", "Passport"].includes(updateData.idType)) {
-      errors.push({
-        field: "idType",
-        message: "ID Type must be either CIN or Passport!",
+      return sendError(res, "ID Type must be either CIN or Passport!", 400);
+    }
+
+    // Check if the updated ID number already exists for another user
+    if (idNumber) {
+      const existingUser = await User.findOne({
+        "idNumber.number": idNumber,
+        "idNumber.countryCode": idCountryCode || "TN",
       });
+
+      if (existingUser && existingUser._id.toString() !== id) {
+        return sendError(res, `Unable to process this ${updateData.idType} Number!`, 400);
+      }
     }
 
     switch (updateData.idType) {
-
       case "CIN":
-
         if (idNumber && !validateCIN(idNumber)) {
-          errors.push({
-            field: "idNumber",
-            message: "Invalid CIN format!",
-          });
+          return sendError(res, "Invalid CIN format!", 400);
         }
 
         if (updateData.idNumber) {
           updateData.idNumber.countryCode = "TN";
         }
-
         break;
 
       case "Passport":
-
-        if (
-          idCountryCode &&
-          !countries.some((c) => c.code === idCountryCode)
-        ) {
-          errors.push({
-            field: "idCountryCode",
-            message: "Invalid country code for Passport!",
-          });
-        }
-
-        else if (
+        if (idCountryCode && !countries.some((c) => c.code === idCountryCode)) {
+          return sendError(res, "Invalid country code for Passport!", 400);
+        } else if (
           idNumber &&
           idCountryCode &&
           !validatePassport(idNumber, idCountryCode)
         ) {
-          errors.push({
-            field: "idNumber",
-            message:
-              "Invalid Passport format for the specified country: " +
-              idCountryCode +
-              "!",
-          });
+          return sendError(
+            res,
+            "Invalid Passport format for the specified country: " + idCountryCode + "!",
+            400
+          );
         }
-
         break;
-    }
-
-    if (errors.length > 0) {
-      throw new AppError("Input validation failed!", 400, errors);
     }
 
     const user = await User.findByIdAndUpdate(id, updateData, {
@@ -836,7 +821,6 @@ export const updateUser = async (req, res, next) => {
       message: "User updated successfully.",
       data: user,
     });
-
   } catch (err) {
     next(err);
   }

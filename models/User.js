@@ -158,4 +158,10 @@ const userSchema = mongoose.Schema(
   },
 );
 
+// Index for the ID number uniqueness
+userSchema.index(
+  { "idNumber.number": 1, "idNumber.countryCode": 1 },
+  { unique: true, sparse: true }
+);
+
 export default mongoose.model("User", userSchema);
