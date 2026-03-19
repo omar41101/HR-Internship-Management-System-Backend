@@ -33,16 +33,6 @@ const timetableSchema = mongoose.Schema(
     duration: {
       type: String,
     },
-    isLocked: {
-      // A user cannot edit his shift. Only an admin can edit shifts
-      type: Boolean,
-      default: false,
-    },
-    hasFeedback: {
-      // Notes or feedback
-      type: Boolean,
-      default: false,
-    },
   },
   {
     timestamps: true,

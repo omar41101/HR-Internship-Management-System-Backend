@@ -29,9 +29,6 @@ const attendanceSchema = mongoose.Schema(
       type: String,
       enum: ["Remote", "Onsite"],
     },
-    notes: {
-      type: String, // Additional notes about the attendance record
-    },
   },
   {
     timestamps: true,

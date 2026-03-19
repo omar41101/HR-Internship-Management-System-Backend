@@ -1,7 +1,10 @@
+import User from "../models/User.js";
 import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
-import User from "../models/User.js";
 import { io } from "../server.js";
+
+import { buildDateFilter } from "../utils/dateFilter.js";
+import { exportCSV, exportExcel, sanitize, getPeriodLabel } from "../utils/exportHelpers.js";
 
 // Helper to get start of day in UTC
 const getStartOfDay = (date) => {
@@ -236,5 +239,102 @@ export const checkOut = async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// Export the attendance records of a precise user to CSV (Admin Only)
+export const exportUserAttendance = async (req, res, next) => {
+  try {
+    const {
+      userId,
+      type,
+      year,
+      month,
+      trimester,
+      format,
+      startDate,
+      endDate,
+    } = req.query;
+
+    // Validate custom
+    if (type === "custom" && (!startDate || !endDate)) {
+      return res.status(400).json({
+        status: "Error",
+        message: "StartDate and endDate are required!",
+      });
+    }
+
+    // Get user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
+    // Build date filter
+    const dateFilter = buildDateFilter({
+      type,
+      year,
+      month,
+      trimester,
+      startDate,
+      endDate,
+    });
+
+    // Fetch records
+    const records = await Attendance.find({
+      userId,
+      date: dateFilter,
+    }).sort({ date: 1 }); // Sort by date ascending for better readability in exports
+
+    if(records.length === 0) {
+      return res.status(404).json({
+        status: "Error",
+        message: "No attendance records found for the specified period!",
+      });
+    }
+
+    // Format data
+    const formatted = records.map((r) => ({
+      Date: r.date.toISOString().split("T")[0],
+      CheckIn: r.checkInTime || "-",
+      CheckOut: r.checkOutTime || "-",
+      Status: r.status || "Absent",
+    }));
+
+    // Build the filename (The user name included)
+    const fullName = `${user.name}_${user.lastName || ""}`;
+    const cleanName = sanitize(fullName);
+    const periodLabel = getPeriodLabel({
+      type,
+      year,
+      month,
+      trimester,
+      startDate,
+      endDate,
+    });
+
+    const extension = format === "csv" ? "csv" : "xlsx";
+    const fileName = `attendance_${cleanName}_${periodLabel}.${extension}`.toLowerCase();
+
+    // Export based on the requested format (CSV or Excel)
+    if (format === "csv") {
+      return exportCSV(formatted, res, fileName);
+    }
+
+    if (format === "excel") {
+      return exportExcel(formatted, res, fileName);
+    }
+
+    // If the format requested is Invalid
+    return res.status(400).json({
+      status: "Error",
+      message: "Invalid export format!",
+    });
+
+  } catch (err) {
+    next(err);
   }
 };

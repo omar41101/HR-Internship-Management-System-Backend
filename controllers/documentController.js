@@ -11,7 +11,6 @@ import {
 
 import crypto from "crypto";
 import { DOC_MIME_TYPES } from "../middleware/upload.js";
-// import cloudinary from "../config/cloudinary.js";
 import { pipeline } from "stream/promises";
 import fetch from "node-fetch";
 
