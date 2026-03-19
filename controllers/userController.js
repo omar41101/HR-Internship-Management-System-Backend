@@ -22,6 +22,7 @@ import {
   generateRandomCode,
   validateCIN,
   validatePassport,
+  getPassportHint,
 } from "../middleware/UserValidation.js";
 import { countries } from "../middleware/countries.js"; // List of countries with their codes
 import { logAuditAction } from "../utils/logger.js";
@@ -507,10 +508,10 @@ export const addUser = async (req, res, next) => {
 
           return sendError(res, "Invalid country code for Passport!", 400);
         } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
-
+          const hint = getPassportHint(idCountryCode);
           return sendError(
             res, 
-            "Invalid Passport format for the specified country: " + idCountryCode + "!",
+            `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
             400
           );
         }
@@ -803,6 +804,7 @@ export const updateUser = async (req, res, next) => {
           idCountryCode &&
           !validatePassport(idNumber, idCountryCode)
         ) {
+          const hint = getPassportHint(idCountryCode);
           return sendError(
             res,
             "Invalid Passport format for the specified country: " + idCountryCode + "!",
