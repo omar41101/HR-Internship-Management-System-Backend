@@ -1,4 +1,4 @@
-import { passportRules } from "./passportRules.js";
+import { passportRules } from "./idRules.js";
 import pkg from "google-libphonenumber";
 const { PhoneNumberUtil, PhoneNumberFormat } = pkg;
 
@@ -59,14 +59,14 @@ export const validatePassport = (passportNumber, countryCode) => {
   // Normalize Input
   passportNumber = passportNumber.trim().toUpperCase();
 
-  const rule = passportRules[countryCode];
+  const ruleObj = passportRules[countryCode] || passportRules.GENERIC;
+  return ruleObj.regex.test(passportNumber);
+};
 
-  if (!rule) {
-    // Fallback for unknown countries (Generic Rules)
-    return /^[A-Z0-9]{6,9}$/.test(passportNumber);
-  }
-
-  return rule.test(passportNumber);
+// Get Passport hint/description for a country
+export const getPassportHint = (countryCode) => {
+  const ruleObj = passportRules[countryCode] || passportRules.GENERIC;
+  return ruleObj.description;
 };
 
 // Length check (For the Bio)
