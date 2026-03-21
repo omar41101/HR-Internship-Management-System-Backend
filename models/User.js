@@ -152,6 +152,10 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    faceEnrollmentPromptRequired: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,
