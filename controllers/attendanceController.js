@@ -1,4 +1,5 @@
 import User from "../models/User.js";
+import Department from "../models/Department.js";
 import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
 import { io } from "../server.js";
@@ -242,11 +243,13 @@ export const checkOut = async (req, res, next) => {
   }
 };
 
-// Export the attendance records of a precise user to CSV (Admin Only)
+// Export the attendance records of a precise user to CSV/Excel (Admin Only)
 export const exportUserAttendance = async (req, res, next) => {
   try {
     const {
-      userId,
+      userName,
+      userLastName,
+      userEmail,
       type,
       year,
       month,
@@ -256,20 +259,20 @@ export const exportUserAttendance = async (req, res, next) => {
       endDate,
     } = req.query;
 
+    // Validate user existance
+    const user = await User.findOne({ name: userName, lastName: userLastName, email: userEmail });
+    if (!user) {
+      return res.status(404).json({
+        status: "Error",
+        message: "User not found!",
+      });
+    }
+
     // Validate custom
     if (type === "custom" && (!startDate || !endDate)) {
       return res.status(400).json({
         status: "Error",
         message: "StartDate and endDate are required!",
-      });
-    }
-
-    // Get user
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({
-        status: "Error",
-        message: "User not found!",
       });
     }
 
@@ -285,7 +288,7 @@ export const exportUserAttendance = async (req, res, next) => {
 
     // Fetch records
     const records = await Attendance.find({
-      userId,
+      userId: user._id,
       date: dateFilter,
     }).sort({ date: 1 }); // Sort by date ascending for better readability in exports
 
@@ -301,7 +304,7 @@ export const exportUserAttendance = async (req, res, next) => {
       Date: r.date.toISOString().split("T")[0],
       CheckIn: r.checkInTime || "-",
       CheckOut: r.checkOutTime || "-",
-      Status: r.status || "Absent",
+      Status: r.status|| "absent",
     }));
 
     // Build the filename (The user name included)
@@ -336,5 +339,104 @@ export const exportUserAttendance = async (req, res, next) => {
 
   } catch (err) {
     next(err);
+  }
+};
+
+// Export the attendance records of the department users to CSV/Excel (Admin Only)
+export const exportDepartmentAttendance = async (req, res, next) => {
+  try {
+    const { departmentName, type, year, month, trimester, startDate, endDate, format } = req.query;
+    
+    // Activate the includeName flag to include the user names in the export file
+    const includeName = true; 
+
+    // Get department and check its existance by name (Because the department names are unique)
+    const department = await Department.findOne({ name: departmentName });
+    if (!department) {
+      return res.status(404).json({
+        status: "Error",
+        message: "Department not found!",
+      });
+    }
+
+    // Get all the users in that department
+    const users = await User.find({ department_id: department._id });
+    if (!users.length) {
+      return res.status(404).json({
+        status: "Error",
+        message: "No users found in this department!",
+      });
+    }
+
+    // Extract user IDs for attendance query
+    const userIds = users.map(u => u._id);
+
+    // Build the date filter
+    const dateFilter = buildDateFilter({
+      type,
+      year: Number(year),
+      month: Number(month),
+      trimester: Number(trimester),
+      startDate,
+      endDate,
+    });
+
+    // Get attendance records
+    const records = await Attendance.find({
+      userId: { $in: userIds },
+      date: dateFilter,
+    }).populate("userId", "name lastName");
+
+    if (!records.length) {
+      return res.status(404).json({
+        status: "Error",
+        message: "No attendance records found for this department!",
+      });
+    }
+
+    // Format the return data for export
+    const formattedData = records.map(r => ({
+      Name: `${r.userId.name} ${r.userId.lastName}`,
+      Date: r.date.toISOString().split("T")[0], // Format date as YYYY-MM-DD
+      CheckIn: r.checkInTime || "-",
+      CheckOut: r.checkOutTime || "-",
+      Status: r.status,
+      Location: r.location || "-",
+    }));
+
+    // Sanitize the department name for the filename
+    const cleanDeptName = sanitize(department.name);
+
+    // Build the filename (The user name included)
+    const periodLabel = getPeriodLabel({
+      type,
+      year,
+      month,
+      trimester,
+      startDate,
+      endDate,
+    });
+
+    const extension = format === "csv" ? "csv" : "xlsx";
+
+    // Generate file name
+    const fileName = `attendance_${cleanDeptName}_department_${periodLabel}.${extension}`.toLowerCase();
+
+    // Export logic
+    if (format === "csv") {
+      return exportCSV(formattedData, res, fileName);
+    }
+
+    if (format === "excel") {
+      return exportExcel(formattedData, res, fileName, includeName);
+    }
+
+    res.status(400).json({
+      status: "Error",
+      message: "Invalid export Format!",
+    });
+
+  } catch (error) {
+    next(error);
   }
 };
