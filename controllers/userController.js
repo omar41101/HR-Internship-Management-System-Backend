@@ -1,3 +1,6 @@
+// FIX: Unified profile image upload using Cloudinary for both create and update.
+// Removed base64 usage in this flow.
+// Added proper upload + optional cleanup of old images.
 // Importations
 import {
   uploadImageToCloudinary,
@@ -52,6 +55,16 @@ const validateUserStatus = (user) => {
   }
 };
 
+const consumeFaceEnrollmentPrompt = (user) => {
+  const requiresFaceEnrollment = user.faceEnrollmentPromptRequired === true;
+
+  if (requiresFaceEnrollment) {
+    user.faceEnrollmentPromptRequired = false;
+  }
+
+  return requiresFaceEnrollment;
+};
+
 // --------------------------------------------------------------------------- //
 // ---------------------------------- AUTH ----------------------------------- //
 // --------------------------------------------------------------------------- //
@@ -88,7 +101,7 @@ export const login = async (req, res, next) => {
     // Compare password - hashPassword in DB
     const isMatch = await bcrypt.compare(trimmedPassword, user.password);
     if (!isMatch) {
-      console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
+      console.log(`[LOGIN-DEBUG] Password mismatch for: ${identifier}`);
 
       user.loginAttempts += 1;
 
@@ -134,6 +147,8 @@ export const login = async (req, res, next) => {
       { expiresIn: "24h" },
     );
 
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
     // Reset Login attempts
     user.loginAttempts = 0;
     await user.save();
@@ -145,7 +160,7 @@ export const login = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole.name,
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -187,6 +202,9 @@ export const verifyUser = async (req, res, next) => {
       { expiresIn: "24h" },
     );
 
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+    await user.save();
+
     res.status(200).json({
       status: "Success",
       message: "Account Verified Successfully!",
@@ -195,7 +213,7 @@ export const verifyUser = async (req, res, next) => {
         userId: user._id,
         role: userRole?.name || "Employee",
         requiresPasswordChange: user.mustResetPassword,
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -284,6 +302,7 @@ export const resetPassword = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.mustResetPassword = false;
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
     await user.save();
 
     const userRole = await UserRole.findById(user.role_id);
@@ -300,7 +319,7 @@ export const resetPassword = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole?.name || "Employee",
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -381,6 +400,7 @@ export const forgetPassword = async (req, res, next) => {
     user.resetPasswordExpires = null;
     user.status = "Active";
     user.mustResetPassword = false;
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
     await user.save();
 
     const userRole = await UserRole.findById(user.role_id);
@@ -397,7 +417,7 @@ export const forgetPassword = async (req, res, next) => {
         token: tokenGen,
         userId: user._id,
         role: userRole?.name || "Employee",
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -601,49 +621,8 @@ export const addUser = async (req, res, next) => {
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // Handle profile image upload if provided as base64
-    let finalProfileImageURL =
-      typeof profileImageURL === "string" &&
-      !profileImageURL.startsWith("data:image")
-        ? profileImageURL
-        : "";
-
-    if (
-      profileImageURL &&
-      typeof profileImageURL === "string" &&
-      profileImageURL.startsWith("data:image")
-    ) {
-      try {
-        console.log(
-          `[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
-        );
-        const uploadResult = await uploadImageToCloudinary(
-          profileImageURL,
-          "hrcom/profile_images",
-        );
-
-        if (uploadResult && uploadResult.secure_url) {
-          finalProfileImageURL = uploadResult.secure_url;
-          console.log(
-            `[ADD-USER-DEBUG] Upload success: ${finalProfileImageURL}`,
-          );
-        } else {
-          console.error(
-            "[ADD-USER-DEBUG] Upload result missing secure_url:",
-            uploadResult,
-          );
-        }
-      } catch (uploadErr) {
-        console.error(
-          "[ADD-USER-DEBUG] Cloudinary upload failed:",
-          uploadErr.message,
-        );
-      }
-    } else {
-      console.log(
-        `[ADD-USER-DEBUG] No base64 image detected in req.body.profileImageURL`,
-      );
-    }
+    // No base64 handling here. Image upload uses a separate FormData endpoint (uploadProfileImage).
+    let finalProfileImageURL = typeof profileImageURL === "string" ? profileImageURL : "";
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -812,9 +791,53 @@ export const updateUser = async (req, res, next) => {
         break;
     }
 
+    // Map role name to role_id
+    if (updateData.role) {
+      const userrole = await UserRole.findOne({
+        name: { $regex: new RegExp(`^${updateData.role}$`, "i") },
+      });
+      if (userrole) {
+        updateData.role_id = userrole._id;
+      }
+      delete updateData.role;
+    }
+
+    // Map department name to department_id
+    if (updateData.department) {
+      const userdepartment = await Department.findOne({
+        name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
+      });
+      if (userdepartment) {
+        updateData.department_id = userdepartment._id;
+      }
+      delete updateData.department;
+    }
+
+    // Map supervisor name to supervisor_id
+    if (updateData.supervisor_full_name) {
+      const parts = updateData.supervisor_full_name.trim().split(/\s+/);
+      const sName = parts[0];
+      const sLastName = parts.slice(1).join(" ");
+
+      const supervisor = await User.findOne({
+        name: sName,
+        lastName: sLastName,
+      });
+      if (supervisor) {
+        updateData.supervisor_id = supervisor._id;
+      }
+      delete updateData.supervisor_full_name;
+    }
+
+    // Map isActive boolean to status string
+    if (updateData.isActive !== undefined) {
+      updateData.status = updateData.isActive ? "Active" : "Inactive";
+      delete updateData.isActive;
+    }
+
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
-    });
+    }).populate("role_id").populate("department_id").populate("supervisor_id");
 
     await logAuditAction({
       adminId: req.user.id,
@@ -916,6 +939,7 @@ export const getAllUsers = async (req, res, next) => {
       joinDate: user.joinDate,
       position: user.position,
       faceEnrolled: user.faceEnrolled,
+      faceEnrollmentPromptRequired: user.faceEnrollmentPromptRequired,
       faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
@@ -1288,6 +1312,7 @@ export const enrollFace = async (req, res, next) => {
     // Save the descriptors to the user's profile
     user.faceDescriptors = descriptors;
     user.faceEnrolled = true;
+    user.faceEnrollmentPromptRequired = false;
     await user.save();
 
     res.status(200).json({
@@ -1310,6 +1335,7 @@ export const resetFace = async (req, res, next) => {
     // Clear face descriptors and set faceEnrolled to false
     user.faceDescriptors = [];
     user.faceEnrolled = false;
+    user.faceEnrollmentPromptRequired = true;
     await user.save();
 
     res.status(200).json({
