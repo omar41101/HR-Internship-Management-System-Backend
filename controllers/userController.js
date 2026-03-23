@@ -715,8 +715,22 @@ export const updateUser = async (req, res, next) => {
     }
     const updateData = { ...req.body };
 
-    if (updateData.email && !isValidEmail(updateData.email))
-      return sendError(res, "Invalid Email Format!", 400);
+    if (updateData.email) {
+      if (!isValidEmail(updateData.email)) {
+        return sendError(res, "Invalid Email Format!", 400);
+      }
+      
+      const trimmedEmail = updateData.email.trim().toLowerCase();
+      const existingEmailUser = await User.findOne({ email: trimmedEmail });
+      
+      // We check if the email belongs to another user. If an Admin is editing another user's profile,
+      // id variable holds the target user's ID. If a user edits their own profile, id holds their ID.
+      if (existingEmailUser && existingEmailUser._id.toString() !== id) {
+        return res.status(400).json({ status: "Error", message: "Email already in use!" });
+      }
+      
+      updateData.email = trimmedEmail;
+    }
 
     // Check phone number validity and uniqueness
     let updatedPhoneNumber = null;
@@ -1338,3 +1352,8 @@ export const resetFace = async (req, res, next) => {
     next(err);
   }
 };
+
+/*
+What was changed: Added email uniqueness validation in the updateUser function to prevent duplicated emails on updates.
+Why it was changed: To allow non-admin users to edit their own profile email safely and correctly reject taken emails.
+*/
