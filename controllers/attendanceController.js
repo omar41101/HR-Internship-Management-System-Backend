@@ -6,6 +6,7 @@ import { io } from "../server.js";
 
 import { buildDateFilter } from "../utils/dateFilter.js";
 import { exportCSV, exportExcel, sanitize, getPeriodLabel } from "../utils/exportHelpers.js";
+import { exportAttendanceStats } from "../services/attendanceExportService.js";
 
 // Helper to get start of day in UTC
 const getStartOfDay = (date) => {
@@ -19,8 +20,23 @@ export const checkIn = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const { location } = req.body; // Get the user location (Remote/Onsite)
-    const now = new Date(); // The exact current date and time when the user clicked on the button Check in.
-    const today = getStartOfDay(now); // Today's date
+    const now = new Date();
+    const utcNow = new Date(Date.UTC(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+      now.getMilliseconds()
+    ));
+
+    const todayUTC = new Date(Date.UTC(
+      utcNow.getUTCFullYear(),
+      utcNow.getUTCMonth(),
+      utcNow.getUTCDate(),
+      0, 0, 0, 0
+    ));
 
     // Get the user's existance
     const user = await User.findById(userId);
@@ -52,9 +68,9 @@ export const checkIn = async (req, res, next) => {
 
     // Create or update attendance record
     const attendance = await Attendance.findOneAndUpdate(
-      { userId, date: today },
+      { userId, date: todayUTC },
       {
-        checkInTime,
+        checkInTime: utcNow.toISOString(),
         status,
         location,
         checkOutTime: null,
@@ -116,7 +132,15 @@ export const getMyStatus = async (req, res, next) => {
 // Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {
   try {
-    const { userId, startDate, endDate } = req.query;
+    const {
+      userId,
+      startDate,
+      endDate,
+      status,
+      role,
+      department,
+      search,
+    } = req.query;
     const filter = {}; // Allow filtering
 
     // Check for user existance if userId is provided
@@ -141,12 +165,56 @@ export const getAttendance = async (req, res, next) => {
     if (startDate || endDate) {
       filter.date = {};
       if (startDate) filter.date.$gte = getStartOfDay(startDate);
-      if (endDate) filter.date.$lte = getStartOfDay(endDate);
+      if (endDate) filter.date.$lte = getEndOfDay(endDate);
     }
 
-    const attendanceRecords = await Attendance.find(filter)
-      .populate("userId", "name lastName department_id email")
-      .sort({ date: -1 });
+    // Status filtering
+    if (status) {
+      filter.status = status;
+    }
+
+    // Get attendance records
+    let attendanceRecords = await Attendance.find(filter)
+      .populate({
+        path: "userId",
+        populate: [
+          { path: "role_id" },
+          { path: "department_id" },
+        ],
+      })
+      .sort({ date: -1 })
+      .lean();
+    
+    // Search user by name/lastName or email
+    if (search) {
+      const q = search.toLowerCase();
+
+      attendanceRecords = attendanceRecords.filter((a) => {
+        const user = a.userId;
+        return (
+          user?.name?.toLowerCase().includes(q) ||
+          user?.lastName?.toLowerCase().includes(q) ||
+          user?.email?.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // Filter By Role
+    if (role) {
+      attendanceRecords = attendanceRecords.filter(
+        (a) =>
+          a.userId?.role_id?.name?.toLowerCase() === role.toLowerCase()
+      );
+    }
+
+    // Filter By Department
+    if (department) {
+      attendanceRecords = attendanceRecords.filter(
+        (a) =>
+          a.userId?.department_id?.name?.toLowerCase() ===
+          department.toLowerCase()
+      );
+    }
 
     res.status(200).json({
       status: "success",
@@ -196,7 +264,22 @@ export const checkOut = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const now = new Date();
-    const today = getStartOfDay(now);
+    const utcNow = new Date(Date.UTC(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      now.getHours(),
+      now.getMinutes(),
+      now.getSeconds(),
+      now.getMilliseconds()
+    ));
+
+    const todayUTC = new Date(Date.UTC(
+      utcNow.getUTCFullYear(),
+      utcNow.getUTCMonth(),
+      utcNow.getUTCDate(),
+      0, 0, 0, 0
+    ));
 
     // Check the user's existance
     const user = await User.findById(userId);
@@ -214,8 +297,8 @@ export const checkOut = async (req, res, next) => {
     });
 
     const attendance = await Attendance.findOneAndUpdate(
-      { userId, date: today },
-      { checkOutTime },
+      { userId, date: todayUTC },
+      { checkOutTime: utcNow.toISOString() },
       { new: true },
     );
 
@@ -439,4 +522,64 @@ export const exportDepartmentAttendance = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+// Export attendance stats (KPIs) for users to CSV/Excel (Admin Only)
+export const exportAttendanceStatistics = async (req, res, next) => {
+  try {
+    const { 
+      userName,
+      userLastName,
+      userEmail, 
+      departmentName, 
+      periodType, 
+      startDate, 
+      endDate, 
+      kpis, 
+      format } = req.query;
+
+    let userId = null;
+    let departmentId = null;
+    
+    // Validate user existance and get the user ID (If the stats export is for a specific user)
+    if (userName){
+      const user = await User.findOne({ name: userName, lastName: userLastName, email: userEmail });
+      if (!user) {
+        return res.status(404).json({
+          status: "Error",
+          message: "User not found!",
+        });
+      }
+
+      userId = user._id;
+    }
+
+    // Validate department existance
+    if (departmentName){
+      const department = await Department.findOne({ name: departmentName });
+      if (!department) {
+        return res.status(404).json({
+          status: "Error",
+          message: "Department not found!",
+        });
+      }
+      departmentId = department._id;
+    }
+
+    // Get the selected KPIs from the query
+    const selectedKPIs = kpis ? kpis.split(",") : undefined;
+
+    await exportAttendanceStats({
+      userId,
+      departmentId,
+      periodType,
+      startDate,
+      endDate,
+      selectedKPIs,
+      format,
+      res, 
+    });
+  } catch (error) {
+    next(error);
+  } 
 };

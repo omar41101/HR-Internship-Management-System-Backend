@@ -6,7 +6,8 @@ import {
   getMyStatus,
   updateAttendance,
   exportUserAttendance,
-  exportDepartmentAttendance
+  exportDepartmentAttendance,
+  exportAttendanceStatistics
 } from "../controllers/attendanceController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -459,6 +460,126 @@ router.get(
   authenticate,
   authorize("Admin"),
   exportDepartmentAttendance
+);
+
+// Export attendance stats (Admin only)
+/**
+ * @swagger
+ * /stats/export:
+ *   get:
+ *     summary: Export attendance statistics (Admin only)
+ *     tags:
+ *       - Attendance
+ *     description: >
+ *       Allows an admin to export attendance statistics based on filters such as a specific user,
+ *       a department, or globally for all users.
+ *       The export supports different period types (month, trimester, year, or custom range)
+ *       and allows selecting specific KPIs dynamically.
+ *       The output can be in CSV or Excel format.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: userName
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: First name of the user
+ *         example: "John"
+ *       - in: query
+ *         name: userLastName
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Last name of the user
+ *         example: "Doe"
+ *       - in: query
+ *         name: userEmail
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Email of the user (used with name for precise identification)
+ *         example: "john.doe@email.com"
+ *       - in: query
+ *         name: departmentName
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Name of the department
+ *         example: "Human Resources"
+ *       - in: query
+ *         name: periodType
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [month, trimester, year, custom]
+ *         description: Type of period filter
+ *         example: month
+ *       - in: query
+ *         name: startDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (required if periodType is "custom")
+ *         example: "2026-03-01"
+ *       - in: query
+ *         name: endDate
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (required if periodType is "custom")
+ *         example: "2026-03-31"
+ *       - in: query
+ *         name: kpis
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: >
+ *           Comma-separated list of KPIs to include in the export.
+ *           If not provided, all KPIs will be included.
+ *         example: "presentDays,absentDays,lateDays"
+ *       - in: query
+ *         name: format
+ *         required: true
+ *         schema:
+ *           type: string
+ *           enum: [csv, excel]
+ *         description: Output file format
+ *         example: excel
+ *     responses:
+ *       200:
+ *         description: Attendance statistics exported successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: success
+ *                 message:
+ *                   type: string
+ *                   example: Attendance statistics exported successfully
+ *                 fileUrl:
+ *                   type: string
+ *                   description: URL or path to download the exported file
+ *                   example: "/downloads/attendance_stats_March2026.xlsx"
+ *       400:
+ *         description: Invalid request parameters or missing required fields
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized (Admin only)
+ *       404:
+ *         description: User not found | Department not found | No attendance statistics found
+ *       500:
+ *         description: Server Error
+ */
+router.get(
+  "/stats/export", 
+  authenticate, 
+  authorize("Admin"), 
+  exportAttendanceStatistics
 );
 
 export default router;

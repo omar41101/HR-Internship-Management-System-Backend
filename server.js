@@ -6,6 +6,7 @@ import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
+import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 
 import userRoutes from "./routes/userRoutes.js";
 import UserRoleRoutes from "./routes/userRoleRoutes.js";

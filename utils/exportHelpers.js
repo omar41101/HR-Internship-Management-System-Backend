@@ -65,7 +65,7 @@ export const exportExcel = async (data, res, fileName, includeName = false) => {
   // Include the columns in the worksheet
   worksheet.columns = columns;
 
-  // Style the headers (borders + background color)
+  // Style the header (borders + background color)
   worksheet.getRow(1).eachCell((cell) => {
     cell.fill = {
       type: 'pattern',
@@ -84,7 +84,7 @@ export const exportExcel = async (data, res, fileName, includeName = false) => {
 
   worksheet.addRows(data);
 
-  // Style the data rows with borders
+  // Style the data rows with borders (except the header)
   worksheet.eachRow((row, rowNumber) => {
     if (rowNumber === 1) return;
     row.eachCell((cell) => {
