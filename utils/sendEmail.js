@@ -26,7 +26,7 @@ export const sendEmail = async ({
       break;
 
     case "updateUser":
-      bodyHtml = getUpdateUserContent({ name, password, code, newRole });
+      bodyHtml = getUpdateUserContent({ name, newRole });
       break;
 
     case "resendOTP":

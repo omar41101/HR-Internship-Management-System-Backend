@@ -1,5 +1,4 @@
-// Passport Regex Format + Descriptive Hints for various countries
-// Based on ICAO standards and common national formats
+// Passport Regex Format for 120+ countries based on ICAO standards + Descriptive Hints for various countries
 
 export const passportRules = {
   // North America

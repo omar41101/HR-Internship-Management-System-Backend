@@ -86,7 +86,7 @@ export const fullCINPassportValidation = async (idType, idCountryCode, trimmedId
   });
 
   if (existingUser && existingUser._id.toString() !== userId) {
-    throw new AppError("ID number already in use!", 400);
+    throw new AppError("Identification number unavailable!", 400);
   }
 };
 
@@ -231,13 +231,13 @@ export const addUser = async (req, res, next) => {
     // CIN/Passport validation
     await fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
 
-    // Get the role id if the Role is valid
+    // Get the role Id if the Role is valid
     const roleId = await validateUserRole(role, action);
 
-    // Check the validity of the supervisor (Optional field)
+    // Check the validity of the supervisor (Optional field) and get the supervisor ID
     const supervisorId = await validateSupervisor(supervisor_full_name, action);
 
-    // Check the validity of the department
+    // Check the validity of the department and get the department ID
     const departmentId = await validateDepartment(department, action);
 
     // Generate password (length = 8)
@@ -254,7 +254,7 @@ export const addUser = async (req, res, next) => {
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // Get the profile image URL
+    // Get the profile Image URL
     let finalProfileImageURL =
       typeof profileImageURL === "string" ? profileImageURL : "";
 
@@ -403,10 +403,18 @@ export const updateUser = async (req, res, next) => {
       }
     }
 
-    // Check the role validity
+    // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)
+    let roleChanged = false;
+    let newRoleName = null;
+
     if (updateData.role) {
+      // Validate the new role and get its ID
       updateData.role_id = await validateUserRole(updateData.role, action);
-      delete updateData.role;
+
+      roleChanged = true;
+      newRoleName = updateData.role;
+
+      delete updateData.role; 
     }
 
     // Check the department validity
@@ -440,6 +448,30 @@ export const updateUser = async (req, res, next) => {
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
+
+    // Send the update user email ONLY if role changed
+    if (roleChanged) {
+      try {
+        console.log(
+          `[UPDATE-USER-DEBUG] Sending Update user email to: ${user.email}`
+        );
+
+        await sendEmail({
+          to: user.email,
+          subject: "HRcoM! - Congratulations! Your Role Has Been Updated",
+          type: "updateUser",
+          name: user.name,
+          newRole: newRoleName,
+        });
+
+        console.log(`[UPDATE-USER-DEBUG] Email sent successfully.`);
+      } catch (emailErr) {
+        console.log(
+          `[UPDATE-USER-DEBUG] EMAIL FAILED:`,
+          emailErr.message
+        );
+      }
+    }
 
     // Create the audit log for this action
     await logAuditAction({

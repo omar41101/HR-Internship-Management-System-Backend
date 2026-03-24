@@ -33,20 +33,20 @@ export const getAddUserContent = ({ name, password, code }) => {
 };
 
 // Email of updating an existing user if the role is changed
-export const getUpdateUserContent = ({ name, password, code, newRole }) => {
+export const getUpdateUserContent = ({ name, newRole }) => {
   return `
-    <h2 style="color: #101D42;">Welcome back to HRcoM!</h2>
+    <h2 style="color: #101D42;">Role Update Notification!</h2>
 
     <p>Dear ${name},</p>
-    <p>Congratulations,</p>
-    <p>We are pleased to inform you that you have been promoted to ${newRole}!</p>
-    <p>Please use the following credentials to login:</p>
-    <p><strong style="color: #101D42;">Password:</strong> ${password}</p>
-    <p><strong style="color: #101D42;">OTP Code:</strong> ${code}</p>
-    <p><strong style="color: #101D42;">Platform URL:</strong> ${process.env.PLATFORM_URL}</p>
+    <p>
+      We are pleased to inform you that you have been promoted to 
+      <strong>${newRole}</strong>.
+    </p>
+    <p>
+      Congratulations on this achievement! This reflects your hard work and contributions to our team.
+    </p>
+    <p>We are truly excited to see you grow further with us!</p>
     </br>
-
-    <h3>Once you login, you need to re-enter the OTP Code and reset the password for security reasons!</h3>
   `;
 };
 
