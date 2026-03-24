@@ -226,6 +226,27 @@ export const getAttendance = async (req, res, next) => {
   }
 };
 
+// Get the list of statuses (Admin/Supervisor)
+export const getAllStatuses = async (req, res, next) => {
+  try {
+    // Get distinct existing statuses from the Attendance collection 
+    const existingStatuses = await Attendance.distinct("status");
+
+    // All possible statuses
+    const allStatuses = ["present", "late", "absent", "leave", "day-off"];
+
+    // Filter duplicate statuses
+    const statuses = allStatuses.filter(s => !existingStatuses.includes(s)).concat(existingStatuses);
+
+    res.status(200).json({
+      status: "success",
+      result: statuses,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Admin updates attendance record directly
 export const updateAttendance = async (req, res, next) => {
   try {

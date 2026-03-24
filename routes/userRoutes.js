@@ -5,6 +5,7 @@ import {
   updateUser,
   deleteUser,
   getAllUsers,
+  getActiveSupervisors,
   getUserById,
   searchUser,
   filterUsers,
@@ -19,7 +20,8 @@ import {
   requestPasswordReset,
   forgetPassword,
   enrollFace,
-  resetFace
+  resetFace,
+  getTeamMembers
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -368,6 +370,25 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  */
 router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
 
+// Route to get active supervisors
+/**
+ * @swagger
+ * /api/users/active-supervisors:
+ *  get:
+ *    summary: Get all active supervisors (Admin only)
+ *    tags:
+ *     - Users
+ *    description: Returns a list of all active supervisors in the system.
+ *  security:
+ *    - bearerAuth: []
+ *  responses:
+ *   200:
+ *    description: Returns list of available and active supervisors
+ *   500:
+ *    description: Server error
+ * */
+router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisors);
+
 // Route to get user by ID
 /**
  * @swagger
@@ -705,6 +726,16 @@ router.post(
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
   resetFace
+);
+
+// ----------------------------------- TEAM MANAGEMENT ROUTES ----------------------------------- //
+
+// Route to get team members (Supervisor/admin only)
+router.get(
+  "/users/team/:id",
+  authenticate,
+  authorize(["Admin", "Supervisor"], { allowSelf: true }),
+  getTeamMembers
 );
 
 export default router;

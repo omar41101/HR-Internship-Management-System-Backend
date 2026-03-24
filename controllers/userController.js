@@ -1,7 +1,4 @@
-// FIX: Unified profile image upload using Cloudinary for both create and update.
-// Removed base64 usage in this flow.
-// Added proper upload + optional cleanup of old images.
-// Importations
+// Imports
 import {
   uploadImageToCloudinary,
   deleteFromCloudinary,
@@ -79,7 +76,7 @@ export const login = async (req, res, next) => {
     console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
 
     // Check the User existence by Email or CIN/Passport number
-    const user = await User.findOne({email: trimmedEmail });
+    const user = await User.findOne({ email: trimmedEmail });
 
     if (!user) {
       throw new AppError(
@@ -478,17 +475,13 @@ export const addUser = async (req, res, next) => {
     );
 
     // Validate the field inputs
-    if (isEmpty(name))
-      return sendError(res, "First name is required!", 400);
-    
-    if (isEmpty(lastName))
-      return sendError(res, "Last name is required!", 400);
+    if (isEmpty(name)) return sendError(res, "First name is required!", 400);
 
-    if (isEmpty(address))
-      return sendError(res, "Address is required!", 400);
-    
-      if (isEmpty(position))
-      return sendError(res, "Position is required!", 400);
+    if (isEmpty(lastName)) return sendError(res, "Last name is required!", 400);
+
+    if (isEmpty(address)) return sendError(res, "Address is required!", 400);
+
+    if (isEmpty(position)) return sendError(res, "Position is required!", 400);
 
     if (!isValidEmail(email))
       return sendError(res, "Invalid Email Format!", 400);
@@ -523,14 +516,13 @@ export const addUser = async (req, res, next) => {
           !idCountryCode ||
           !countries.some((c) => c.code === idCountryCode)
         ) {
-
           return sendError(res, "Invalid country code for Passport!", 400);
         } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
           const hint = getPassportHint(idCountryCode);
           return sendError(
-            res, 
+            res,
             `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
-            400
+            400,
           );
         }
         break;
@@ -544,8 +536,7 @@ export const addUser = async (req, res, next) => {
     if (nbOfChildren < 0)
       return sendError(res, "Invalid Number of children!", 400);
 
-    if (bonus < 0)
-      return sendError(res, "Invalid Bonus value!", 400);
+    if (bonus < 0) return sendError(res, "Invalid Bonus value!", 400);
 
     // Check Role validity
     const userrole = await UserRole.findOne({
@@ -622,7 +613,8 @@ export const addUser = async (req, res, next) => {
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
     // No base64 handling here. Image upload uses a separate FormData endpoint (uploadProfileImage).
-    let finalProfileImageURL = typeof profileImageURL === "string" ? profileImageURL : "";
+    let finalProfileImageURL =
+      typeof profileImageURL === "string" ? profileImageURL : "";
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -717,16 +709,18 @@ export const updateUser = async (req, res, next) => {
       if (!isValidEmail(updateData.email)) {
         return sendError(res, "Invalid Email Format!", 400);
       }
-      
+
       const trimmedEmail = updateData.email.trim().toLowerCase();
       const existingEmailUser = await User.findOne({ email: trimmedEmail });
-      
+
       // We check if the email belongs to another user. If an Admin is editing another user's profile,
       // id variable holds the target user's ID. If a user edits their own profile, id holds their ID.
       if (existingEmailUser && existingEmailUser._id.toString() !== id) {
-        return res.status(400).json({ status: "Error", message: "Email already in use!" });
+        return res
+          .status(400)
+          .json({ status: "Error", message: "Email already in use!" });
       }
-      
+
       updateData.email = trimmedEmail;
     }
 
@@ -748,7 +742,7 @@ export const updateUser = async (req, res, next) => {
         });
 
         if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
-          return sendError(res, "Phone number not available!", 400);  
+          return sendError(res, "Phone number not available!", 400);
         }
 
         // Save the updated version
@@ -772,7 +766,11 @@ export const updateUser = async (req, res, next) => {
       });
 
       if (existingUser && existingUser._id.toString() !== id) {
-        return sendError(res, `Unable to process this ${updateData.idType} Number!`, 400);
+        return sendError(
+          res,
+          `Unable to process this ${updateData.idType} Number!`,
+          400,
+        );
       }
     }
 
@@ -798,8 +796,10 @@ export const updateUser = async (req, res, next) => {
           const hint = getPassportHint(idCountryCode);
           return sendError(
             res,
-            "Invalid Passport format for the specified country: " + idCountryCode + "!",
-            400
+            "Invalid Passport format for the specified country: " +
+              idCountryCode +
+              "!",
+            400,
           );
         }
         break;
@@ -851,7 +851,10 @@ export const updateUser = async (req, res, next) => {
 
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
-    }).populate("role_id").populate("department_id").populate("supervisor_id");
+    })
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id");
 
     await logAuditAction({
       adminId: req.user.id,
@@ -971,6 +974,29 @@ export const getAllUsers = async (req, res, next) => {
     }));
 
     res.status(200).json(cleanUsers);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get available active supervisors (Admin only)
+export const getActiveSupervisors = async (req, res, next) => {
+  try {
+    // Get the Supervisor role ID
+    const supervisorRoleId = await UserRole.findOne({
+      name: "Supervisor",
+    }).select("_id");
+
+    // Search available active supervisors
+    const supervisors = await User.find({
+      status: "Active",
+      role_id: supervisorRoleId,
+    }).select("name lastName email");
+
+    res.status(200).json({
+      status: "Success",
+      data: supervisors,
+    });
   } catch (err) {
     next(err);
   }
@@ -1184,7 +1210,7 @@ export const exportUsersToExcel = async (req, res, next) => {
       { header: "Department", key: "department", width: 20 },
       { header: "Status", key: "status", width: 10 },
       { header: "Join Date", key: "joinDate", width: 15 },
-    ]; 
+    ];
 
     users.forEach((user) =>
       sheet.addRow({
@@ -1198,29 +1224,29 @@ export const exportUsersToExcel = async (req, res, next) => {
     // Style the header (borders + background color)
     sheet.getRow(1).eachCell((cell) => {
       cell.fill = {
-        type: 'pattern',
-        pattern:'solid',
-        fgColor:{ argb:'89D2DC' }
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "89D2DC" },
       };
       cell.font = { bold: true };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
       cell.border = {
-        top: { style: 'thin' },
-        left: { style: 'thin' },
-        bottom: { style: 'thin' },
-        right: { style: 'thin' },
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
       };
     });
 
     // Style data rows with borders (except the header)
     sheet.eachRow((row, rowNumber) => {
       if (rowNumber === 1) return;
-      row.eachCell(cell => {
+      row.eachCell((cell) => {
         cell.border = {
           top: { style: "thin" },
           left: { style: "thin" },
           bottom: { style: "thin" },
-          right: { style: "thin" }
+          right: { style: "thin" },
         };
       });
     });
@@ -1391,7 +1417,37 @@ export const resetFace = async (req, res, next) => {
   }
 };
 
-/*
-What was changed: Added email uniqueness validation in the updateUser function to prevent duplicated emails on updates.
-Why it was changed: To allow non-admin users to edit their own profile email safely and correctly reject taken emails.
-*/
+
+// --------------------------------------------------------------------------- //
+// ------------------------ TEAM MEMBERS MANAGEMENT -------------------------- //
+// --------------------------------------------------------------------------- //
+
+// Get team members under a supervisor (Supervisor and Admin)
+export const getTeamMembers = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Check if the user exists
+    const existingUser = await User.findById(id);
+    if (!existingUser) {
+      return sendError(res, "User not found!", 404);
+    }
+
+    // Only the supervisor himself and the Admin can access the team members list
+    if (req.user.role !== "Admin" && req.user._id.toString() !== id) {
+      return sendError(res, "Unauthorized access to this team!", 403);
+    }
+
+    // Find all team members of the supervisor
+    const teamMembers = await User.find({ supervisor_id: id })
+      .populate("role_id", "name")   
+      .populate("department_id", "name"); 
+
+    res.status(200).json({
+      status: "Success",
+      data: teamMembers,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
