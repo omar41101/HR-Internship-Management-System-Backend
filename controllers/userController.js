@@ -1177,14 +1177,14 @@ export const exportUsersToExcel = async (req, res, next) => {
       { header: "Name", key: "name", width: 20 },
       { header: "Last Name", key: "lastName", width: 20 },
       { header: "Email", key: "email", width: 30 },
-      { header: "Address", key: "address", width: 15 },
+      { header: "Address", key: "address", width: 25 },
       { header: "Phone", key: "phoneNumber", width: 15 },
       { header: "Position", key: "position", width: 20 },
       { header: "Role", key: "role", width: 15 },
       { header: "Department", key: "department", width: 20 },
       { header: "Status", key: "status", width: 10 },
       { header: "Join Date", key: "joinDate", width: 15 },
-    ];
+    ]; 
 
     users.forEach((user) =>
       sheet.addRow({
@@ -1194,6 +1194,36 @@ export const exportUsersToExcel = async (req, res, next) => {
         status: user.status,
       }),
     );
+
+    // Style the header (borders + background color)
+    sheet.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: 'pattern',
+        pattern:'solid',
+        fgColor:{ argb:'89D2DC' }
+      };
+      cell.font = { bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    // Style data rows with borders (except the header)
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.eachCell(cell => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" }
+        };
+      });
+    });
 
     res.setHeader(
       "Content-Type",
