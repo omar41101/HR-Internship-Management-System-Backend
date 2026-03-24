@@ -44,6 +44,11 @@ const createTestUser = async () => {
     name: "Admin",
     lastName: "User",
     email: "admin@example.com",
+    idType: "CIN",
+    idNumber: {
+      number: "12145678",
+      countryCode: "TN",
+    },
     address: "Sousse",
     joinDate: Date.now(),
     password: hashedPassword,

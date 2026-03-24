@@ -62,7 +62,6 @@ const errorHandler = (err, req, res, next) => {
     // If in development/test, include the stack trace for easier debugging
     if (process.env.NODE_ENV !== "production") {
         errorResponse.originalError = err.message;
-        errorResponse.stack = err.stack;
     }
 
     res.status(err.statusCode).json(errorResponse);

@@ -11,16 +11,23 @@ const authorize = (roles = [], options = {}) => {
         return next();
       }
 
+      // Determine the target ID (fallback to req.params.id if not explicitly set by previous middleware)
+      const targetId = req.targetUserId || req.params.id;
+
       // Check if the user himself has self access
       if (options.allowSelf) {
-        if (user.id === req.params.id) {
+        const tokenUserId = (user.id || user._id || "").toString();
+        // Use either targetUserId overlay or the id from params
+        const finalTargetId = (targetId || "").toString();
+
+        if (finalTargetId === "current" || tokenUserId === finalTargetId) {
           return next();
         }
       }
 
       // Check if the supervisor has access
       if (options.allowSupervisor) {
-        const targetUser = await User.findById(req.params.id);
+        const targetUser = await User.findById(targetId);
 
         if (targetUser && user.id === targetUser.supervisor_id?.toString()) {
           return next();

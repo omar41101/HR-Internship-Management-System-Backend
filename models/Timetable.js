@@ -33,14 +33,6 @@ const timetableSchema = mongoose.Schema(
     duration: {
       type: String,
     },
-    isLocked: {
-      type: Boolean,
-      default: false,
-    },
-    hasFeedback: {
-      type: Boolean,
-      default: false,
-    },
   },
   {
     timestamps: true,

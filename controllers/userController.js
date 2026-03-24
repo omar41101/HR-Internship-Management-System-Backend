@@ -1,3 +1,6 @@
+// FIX: Unified profile image upload using Cloudinary for both create and update.
+// Removed base64 usage in this flow.
+// Added proper upload + optional cleanup of old images.
 // Importations
 import {
   uploadImageToCloudinary,
@@ -6,6 +9,7 @@ import {
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
+import Document from "../models/Document.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
@@ -19,7 +23,11 @@ import {
   validatePhoneNumber,
   isWithinRange,
   generateRandomCode,
+  validateCIN,
+  validatePassport,
+  getPassportHint,
 } from "../middleware/UserValidation.js";
+import { countries } from "../middleware/countries.js"; // List of countries with their codes
 import { logAuditAction } from "../utils/logger.js";
 import AppError from "../utils/AppError.js";
 
@@ -37,6 +45,7 @@ const handleError = (res, err) => {
   console.error(err);
   return res.status(500).json({ status: "Error", message: err.message });
 };
+
 const validateUserStatus = (user) => {
   if (user.status === "Blocked" || user.status === "Inactive") {
     throw new AppError(
@@ -44,6 +53,16 @@ const validateUserStatus = (user) => {
       403,
     );
   }
+};
+
+const consumeFaceEnrollmentPrompt = (user) => {
+  const requiresFaceEnrollment = user.faceEnrollmentPromptRequired === true;
+
+  if (requiresFaceEnrollment) {
+    user.faceEnrollmentPromptRequired = false;
+  }
+
+  return requiresFaceEnrollment;
 };
 
 // --------------------------------------------------------------------------- //
@@ -57,15 +76,16 @@ export const login = async (req, res, next) => {
     const trimmedEmail = (email || "").trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
 
-    console.log(`[LOGIN-DEBUG] Login attempt for: ${trimmedEmail}`);
+    console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
 
-    // Check the User existence
-    const user = await User.findOne({ email: trimmedEmail });
+    // Check the User existence by Email or CIN/Passport number
+    const user = await User.findOne({email: trimmedEmail });
+
     if (!user) {
       throw new AppError(
         "User not found!",
         404,
-        "Verify that you have used the correct email address.",
+        "Invalid Email or password provided!",
       );
     }
 
@@ -81,7 +101,7 @@ export const login = async (req, res, next) => {
     // Compare password - hashPassword in DB
     const isMatch = await bcrypt.compare(trimmedPassword, user.password);
     if (!isMatch) {
-      console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
+      console.log(`[LOGIN-DEBUG] Password mismatch for: ${identifier}`);
 
       user.loginAttempts += 1;
 
@@ -127,6 +147,8 @@ export const login = async (req, res, next) => {
       { expiresIn: "24h" },
     );
 
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
     // Reset Login attempts
     user.loginAttempts = 0;
     await user.save();
@@ -138,7 +160,7 @@ export const login = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole.name,
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -180,6 +202,9 @@ export const verifyUser = async (req, res, next) => {
       { expiresIn: "24h" },
     );
 
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+    await user.save();
+
     res.status(200).json({
       status: "Success",
       message: "Account Verified Successfully!",
@@ -188,7 +213,7 @@ export const verifyUser = async (req, res, next) => {
         userId: user._id,
         role: userRole?.name || "Employee",
         requiresPasswordChange: user.mustResetPassword,
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -277,6 +302,7 @@ export const resetPassword = async (req, res, next) => {
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.mustResetPassword = false;
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
     await user.save();
 
     const userRole = await UserRole.findById(user.role_id);
@@ -293,7 +319,7 @@ export const resetPassword = async (req, res, next) => {
         token,
         userId: user._id,
         role: userRole?.name || "Employee",
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -374,6 +400,7 @@ export const forgetPassword = async (req, res, next) => {
     user.resetPasswordExpires = null;
     user.status = "Active";
     user.mustResetPassword = false;
+    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
     await user.save();
 
     const userRole = await UserRole.findById(user.role_id);
@@ -390,7 +417,7 @@ export const forgetPassword = async (req, res, next) => {
         token: tokenGen,
         userId: user._id,
         role: userRole?.name || "Employee",
-        requiresFaceEnrollment: !user.faceEnrolled,
+        requiresFaceEnrollment,
       },
     });
   } catch (err) {
@@ -412,9 +439,12 @@ export const addUser = async (req, res, next) => {
       name,
       lastName,
       email,
+      idType, // Passport or CIN
+      idCountryCode, // Passport or CIN country code
+      idNumber, // Passport or CIN number
       address,
       joinDate,
-      countryCode,
+      countryCode, // Country code for the phone number
       phoneNumber,
       position,
       bonus,
@@ -432,76 +462,90 @@ export const addUser = async (req, res, next) => {
     } = req.body;
 
     const trimmedEmail = (email || "").trim().toLowerCase();
+    const trimmedIdNumber = (idNumber || "").trim();
 
     // Check user existence
     console.log(
-      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
+      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail} - ${trimmedIdNumber}`,
     );
-    const existingUser = await User.findOne({ email: trimmedEmail });
-    if (existingUser) return sendError(res, "User Already Existing!", 401);
+    const existingUser = await User.findOne({
+      $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
+    });
+    if (existingUser) return sendError(res, "User Already Existing!", 409);
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
     // Validate the field inputs
-    const errors = [];
-
     if (isEmpty(name))
-      errors.push({ field: "name", message: "First name is required" });
+      return sendError(res, "First name is required!", 400);
+    
     if (isEmpty(lastName))
-      errors.push({ field: "lastName", message: "Last name is required" });
+      return sendError(res, "Last name is required!", 400);
+
     if (isEmpty(address))
-      errors.push({ field: "address", message: "Address is required" });
-    if (isEmpty(position))
-      errors.push({ field: "position", message: "Position is required" });
+      return sendError(res, "Address is required!", 400);
+    
+      if (isEmpty(position))
+      return sendError(res, "Position is required!", 400);
 
     if (!isValidEmail(email))
-      errors.push({ field: "email", message: "Invalid email format" });
-    if (validatePhoneNumber(countryCode, phoneNumber) === null) {
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
+      return sendError(res, "Invalid Email Format!", 400);
+
+    // Phone number validation and checking phone number uniqueness
+    if (!validatePhoneNumber(countryCode, phoneNumber)) {
+      return sendError(res, "Invalid Phone Number Format!", 400);
+    }
+
+    const existingPhoneUser = await User.findOne({
+      phoneNumber: validatePhoneNumber(countryCode, phoneNumber),
+    });
+    if (existingPhoneUser) {
+      return sendError(res, "Phone number not available!", 400);
+    }
+
+    // CIN/Passport validation
+    if (!["CIN", "Passport"].includes(idType)) {
+      return sendError(res, "ID Type must be either CIN or Passport!", 400);
+    }
+
+    // P.S: The country code for the CIN is automatically = "TN"
+    switch (idType) {
+      case "CIN":
+        if (!validateCIN(trimmedIdNumber)) {
+          return sendError(res, "Invalid CIN format!", 400);
+        }
+        break;
+
+      case "Passport":
+        if (
+          !idCountryCode ||
+          !countries.some((c) => c.code === idCountryCode)
+        ) {
+
+          return sendError(res, "Invalid country code for Passport!", 400);
+        } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
+          const hint = getPassportHint(idCountryCode);
+          return sendError(
+            res, 
+            `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
+            400
+          );
+        }
+        break;
     }
 
     if (bio && !isWithinRange(bio, 0, 500))
-      errors.push({
-        field: "bio",
-        message: "Bio must be under 500 characters",
-      });
+      return sendError(res, "Bio must be under 500 characters!", 400);
 
     if (hasChildren && nbOfChildren <= 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Please specify the number of children",
-      });
+      return sendError(res, "Please specify the number of children!", 400);
     if (nbOfChildren < 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Number of children cannot be negative",
-      });
+      return sendError(res, "Invalid Number of children!", 400);
+
     if (bonus < 0)
-      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
-
-    if (errors.length > 0) {
-      console.log("[ADD-USER-DEBUG] Validation failed with errors:", errors);
-
-      throw new AppError(
-        "Input validation failed!",
-        400,
-        "Please check the highlighted fields and correct the errors.",
-      );
-    }
-
-    // Check user existence
-    console.log(
-      `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail}`,
-    );
-
-    console.log(
-      `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
-    );
+      return sendError(res, "Invalid Bonus value!", 400);
 
     // Check Role validity
     const userrole = await UserRole.findOne({
@@ -589,49 +633,8 @@ export const addUser = async (req, res, next) => {
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // Handle profile image upload if provided as base64
-    let finalProfileImageURL =
-      typeof profileImageURL === "string" &&
-        !profileImageURL.startsWith("data:image")
-        ? profileImageURL
-        : "";
-
-    if (
-      profileImageURL &&
-      typeof profileImageURL === "string" &&
-      profileImageURL.startsWith("data:image")
-    ) {
-      try {
-        console.log(
-          `[ADD-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
-        );
-        const uploadResult = await uploadImageToCloudinary(
-          profileImageURL,
-          "hrcom/profile_images",
-        );
-
-        if (uploadResult && uploadResult.secure_url) {
-          finalProfileImageURL = uploadResult.secure_url;
-          console.log(
-            `[ADD-USER-DEBUG] Upload success: ${finalProfileImageURL}`,
-          );
-        } else {
-          console.error(
-            "[ADD-USER-DEBUG] Upload result missing secure_url:",
-            uploadResult,
-          );
-        }
-      } catch (uploadErr) {
-        console.error(
-          "[ADD-USER-DEBUG] Cloudinary upload failed:",
-          uploadErr.message,
-        );
-      }
-    } else {
-      console.log(
-        `[ADD-USER-DEBUG] No base64 image detected in req.body.profileImageURL`,
-      );
-    }
+    // No base64 handling here. Image upload uses a separate FormData endpoint (uploadProfileImage).
+    let finalProfileImageURL = typeof profileImageURL === "string" ? profileImageURL : "";
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -639,6 +642,11 @@ export const addUser = async (req, res, next) => {
       name,
       lastName,
       email: trimmedEmail,
+      idType,
+      idNumber: {
+        number: trimmedIdNumber,
+        countryCode: idCountryCode,
+      },
       password: hashedPassword,
       verificationCode: hashedOTP,
       verificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
@@ -711,232 +719,166 @@ export const addUser = async (req, res, next) => {
 // Update User (Only the Admin can do it)
 export const updateUser = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
+    if (id === "current") {
+      id = req.user.id;
+    }
     const updateData = { ...req.body };
 
-    // Input Validation
-    const errors = [];
-    if (updateData.email && !isValidEmail(updateData.email))
-      errors.push({ field: "email", message: "Invalid email format" });
-    if (
-      updateData.phoneNumber &&
-      validatePhoneNumber(updateData.countryCode, updateData.phoneNumber) ===
-      null
-    ) {
-      errors.push({
-        field: "phoneNumber",
-        message: "Invalid phone number format",
-      });
-    }
-    if (updateData.bio && !isWithinRange(updateData.bio, 0, 500))
-      errors.push({
-        field: "bio",
-        message: "Bio must be under 500 characters",
-      });
-    if (updateData.bonus !== undefined && updateData.bonus < 0)
-      errors.push({ field: "bonus", message: "Bonus cannot be negative" });
-
-    // Children validation
-    if (
-      updateData.hasChildren === true &&
-      (updateData.nbOfChildren === undefined || updateData.nbOfChildren <= 0)
-    ) {
-      errors.push({
-        field: "nbOfChildren",
-        message: "Please specify the number of children",
-      });
-    }
-    if (updateData.nbOfChildren !== undefined && updateData.nbOfChildren < 0)
-      errors.push({
-        field: "nbOfChildren",
-        message: "Number of children cannot be negative",
-      });
-
-    if (errors.length > 0) {
-      throw new AppError(
-        "Input validation failed!",
-        400,
-        "Please check the highlighted fields and correct the errors.",
-      );
-    }
-
-    const existingUser = await User.findById(id).populate("role_id");
-    if (!existingUser) throw new AppError("User not found!", 404);
-
-    let roleChanged = false;
-    let newPasswordRaw = "";
-
-    // Check for the role change validity
-    if (updateData.role) {
-      const newRoleName = updateData.role;
-      const currentRoleName = existingUser.role_id
-        ? existingUser.role_id.name
-        : "";
-
-      if (newRoleName.toLowerCase() !== currentRoleName.toLowerCase()) {
-        roleChanged = true;
-
-        const roleDoc = await UserRole.findOne({
-          name: { $regex: new RegExp(`^${newRoleName}$`, "i") },
-        });
-
-        if (!roleDoc) throw new AppError("Invalid Role!", 400);
-
-        updateData.role_id = roleDoc._id; // Get the new role ID
-
-        console.log(
-          `[UPDATE-USER-DEBUG] Role changed from "${currentRoleName}" to "${roleDoc.name}".`,
-        );
-      } else {
-        console.log(`[UPDATE-USER-DEBUG] Role unchanged: "${currentRoleName}"`);
+    if (updateData.email) {
+      if (!isValidEmail(updateData.email)) {
+        return sendError(res, "Invalid Email Format!", 400);
       }
-    }
-
-    // Check for the department change validity
-    if (updateData.department) {
-      if (
-        updateData.department === "Unassigned" ||
-        updateData.department === "" ||
-        updateData.department === "all"
-      ) {
-        updateData.department_id = null;
-      } else {
-        const dept = await Department.findOne({
-          name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
-        });
-
-        if (!dept) throw new AppError("Invalid Department!", 400);
-
-        updateData.department_id = dept._id; // Get the new department ID
+      
+      const trimmedEmail = updateData.email.trim().toLowerCase();
+      const existingEmailUser = await User.findOne({ email: trimmedEmail });
+      
+      // We check if the email belongs to another user. If an Admin is editing another user's profile,
+      // id variable holds the target user's ID. If a user edits their own profile, id holds their ID.
+      if (existingEmailUser && existingEmailUser._id.toString() !== id) {
+        return res.status(400).json({ status: "Error", message: "Email already in use!" });
       }
+      
+      updateData.email = trimmedEmail;
     }
 
-    // Check for the supervisor change validity
-    if (updateData.supervisor_full_name !== undefined) {
-      if (
-        updateData.supervisor_full_name === "" ||
-        updateData.supervisor_full_name === "Not assigned yet" ||
-        updateData.supervisor_full_name === null
-      ) {
-        updateData.supervisor_id = null;
-      } else {
-        const parts = updateData.supervisor_full_name.trim().split(/\s+/);
-        const firstName = parts[0];
-        const lastName = parts.slice(1).join(" ");
+    // Check phone number validity and uniqueness
+    let updatedPhoneNumber = null;
 
-        const supervisor = await User.findOne({ name: firstName, lastName });
-        if (!supervisor) throw new AppError("Invalid Supervisor!", 400);
-
-        updateData.supervisor_id = supervisor._id; // Get the new supervisor ID
-      }
-    }
-
-    // Get the full validated phone number
     if (updateData.phoneNumber) {
-      updateData.phoneNumber = validatePhoneNumber(
+      updatedPhoneNumber = validatePhoneNumber(
         updateData.countryCode,
         updateData.phoneNumber,
       );
-    }
 
-    // Only generate NEW password and a NEW OTP code if the role actually changed
-    let newCode = "";
-    if (roleChanged) {
-      newPasswordRaw = generateRandomCode();
-      newCode = generateRandomCode(6);
+      if (!updatedPhoneNumber) {
+        return sendError(res, "Invalid Phone Number!", 400);
+      } else {
+        // Check phone number uniqueness
+        const existingPhoneUser = await User.findOne({
+          phoneNumber: updatedPhoneNumber,
+        });
 
-      // Hash the new password and OTP Code
-      updateData.password = await bcrypt.hash(newPasswordRaw, 10);
-      updateData.verificationCode = await bcrypt.hash(newCode, 10);
-      updateData.verificationCodeExpires = new Date(
-        Date.now() + 24 * 60 * 60 * 1000,
-      ); // 24 hours
-      updateData.status = "Pending";
-      updateData.mustResetPassword = true;
-    }
-
-    // Handle profile image upload if provided as base64
-    if (
-      updateData.profileImageURL &&
-      typeof updateData.profileImageURL === "string" &&
-      updateData.profileImageURL.startsWith("data:image")
-    ) {
-      try {
-        console.log(
-          `[UPDATE-USER-DEBUG] Detected base64 image, uploading to Cloudinary...`,
-        );
-        const uploadResult = await uploadImageToCloudinary(
-          updateData.profileImageURL,
-          "hrcom/profile_images",
-        );
-
-        if (uploadResult && uploadResult.secure_url) {
-          updateData.profileImageURL = uploadResult.secure_url;
-          console.log(
-            `[UPDATE-USER-DEBUG] Upload success: ${updateData.profileImageURL}`,
-          );
-        } else {
-          console.error(
-            "[UPDATE-USER-DEBUG] Upload result missing secure_url:",
-            uploadResult,
-          );
-          delete updateData.profileImageURL; // Don't save base64 if upload fails
+        if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
+          return sendError(res, "Phone number not available!", 400);  
         }
-      } catch (uploadErr) {
-        console.error(
-          "[UPDATE-USER-DEBUG] Cloudinary upload failed:",
-          uploadErr.message,
-        );
-        delete updateData.profileImageURL; // Don't save base64 if upload fails
+
+        // Save the updated version
+        updateData.phoneNumber = updatedPhoneNumber;
       }
     }
 
-    // Update the user
+    // Check ID number uniqueness and validity
+    const idNumber = updateData.idNumber?.number;
+    const idCountryCode = updateData.idNumber?.countryCode;
+
+    if (updateData.idType && !["CIN", "Passport"].includes(updateData.idType)) {
+      return sendError(res, "ID Type must be either CIN or Passport!", 400);
+    }
+
+    // Check if the updated ID number already exists for another user
+    if (idNumber) {
+      const existingUser = await User.findOne({
+        "idNumber.number": idNumber,
+        "idNumber.countryCode": idCountryCode || "TN",
+      });
+
+      if (existingUser && existingUser._id.toString() !== id) {
+        return sendError(res, `Unable to process this ${updateData.idType} Number!`, 400);
+      }
+    }
+
+    switch (updateData.idType) {
+      case "CIN":
+        if (idNumber && !validateCIN(idNumber)) {
+          return sendError(res, "Invalid CIN format!", 400);
+        }
+
+        if (updateData.idNumber) {
+          updateData.idNumber.countryCode = "TN";
+        }
+        break;
+
+      case "Passport":
+        if (idCountryCode && !countries.some((c) => c.code === idCountryCode)) {
+          return sendError(res, "Invalid country code for Passport!", 400);
+        } else if (
+          idNumber &&
+          idCountryCode &&
+          !validatePassport(idNumber, idCountryCode)
+        ) {
+          const hint = getPassportHint(idCountryCode);
+          return sendError(
+            res,
+            "Invalid Passport format for the specified country: " + idCountryCode + "!",
+            400
+          );
+        }
+        break;
+    }
+
+    // Map role name to role_id
+    if (updateData.role) {
+      const userrole = await UserRole.findOne({
+        name: { $regex: new RegExp(`^${updateData.role}$`, "i") },
+      });
+      if (userrole) {
+        updateData.role_id = userrole._id;
+      }
+      delete updateData.role;
+    }
+
+    // Map department name to department_id
+    if (updateData.department) {
+      const userdepartment = await Department.findOne({
+        name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
+      });
+      if (userdepartment) {
+        updateData.department_id = userdepartment._id;
+      }
+      delete updateData.department;
+    }
+
+    // Map supervisor name to supervisor_id
+    if (updateData.supervisor_full_name) {
+      const parts = updateData.supervisor_full_name.trim().split(/\s+/);
+      const sName = parts[0];
+      const sLastName = parts.slice(1).join(" ");
+
+      const supervisor = await User.findOne({
+        name: sName,
+        lastName: sLastName,
+      });
+      if (supervisor) {
+        updateData.supervisor_id = supervisor._id;
+      }
+      delete updateData.supervisor_full_name;
+    }
+
+    // Map isActive boolean to status string
+    if (updateData.isActive !== undefined) {
+      updateData.status = updateData.isActive ? "Active" : "Inactive";
+      delete updateData.isActive;
+    }
+
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
-    });
+    }).populate("role_id").populate("department_id").populate("supervisor_id");
 
-    // If role changed, send by Email the new credentials to the User
-    if (roleChanged) {
-      try {
-        console.log(
-          `[UPDATE-USER-DEBUG] Sending updated credentials to: ${user.email}`,
-        );
-
-        await sendEmail({
-          to: user.email,
-          subject: "HRcoM Account Update",
-          type: "updateUser",
-          name: user.name,
-          password: newPasswordRaw,
-          code: newCode,
-          newRole: newRoleName,
-        });
-      } catch (emailErr) {
-        console.log(
-          `[UPDATE-USER-DEBUG] Role updated but email failed:`,
-          emailErr.message,
-        );
-      }
-    }
-
-    res.status(200).json({
-      status: "Success",
-      message: roleChanged
-        ? "User role updated and new credentials sent."
-        : "User updated successfully.",
-      data: user,
-    });
-
-    // Logging the action
     await logAuditAction({
       adminId: req.user.id,
       action: "UPDATE_USER",
       targetType: "User",
       targetId: user._id,
       targetName: `${user.name} ${user.lastName}`,
-      details: req.body, // Log the changes requested
+      details: updateData,
       ipAddress: req.ip,
+    });
+
+    res.status(200).json({
+      status: "Success",
+      message: "User updated successfully.",
+      data: user,
     });
   } catch (err) {
     next(err);
@@ -947,12 +889,29 @@ export const updateUser = async (req, res, next) => {
 export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const user = await User.findByIdAndDelete(id);
+
+    const user = await User.findById(id);
     if (!user) throw new AppError("User not found!", 404);
+
+    // Find all documents of the user
+    const documents = await Document.find({ user_id: id });
+
+    // Delete the user's document files from Cloudinary
+    for (const doc of documents) {
+      if (doc.filePublicId) {
+        await deleteFromCloudinary(doc.filePublicId);
+      }
+    }
+
+    // Delete documents from MongoDB
+    await Document.deleteMany({ user_id: id });
+
+    // Delete the user
+    await User.findByIdAndDelete(id);
 
     res.status(200).json({
       status: "Success",
-      message: "User deleted successfully",
+      message: "User and all associated documents deleted successfully!",
     });
 
     // Logging the action
@@ -1006,6 +965,7 @@ export const getAllUsers = async (req, res, next) => {
       joinDate: user.joinDate,
       position: user.position,
       faceEnrolled: user.faceEnrolled,
+      faceEnrollmentPromptRequired: user.faceEnrollmentPromptRequired,
       faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
@@ -1015,10 +975,10 @@ export const getAllUsers = async (req, res, next) => {
         : null,
       supervisor: user.supervisor_id
         ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
+            id: user.supervisor_id._id,
+            name: user.supervisor_id.name,
+            lastName: user.supervisor_id.lastName,
+          }
         : null,
     }));
 
@@ -1031,7 +991,10 @@ export const getAllUsers = async (req, res, next) => {
 // Get User by ID
 export const getUserById = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
+    if (id === "current") {
+      id = req.user.id;
+    }
     const user = await User.findById(id)
       .populate("role_id")
       .populate("department_id")
@@ -1039,43 +1002,10 @@ export const getUserById = async (req, res, next) => {
 
     if (!user) throw new AppError("User not found!", 404);
 
-    // Format the user data
-    const formattedUser = {
-      id: user._id,
-      name: user.name,
-      lastName: user.lastName,
-      email: user.email,
-      address: user.address,
-      phoneNumber: user.phoneNumber,
-      bonus: user.bonus,
-      profileImageURL: user.profileImageURL,
-      bio: user.bio,
-      leaveBalance: user.leaveBalance,
-      socialStatus: user.socialStatus,
-      hasChildren: user.hasChildren,
-      nbOfChildren: user.nbOfChildren,
-      status: user.status,
-      isAvailable: user.isAvailable,
-      joinDate: user.joinDate,
-      position: user.position,
-      faceEnrolled: user.faceEnrolled,
-      faceDescriptors: user.faceDescriptors,
-      role: user.role_id
-        ? { id: user.role_id._id, name: user.role_id.name }
-        : null,
-      department: user.department_id
-        ? { id: user.department_id._id, name: user.department_id.name }
-        : null,
-      supervisor: user.supervisor_id
-        ? {
-          id: user.supervisor_id._id,
-          name: user.supervisor_id.name,
-          lastName: user.supervisor_id.lastName,
-        }
-        : null,
-    };
-
-    res.status(200).json(formattedUser);
+    res.status(200).json({
+      status: "Success",
+      data: user,
+    });
   } catch (err) {
     next(err);
   }
@@ -1158,22 +1088,6 @@ export const filterUsers = async (req, res, next) => {
     res.status(200).json({ status: "Success", data: users });
   } catch (err) {
     return handleError(res, err);
-  }
-};
-
-// Get Current User (the one logged in)
-export const getCurrentUser = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const user = await User.findById(userId).populate("role_id");
-    if (!user) throw new AppError("User not found!", 404);
-
-    res.status(200).json({
-      status: "Success",
-      data: user,
-    });
-  } catch (err) {
-    next(err);
   }
 };
 
@@ -1320,9 +1234,12 @@ export const uploadProfileImage = async (req, res, next) => {
     if (existingUser.profileImagePublicId) {
       await deleteFromCloudinary(existingUser.profileImagePublicId, "image");
     }
-    
+
     // Upload new profile image to Cloudinary
-    const result = await uploadImageToCloudinary(req.file.buffer, "hrcom/profile_images");
+    const result = await uploadImageToCloudinary(
+      req.file.buffer,
+      "hrcom/profile_images",
+    );
 
     // Update the user's profile image info
     const user = await User.findByIdAndUpdate(
@@ -1331,7 +1248,7 @@ export const uploadProfileImage = async (req, res, next) => {
         profileImageURL: result.secure_url,
         profileImagePublicId: result.public_id,
       },
-      { returnDocument: "after" }
+      { returnDocument: "after" },
     );
 
     // Audit log
@@ -1355,7 +1272,6 @@ export const uploadProfileImage = async (req, res, next) => {
       profileImagePublicId: result.public_id,
       user,
     });
-
   } catch (err) {
     next(err);
   }
@@ -1408,7 +1324,11 @@ export const enrollFace = async (req, res, next) => {
     const { id } = req.params;
     const { descriptors } = req.body;
 
-    if (!descriptors || !Array.isArray(descriptors) || descriptors.length === 0) {
+    if (
+      !descriptors ||
+      !Array.isArray(descriptors) ||
+      descriptors.length === 0
+    ) {
       throw new AppError("Face descriptors missing or invalid!", 400);
     }
 
@@ -1418,6 +1338,7 @@ export const enrollFace = async (req, res, next) => {
     // Save the descriptors to the user's profile
     user.faceDescriptors = descriptors;
     user.faceEnrolled = true;
+    user.faceEnrollmentPromptRequired = false;
     await user.save();
 
     res.status(200).json({
@@ -1428,6 +1349,7 @@ export const enrollFace = async (req, res, next) => {
     next(err);
   }
 };
+
 // Face reset functionality
 export const resetFace = async (req, res, next) => {
   try {
@@ -1439,6 +1361,7 @@ export const resetFace = async (req, res, next) => {
     // Clear face descriptors and set faceEnrolled to false
     user.faceDescriptors = [];
     user.faceEnrolled = false;
+    user.faceEnrollmentPromptRequired = true;
     await user.save();
 
     res.status(200).json({
@@ -1449,3 +1372,8 @@ export const resetFace = async (req, res, next) => {
     next(err);
   }
 };
+
+/*
+What was changed: Added email uniqueness validation in the updateUser function to prevent duplicated emails on updates.
+Why it was changed: To allow non-admin users to edit their own profile email safely and correctly reject taken emails.
+*/

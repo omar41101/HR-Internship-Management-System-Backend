@@ -522,7 +522,128 @@ const options = {
             updatedAt: {
               type: "string",
               format: "date-time",
-              description: "Timestamp of when the document type was last updated.",
+              description:
+                "Timestamp of when the document type was last updated.",
+            },
+          },
+        },
+
+        // ================== Timetable Schemas ==================
+        Timetable: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique Identifier for each timetable entry.",
+            },
+            userId: {
+              type: "string",
+              description:
+                "ID of the user to whom the timetable entry belongs.",
+            },
+            date: {
+              type: "string",
+              format: "date-time",
+              description: "The date of the timetable entry.",
+            },
+            type: {
+              type: "string",
+              enum: [
+                "Morning Shift",
+                "Evening Shift",
+                "Full-time Shift",
+                "Day Off",
+                "Special Shift",
+              ],
+              description: "The type of the timetable entry.",
+            },
+            location: {
+              type: "string",
+              enum: ["Remote", "Onsite"],
+              description: "The location of the timetable entry.",
+            },
+            color: {
+              type: "string",
+              description:
+                "The color associated with the timetable entry (for calendar display).",
+            },
+            duration: {
+              type: "string",
+              description:
+                "The duration of the shift (e.g., '8 hours', '4 hours').",
+            },
+            isLocked: {
+              type: "boolean",
+              description:
+                "Indicates if the timetable entry is locked (cannot be edited). The user cannot edit his shift. Only an admin can edit shifts.",
+            },
+            hasFeedback: {
+              type: "boolean",
+              description: "Indicates if the timetable entry has feedback.",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the timetable entry was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the timetable entry was last updated.",
+            },
+          },
+        },
+
+        // ================== Attendance Schemas ==================
+        Attendance: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique Identifier for each attendance record.",
+            },
+            userId: {
+              type: "string",
+              description:
+                "ID of the user to whom the attendance record belongs.",
+            },
+            date: {
+              type: "string",
+              format: "date-time",
+              description: "The date of the attendance record.",
+            },
+            checkInTime: {
+              type: "string",
+              description: "The check-in time for the attendance record.",
+            },
+            checkOutTime: {
+              type: "string",
+              description: "The check-out time for the attendance record.",
+            },
+            status: {
+              type: "string",
+              enum: ["present", "late", "absent", "leave"],
+              description: "The attendance status for the record.",
+            },
+            location: {
+              type: "string",
+              enum: ["Remote", "Onsite"],
+              description: "The location of the attendance (Remote or Onsite).",
+            },
+            notes: {
+              type: "string",
+              description:
+                "Additional notes for the attendance record (e.g., reason for being late or absent).",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the attendance record was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the attendance record was last updated.",
             },
           },
         },
