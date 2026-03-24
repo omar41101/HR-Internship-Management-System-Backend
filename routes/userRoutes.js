@@ -1,6 +1,5 @@
 import express from "express";
 import {
-  login,
   addUser,
   updateUser,
   deleteUser,
@@ -14,11 +13,6 @@ import {
   exportUsersToExcel,
   uploadProfileImage,
   removeProfileImage,
-  verifyUser,
-  resendVerificationCode,
-  resetPassword,
-  requestPasswordReset,
-  forgetPassword,
   enrollFace,
   resetFace,
   getTeamMembers
@@ -32,229 +26,15 @@ const router = express.Router();
 /**
  * @swagger
  * tags:
- *   - name: Auth
- *     description: Endpoints for the full authentification system
- */
-
-/**
- * @swagger
- * tags:
  *   - name: Users
  *     description: Endpoints for the users CRUDs
  */
 
-// ----------------------------------- AUTH ROUTES ----------------------------------- //
-// Route to log the user
-/**
- * @swagger
- * /api/users/login:
- *   post:
- *     summary: User Login
- *     tags:
- *       - Auth
- *     description: Allows a user to enter his dashboard based on his credentials
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/LoginRequest'
- *     responses:
- *       200:
- *         description: Successful login (Could include OTP verification and/or Reset Password after login)
- *       401:
- *         description: Invalid Credentials
- *       403:
- *         description: Account Blocked 
- *       404:
- *         description: User not found | User Role not found
- *       500:
- *         description: Server error
- */
-router.post("/login", login);
+// -------------------------------------------------------------------------------------- //
+// ------------------------------- USER MANAGEMENT ROUTES ------------------------------- //
+// -------------------------------------------------------------------------------------- //
 
-// Route to verify user's OTP code
-/**
- * @swagger
- * /users/verify-user:
- *   post:
- *     summary: Verify user's OTP code
- *     tags: 
- *       - Auth
- *     description: Verifies the OTP code sent to the user's email and activates the account.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - code
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email
- *               code:
- *                 type: string
- *                 description: OTP verification code sent to the email
- *     responses:
- *       200:
- *         description: Account verified successfully
- *       400:
- *         description: Invalid OTP code | OTP Code expired
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
-router.post("/users/verify-user", verifyUser);
-
-// Route to resend OTP code
-/**
- * @swagger
- * /users/resend-verification:
- *   post:
- *     summary: Resend OTP verification code
- *     tags: 
- *      - Auth
- *     description: Sends a new OTP code to the user's email if the resend limit is not exceeded.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email
- *     responses:
- *       200:
- *         description: OTP code resent successfully
- *       400:
- *         description: Account already verified 
- *       404:
- *         description: User not found
- *       429:
- *         description: Maximum resend limit reached (Too many requests)
- *       500:
- *         description: Server Error
- */
-router.post("/users/resend-verification", resendVerificationCode);
-
-// Route to reset password
-/**
- * @swagger
- * /users/reset-password:
- *   post:
- *     summary: Reset password after account verification
- *     tags: 
- *      - Auth
- *     description: Allows a verified user to set a new password after first login.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - newPassword
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email
- *               newPassword:
- *                 type: string
- *                 description: New password for the account
- *     responses:
- *       200:
- *         description: Password Reset successfully
- *       400:
- *         description: Invalid password format
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
-router.post("/users/reset-password", resetPassword);
-
-// Route to forget password request
-/**
- * @swagger
- * /users/request-password-reset:
- *   post:
- *     summary: Request password reset link
- *     tags: 
- *        - Auth
- *     description: Sends a password reset link to the user's email.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email address
- *     responses:
- *       200:
- *         description: Password reset link sent successfully
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
-router.post("/users/request-password-reset", requestPasswordReset);
-
-// Route to forget password reset
-/**
- * @swagger
- * /users/forget-password:
- *   post:
- *     summary: Reset password using reset token
- *     tags: 
- *      - Auth
- *     description: Allows a user to reset their password using the reset token received via email.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - token
- *               - newPassword
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email
- *               token:
- *                 type: string
- *                 description: Password reset token received via email
- *               newPassword:
- *                 type: string
- *                 description: New password for the account
- *     responses:
- *       200:
- *         description: Password reset successfully
- *       400:
- *         description: Invalid or expired token | Invalid password format
- *       404:
- *         description: User not found
- */
-router.post("/users/forget-password", forgetPassword);
-
-
-// ----------------------------------- USER MANAGEMENT ROUTES ----------------------------------- //
-// Route to Add user
+// Route to Add user (Admin Only)
 /**
  * @swagger
  * /api/users:
@@ -288,7 +68,7 @@ router.post("/users/forget-password", forgetPassword);
  */
 router.post("/users", authenticate, authorize(["Admin"]), addUser);
 
-// Route to Update user
+// Route to Update user (Edit Profile) (Admin Only and the user himself)
 /**
  * @swagger
  * /api/users/{id}:
@@ -325,7 +105,7 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
  */
 router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true }), updateUser);
 
-// Route to Delete user
+// Route to Delete user (Admin Only)
 /**
  * @swagger
  * /api/users/{id}:
@@ -352,7 +132,7 @@ router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true })
  */
 router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
 
-// Route to get all users
+// Route to get all users (Admin Only)
 /**
  * @swagger
  * /api/users:
@@ -370,7 +150,7 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  */
 router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
 
-// Route to get active supervisors
+// Route to get active supervisors (Admin Only)
 /**
  * @swagger
  * /api/users/active-supervisors:
@@ -389,7 +169,7 @@ router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
  * */
 router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisors);
 
-// Route to get user by ID
+// Route to get user by ID (Admin, the user himself and his supervisor)
 /**
  * @swagger
  * /api/users/{id}:
@@ -728,11 +508,13 @@ router.post(
   resetFace
 );
 
-// ----------------------------------- TEAM MANAGEMENT ROUTES ----------------------------------- //
+// -------------------------------------------------------------------------------------- //
+// ----------------------------- TEAM MANAGEMENT ROUTES --------------------------------- //
+// -------------------------------------------------------------------------------------- //
 
 // Route to get team members (Supervisor/admin only)
 router.get(
-  "/users/team/:id",
+  "/users/team/:id",  
   authenticate,
   authorize(["Admin", "Supervisor"], { allowSelf: true }),
   getTeamMembers

@@ -8,6 +8,7 @@ import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 
+import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import UserRoleRoutes from "./routes/userRoleRoutes.js";
 import departmentRoutes from "./routes/departmentRoutes.js";
@@ -57,6 +58,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 connectMongo();
 
 // Activate routes
+app.use('/api', authRoutes);
 app.use('/api', userRoutes);
 app.use('/api', UserRoleRoutes);
 app.use('/api', departmentRoutes);
