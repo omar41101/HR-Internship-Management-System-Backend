@@ -547,14 +547,26 @@ export const addUser = async (req, res, next) => {
 
     // Check the validity of the department
     let departmentId = null;
+    const departmentValue =
+      typeof department === "string" ? department.trim() : department;
+    const isUnassigned =
+      !departmentValue ||
+      departmentValue === "" ||
+      departmentValue === "Unassigned" ||
+      departmentValue === "all";
 
-    if (department && department !== "Unassigned" && department !== "all") {
+    if (!isUnassigned) {
       const userdepartment = await Department.findOne({
-        name: { $regex: new RegExp(`^${department}$`, "i") },
+        name: { $regex: new RegExp(`^${departmentValue}$`, "i") },
       });
 
-      if (!userdepartment) throw new AppError("Invalid Department!", 400);
-      departmentId = userdepartment._id; // Get the department ID
+      if (!userdepartment) {
+        throw new AppError(
+          `Department "${departmentValue}" not found. Create it first (Roles/Departments) or choose Unassigned.`,
+          400,
+        );
+      }
+      departmentId = userdepartment._id;
       console.log(
         `[ADD-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
       );
