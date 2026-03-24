@@ -12,13 +12,12 @@ import { Parser } from "json2csv";
 import ExcelJS from "exceljs";
 import {
   isValidEmail,
-  isEmpty,
   validatePhoneNumber,
-  isWithinRange,
   generateRandomCode,
   validateCIN,
   validatePassport,
   getPassportHint,
+  validateUserData,
 } from "../middleware/UserValidation.js";
 import { countries } from "../middleware/countries.js"; // List of countries with their codes
 import { logAuditAction } from "../utils/logger.js";
@@ -26,12 +25,147 @@ import { sendEmail } from "../utils/sendEmail.js";
 import { sendError, handleError } from "../utils/ErrorFunctions.js";
 import AppError from "../utils/AppError.js";
 
+// --------------------------------------------------------------------------- //
+// ---------------------------- HELPER FUNCTIONS ----------------------------- //
+// --------------------------------------------------------------------------- //
+
+// Full phone number validation helper function (format + uniqueness)
+export const fullPhoneNumberValidation = async (countryCode, phoneNumber, userId = null) => {
+  const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
+
+  if (!validatedPhoneNumber) {
+    throw new AppError("Invalid Phone Number Format!", 400);
+  }
+
+  // Check the phone number uniqueness
+  const existingPhoneUser = await User.findOne({
+    phoneNumber: validatedPhoneNumber,
+  });
+
+  if (existingPhoneUser && existingPhoneUser._id.toString() !== userId) {
+    throw new AppError("Phone number not available!", 400);
+  }
+
+  return validatedPhoneNumber;
+};
+
+// Full CIN/Passport validation helper function (format + uniqueness)
+export const fullCINPassportValidation = async (idType, idCountryCode, trimmedIdNumber, userId = null) => {
+  // Check ID type validity
+  if (!["CIN", "Passport"].includes(idType)) {
+    throw new AppError("ID Type must be either CIN or Passport!", 400);
+  }
+
+  // Check the validity of IdNumber based on the ID type
+  switch (idType) {
+    case "CIN":
+      if (!validateCIN(trimmedIdNumber)) {
+        throw new AppError("Invalid CIN format!", 400);
+      }
+      break;
+
+    case "Passport":
+      if (
+        !idCountryCode ||
+        !countries.some((c) => c.code === idCountryCode)
+      ) {
+        throw new AppError("Invalid country code for Passport!", 400);
+      } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
+        const hint = getPassportHint(idCountryCode);
+        throw new AppError(
+          `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
+          400,
+        );
+      }
+      break;
+  }
+
+  const existingUser = await User.findOne({
+    "idNumber.number": trimmedIdNumber,
+    "idNumber.countryCode": idType === "CIN" ? "TN" : idCountryCode,
+  });
+
+  if (existingUser && existingUser._id.toString() !== userId) {
+    throw new AppError("ID number already in use!", 400);
+  }
+};
+
+// Check User Role validity helper function
+export const validateUserRole = async (role, action) => {
+  // Check user role existance
+  const userrole = await UserRole.findOne({
+    name: { $regex: new RegExp(`^${role}$`, "i") },
+  });
+  if (!userrole) throw new AppError("Invalid Role!", 400);
+
+  // Get the role ID
+  const roleId = userrole._id;
+  console.log(`[${action}-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
+
+  return roleId;
+};
+
+// Check supervisor validity helper function
+export const validateSupervisor = async (supervisor_full_name, action) => {
+  if (
+    supervisor_full_name &&
+    typeof supervisor_full_name === "string" &&
+    supervisor_full_name.trim() !== "" &&
+    supervisor_full_name !== "Not assigned yet"
+  ) {
+    console.log(
+      `[${action}-USER-DEBUG] Attempting to look up supervisor: "${supervisor_full_name}"`,
+    );
+
+    // Split the supervisor's full name
+    const parts = supervisor_full_name.trim().split(/\s+/);
+    const supervisor_name = parts[0];
+    const supervisor_lastName = parts.slice(1).join(" ");
+
+    // Check the supervisor existance
+    const supervisor = await User.findOne({
+      name: supervisor_name,
+      lastName: supervisor_lastName,
+    });
+
+    if (!supervisor) throw new AppError("Supervisor not found!", 404);
+
+    // Get the supervisor ID
+    const supervisorId = supervisor._id; 
+    console.log(`[${action}-USER-DEBUG] Supervisor found: ${supervisorId}`);
+
+    return supervisorId;
+  } else {
+    console.log(
+      `[${action}-USER-DEBUG] Skipping supervisor lookup (name is empty or N/A)`,
+    );
+  }
+};
+
+// Check department validity helper function
+export const validateDepartment = async (department, action) => {
+  if (department && department !== "Unassigned" && department !== "all") {
+    const userdepartment = await Department.findOne({
+      name: { $regex: new RegExp(`^${department}$`, "i") },
+    });
+
+    if (!userdepartment) throw new AppError("Invalid Department!", 400);
+    
+    // Get the department ID
+    const departmentId = userdepartment._id; 
+    console.log(
+      `[${action}-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
+    );
+
+    return departmentId;
+  }
+}
 
 // --------------------------------------------------------------------------- //
 // ----------------------------- USER MANAGEMENT ----------------------------- //
 // --------------------------------------------------------------------------- //
 
-// Add User Functionnality (Only the Admin can do it)
+// Add User (Only the Admin can do it)
 export const addUser = async (req, res, next) => {
   try {
     const {
@@ -63,6 +197,8 @@ export const addUser = async (req, res, next) => {
     const trimmedEmail = (email || "").trim().toLowerCase();
     const trimmedIdNumber = (idNumber || "").trim();
 
+    const action = "ADD";
+
     // Check user existence
     console.log(
       `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail} - ${trimmedIdNumber}`,
@@ -76,129 +212,33 @@ export const addUser = async (req, res, next) => {
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
-    // Validate the field inputs
-    if (isEmpty(name)) return sendError(res, "First name is required!", 400);
-
-    if (isEmpty(lastName)) return sendError(res, "Last name is required!", 400);
-
-    if (isEmpty(address)) return sendError(res, "Address is required!", 400);
-
-    if (isEmpty(position)) return sendError(res, "Position is required!", 400);
-
-    if (!isValidEmail(email))
-      return sendError(res, "Invalid Email Format!", 400);
-
-    // Phone number validation and checking phone number uniqueness
-    if (!validatePhoneNumber(countryCode, phoneNumber)) {
-      return sendError(res, "Invalid Phone Number Format!", 400);
-    }
-
-    const existingPhoneUser = await User.findOne({
-      phoneNumber: validatePhoneNumber(countryCode, phoneNumber),
+    // Validate common field Inputs (Don't require DB checks)
+    validateUserData({
+      name,
+      lastName,
+      trimmedEmail,
+      address,
+      position,
+      bonus,
+      bio,
+      hasChildren,
+      nbOfChildren,
     });
-    if (existingPhoneUser) {
-      return sendError(res, "Phone number not available!", 400);
-    }
+
+    // Get the full validated Phone number (After format and uniqueness checks)
+    const validatedPhoneNumber = await fullPhoneNumberValidation(countryCode, phoneNumber);
 
     // CIN/Passport validation
-    if (!["CIN", "Passport"].includes(idType)) {
-      return sendError(res, "ID Type must be either CIN or Passport!", 400);
-    }
+    await fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
 
-    // P.S: The country code for the CIN is automatically = "TN"
-    switch (idType) {
-      case "CIN":
-        if (!validateCIN(trimmedIdNumber)) {
-          return sendError(res, "Invalid CIN format!", 400);
-        }
-        break;
+    // Get the role id if the Role is valid
+    const roleId = await validateUserRole(role, action);
 
-      case "Passport":
-        if (
-          !idCountryCode ||
-          !countries.some((c) => c.code === idCountryCode)
-        ) {
-          return sendError(res, "Invalid country code for Passport!", 400);
-        } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
-          const hint = getPassportHint(idCountryCode);
-          return sendError(
-            res,
-            `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
-            400,
-          );
-        }
-        break;
-    }
-
-    if (bio && !isWithinRange(bio, 0, 500))
-      return sendError(res, "Bio must be under 500 characters!", 400);
-
-    if (hasChildren && nbOfChildren <= 0)
-      return sendError(res, "Please specify the number of children!", 400);
-    if (nbOfChildren < 0)
-      return sendError(res, "Invalid Number of children!", 400);
-
-    if (bonus < 0) return sendError(res, "Invalid Bonus value!", 400);
-
-    // Check Role validity
-    const userrole = await UserRole.findOne({
-      name: { $regex: new RegExp(`^${role}$`, "i") },
-    });
-    if (!userrole) throw new AppError("Invalid Role!", 400);
-
-    // Get the role ID
-    const roleId = userrole._id;
-    console.log(`[ADD-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
-
-    // --- Supervisor is now optional for the Intern and Employee (can use "Not assigned yet") ---
-    // Check the validity of the supervisor
-    let supervisorId = null;
-
-    if (
-      supervisor_full_name &&
-      typeof supervisor_full_name === "string" &&
-      supervisor_full_name.trim() !== "" &&
-      supervisor_full_name !== "Not assigned yet"
-    ) {
-      console.log(
-        `[ADD-USER-DEBUG] Attempting to look up supervisor: "${supervisor_full_name}"`,
-      );
-
-      const parts = supervisor_full_name.trim().split(/\s+/);
-      const supervisor_name = parts[0];
-      const supervisor_lastName = parts.slice(1).join(" ");
-
-      const supervisor = await User.findOne({
-        name: supervisor_name,
-        lastName: supervisor_lastName,
-      });
-
-      if (!supervisor) throw new AppError("Supervisor not found!", 404);
-      supervisorId = supervisor._id; // Get the supervisor ID
-      console.log(`[ADD-USER-DEBUG] Supervisor found: ${supervisorId}`);
-    } else {
-      console.log(
-        `[ADD-USER-DEBUG] Skipping supervisor lookup (name is empty or N/A)`,
-      );
-    }
+    // Check the validity of the supervisor (Optional field)
+    const supervisorId = await validateSupervisor(supervisor_full_name, action);
 
     // Check the validity of the department
-    let departmentId = null;
-
-    if (department && department !== "Unassigned" && department !== "all") {
-      const userdepartment = await Department.findOne({
-        name: { $regex: new RegExp(`^${department}$`, "i") },
-      });
-
-      if (!userdepartment) throw new AppError("Invalid Department!", 400);
-      departmentId = userdepartment._id; // Get the department ID
-      console.log(
-        `[ADD-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
-      );
-    }
-
-    // Get the full validated Phone number
-    const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
+    const departmentId = await validateDepartment(department, action);
 
     // Generate password (length = 8)
     const password = generateRandomCode();
@@ -214,7 +254,7 @@ export const addUser = async (req, res, next) => {
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // No base64 handling here. Image upload uses a separate FormData endpoint (uploadProfileImage).
+    // Get the profile image URL
     let finalProfileImageURL =
       typeof profileImageURL === "string" ? profileImageURL : "";
 
@@ -302,155 +342,98 @@ export const addUser = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   try {
     let { id } = req.params;
-    if (id === "current") {
-      id = req.user.id;
-    }
-    const updateData = { ...req.body };
+    if (id === "current") id = req.user.id;
 
+    const updateData = { ...req.body };
+    const action = "UPDATE";
+
+    // Check the email validity and the user existence
     if (updateData.email) {
-      if (!isValidEmail(updateData.email)) {
+      const trimmedEmail = updateData.email.trim().toLowerCase();
+
+      if (!isValidEmail(trimmedEmail)) {
         return sendError(res, "Invalid Email Format!", 400);
       }
 
-      const trimmedEmail = updateData.email.trim().toLowerCase();
       const existingEmailUser = await User.findOne({ email: trimmedEmail });
 
-      // We check if the email belongs to another user. If an Admin is editing another user's profile,
-      // id variable holds the target user's ID. If a user edits their own profile, id holds their ID.
       if (existingEmailUser && existingEmailUser._id.toString() !== id) {
-        return res
-          .status(400)
-          .json({ status: "Error", message: "Email already in use!" });
+        return sendError(res, "Unavailable Email!", 400);
       }
 
       updateData.email = trimmedEmail;
     }
 
-    // Check phone number validity and uniqueness
-    let updatedPhoneNumber = null;
+    // Input validation for common fields (those that don't require DB checks)
+    validateUserData({
+      name: updateData.name,
+      lastName: updateData.lastName,
+      trimmedEmail: updateData.email,
+      address: updateData.address,
+      position: updateData.position,
+      bonus: updateData.bonus,
+      bio: updateData.bio,
+      hasChildren: updateData.hasChildren,
+      nbOfChildren: updateData.nbOfChildren,
+    });
 
+    // Check the phone number validity 
     if (updateData.phoneNumber) {
-      updatedPhoneNumber = validatePhoneNumber(
+      updateData.phoneNumber = await fullPhoneNumberValidation(
         updateData.countryCode,
         updateData.phoneNumber,
+        id 
+      );
+    }
+
+    // Check the CIN/Passport validity
+    if (updateData.idType || updateData.idNumber) {
+      const trimmedIdNumber = updateData.idNumber?.number?.trim();
+      const idCountryCode = updateData.idNumber?.countryCode;
+
+      await fullCINPassportValidation(
+        updateData.idType,
+        idCountryCode,
+        trimmedIdNumber,
+        id
       );
 
-      if (!updatedPhoneNumber) {
-        return sendError(res, "Invalid Phone Number!", 400);
-      } else {
-        // Check phone number uniqueness
-        const existingPhoneUser = await User.findOne({
-          phoneNumber: updatedPhoneNumber,
-        });
-
-        if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
-          return sendError(res, "Phone number not available!", 400);
-        }
-
-        // Save the updated version
-        updateData.phoneNumber = updatedPhoneNumber;
+      if (updateData.idType === "CIN" && updateData.idNumber) {
+        updateData.idNumber.countryCode = "TN";
       }
     }
 
-    // Check ID number uniqueness and validity
-    const idNumber = updateData.idNumber?.number;
-    const idCountryCode = updateData.idNumber?.countryCode;
-
-    if (updateData.idType && !["CIN", "Passport"].includes(updateData.idType)) {
-      return sendError(res, "ID Type must be either CIN or Passport!", 400);
-    }
-
-    // Check if the updated ID number already exists for another user
-    if (idNumber) {
-      const existingUser = await User.findOne({
-        "idNumber.number": idNumber,
-        "idNumber.countryCode": idCountryCode || "TN",
-      });
-
-      if (existingUser && existingUser._id.toString() !== id) {
-        return sendError(
-          res,
-          `Unable to process this ${updateData.idType} Number!`,
-          400,
-        );
-      }
-    }
-
-    switch (updateData.idType) {
-      case "CIN":
-        if (idNumber && !validateCIN(idNumber)) {
-          return sendError(res, "Invalid CIN format!", 400);
-        }
-
-        if (updateData.idNumber) {
-          updateData.idNumber.countryCode = "TN";
-        }
-        break;
-
-      case "Passport":
-        if (idCountryCode && !countries.some((c) => c.code === idCountryCode)) {
-          return sendError(res, "Invalid country code for Passport!", 400);
-        } else if (
-          idNumber &&
-          idCountryCode &&
-          !validatePassport(idNumber, idCountryCode)
-        ) {
-          const hint = getPassportHint(idCountryCode);
-          return sendError(
-            res,
-            "Invalid Passport format for the specified country: " +
-              idCountryCode +
-              "!",
-            400,
-          );
-        }
-        break;
-    }
-
-    // Map role name to role_id
+    // Check the role validity
     if (updateData.role) {
-      const userrole = await UserRole.findOne({
-        name: { $regex: new RegExp(`^${updateData.role}$`, "i") },
-      });
-      if (userrole) {
-        updateData.role_id = userrole._id;
-      }
+      updateData.role_id = await validateUserRole(updateData.role, action);
       delete updateData.role;
     }
 
-    // Map department name to department_id
+    // Check the department validity
     if (updateData.department) {
-      const userdepartment = await Department.findOne({
-        name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
-      });
-      if (userdepartment) {
-        updateData.department_id = userdepartment._id;
-      }
+      updateData.department_id = await validateDepartment(
+        updateData.department,
+        action
+      );
       delete updateData.department;
     }
 
-    // Map supervisor name to supervisor_id
+    // Check the supervisor validity
     if (updateData.supervisor_full_name) {
-      const parts = updateData.supervisor_full_name.trim().split(/\s+/);
-      const sName = parts[0];
-      const sLastName = parts.slice(1).join(" ");
-
-      const supervisor = await User.findOne({
-        name: sName,
-        lastName: sLastName,
-      });
-      if (supervisor) {
-        updateData.supervisor_id = supervisor._id;
-      }
+      updateData.supervisor_id = await validateSupervisor(
+        updateData.supervisor_full_name,
+        action
+      );
       delete updateData.supervisor_full_name;
     }
 
-    // Map isActive boolean to status string
+    // Update the Status of the user
     if (updateData.isActive !== undefined) {
       updateData.status = updateData.isActive ? "Active" : "Inactive";
       delete updateData.isActive;
     }
 
+    // Update the user
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
     })
@@ -458,6 +441,7 @@ export const updateUser = async (req, res, next) => {
       .populate("department_id")
       .populate("supervisor_id");
 
+    // Create the audit log for this action
     await logAuditAction({
       adminId: req.user.id,
       action: "UPDATE_USER",
@@ -468,7 +452,7 @@ export const updateUser = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       status: "Success",
       message: "User updated successfully.",
       data: user,
@@ -1019,7 +1003,6 @@ export const resetFace = async (req, res, next) => {
   }
 };
 
-
 // --------------------------------------------------------------------------- //
 // ------------------------ TEAM MEMBERS MANAGEMENT -------------------------- //
 // --------------------------------------------------------------------------- //
@@ -1042,8 +1025,8 @@ export const getTeamMembers = async (req, res, next) => {
 
     // Find all team members of the supervisor
     const teamMembers = await User.find({ supervisor_id: id })
-      .populate("role_id", "name")   
-      .populate("department_id", "name"); 
+      .populate("role_id", "name")
+      .populate("department_id", "name");
 
     res.status(200).json({
       status: "Success",

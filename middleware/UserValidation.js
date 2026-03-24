@@ -1,4 +1,5 @@
 import { passportRules } from "./idRules.js";
+import AppError from "../utils/AppError.js";
 import pkg from "google-libphonenumber";
 const { PhoneNumberUtil, PhoneNumberFormat } = pkg;
 
@@ -9,14 +10,14 @@ const PNF = PhoneNumberFormat;
 export const isValidEmail = (email) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
-}
+};
 
 // Check if a field is empty (handles whitespace)
 export const isEmpty = (field) => {
   return !field || field.trim().length === 0;
-}
+};
 
-// Phone number validation 
+// Phone number validation
 export const validatePhoneNumber = (code, number) => {
   if (!number) return null;
   console.log(`[Phone-Validation-Start] Code: ${code}, Number: ${number}`);
@@ -30,10 +31,14 @@ export const validatePhoneNumber = (code, number) => {
 
     const nationalNumber = phoneNumber.getNationalNumber().toString();
     const digitCount = nationalNumber.length;
-    console.log(`[Phone-Validation-Process] National: ${nationalNumber}, Count: ${digitCount}`);
+    console.log(
+      `[Phone-Validation-Process] National: ${nationalNumber}, Count: ${digitCount}`,
+    );
 
     if (digitCount < 5 || digitCount > 15) {
-      console.warn(`[Phone-Validation-FAIL] Invalid digit count: ${digitCount}`);
+      console.warn(
+        `[Phone-Validation-FAIL] Invalid digit count: ${digitCount}`,
+      );
       return null;
     }
 
@@ -50,7 +55,7 @@ export const validatePhoneNumber = (code, number) => {
 export const validateCIN = (cin) => {
   const cinRegex = /^[0-1][0-9]{7}$/;
   return cinRegex.test(cin);
-}
+};
 
 // Passport validation based on country-specific rules
 export const validatePassport = (passportNumber, countryCode) => {
@@ -73,7 +78,7 @@ export const getPassportHint = (countryCode) => {
 export const isWithinRange = (str, min, max) => {
   if (!str) return true;
   return str.length >= min && str.length <= max;
-}
+};
 
 // Random Code Generator (Password or OTP code generation)
 export const generateRandomCode = (length = 8) => {
@@ -97,7 +102,46 @@ export const generateRandomCode = (length = 8) => {
   }
 
   // Shuffle the random part so the required chars aren't always at the start
-  const shuffledCode = randomCode.split('').sort(() => 0.5 - Math.random()).join('');
+  const shuffledCode = randomCode
+    .split("")
+    .sort(() => 0.5 - Math.random())
+    .join("");
 
   return shuffledCode;
-}
+};
+
+// Add/Update common user validation (These fields don't require DB checks)
+export const validateUserData = (data) => {
+  const {
+    name,
+    lastName,
+    trimmedEmail,
+    address,
+    position,
+    bonus,
+    bio,
+    hasChildren,
+    nbOfChildren,
+  } = data;
+
+  // Validate the field inputs
+  if (name && isEmpty(name)) throw new AppError("First name is required!", 400);
+
+  if (lastName && isEmpty(lastName)) throw new AppError("Last name is required!", 400);
+
+  if (address && isEmpty(address)) throw new AppError("Address is required!", 400);
+
+  if (position && isEmpty(position)) throw new AppError("Position is required!", 400);
+
+  if (trimmedEmail && !isValidEmail(trimmedEmail)) throw new AppError("Invalid Email Format!", 400);
+
+  if (bio && !isWithinRange(bio, 0, 500))
+    throw new AppError("Bio must be under 500 characters!", 400);
+
+  if (hasChildren && nbOfChildren <= 0)
+    throw new AppError("Please specify the number of children!", 400);
+  if (nbOfChildren && nbOfChildren < 0)
+    throw new AppError("Invalid Number of children!", 400);
+
+  if (bonus && bonus < 0) throw new AppError("Invalid Bonus value!", 400);
+};
