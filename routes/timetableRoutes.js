@@ -17,7 +17,7 @@ const router = express.Router();
  *     description: Endpoints for the Timetable (Shift Scheduling) CRUDs
  */ 
 
-// All users can see their own timetable, Admins/Supervisors can see others
+// All users can see their own timetable, Admin can see all timetables, Supervisor can see the timetable of the users they supervise
 /**
  * @swagger
  * /timetable/{userId}:
