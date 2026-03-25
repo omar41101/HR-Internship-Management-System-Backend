@@ -8,6 +8,28 @@ import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 
+
+// Creation of an express app
+const app = express();
+
+// Create HTTP server and attach Socket.io (mangage websocket connections)
+const httpServer = createServer(app);
+
+/**
+ * WHAT: Socket.io Instance
+ * WHY: This must be defined and exported BEFORE the routes are imported.
+ *      Controllers (like timetableController) import 'io' from server.js.
+ *      If routes are imported first, they trigger controller initialization 
+ *      before 'io' is ready, causing a crash.
+ */
+export const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
+  },
+});
+
+import errorHandler from "./middleware/errorHandler.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import UserRoleRoutes from "./routes/userRoleRoutes.js";
@@ -15,22 +37,10 @@ import departmentRoutes from "./routes/departmentRoutes.js";
 import auditLogRoutes from "./routes/auditLogRoutes.js";
 import timetableRoutes from "./routes/timetableRoutes.js";
 import attendanceRoutes from "./routes/attendanceRoutes.js";
-import testRoutes from "./routes/testRoutes.js";
-import errorHandler from "./middleware/errorHandler.js";
 import documentTypeRoutes from "./routes/documentTypeRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
+import testRoutes from "./routes/testRoutes.js";
 
-// Creation of an express app
-const app = express();
-
-// Create HTTP server and attach Socket.io (mangage websocket connections)
-const httpServer = createServer(app);
-export const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
 
 // Socket.io connection handler
 io.on("connection", (socket) => {

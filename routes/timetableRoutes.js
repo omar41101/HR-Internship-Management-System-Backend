@@ -4,6 +4,7 @@ import {
   updateTimetableEntry,
   bulkUpdateTimetableEntries,
   deleteTimetableEntry,
+  clearMonthTimetable,
 } from "../controllers/timetableController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -75,7 +76,7 @@ const router = express.Router();
 router.get(
   "/timetable/:userId",
   authenticate,
-  authorize(["Admin", "Supervisor"], { allowSelf: true }),
+  authorize(["Admin", "HR", "Supervisor"], { allowSelf: true }),
   getTimetableByUser
 );
 
@@ -135,7 +136,7 @@ router.get(
 router.put(
   "/timetable",
   authenticate,
-  authorize(["Admin"]),
+  authorize(["Admin", "HR"]),
   updateTimetableEntry
 );
 
@@ -190,7 +191,7 @@ router.put(
 router.put(
   "/timetable/bulk",
   authenticate,
-  authorize(["Admin"]),
+  authorize(["Admin", "HR"]),
   bulkUpdateTimetableEntries
 );
 
@@ -235,8 +236,48 @@ router.put(
 router.delete(
   "/timetable",
   authenticate,
-  authorize(["Admin"]),
+  authorize(["Admin", "HR"]),
   deleteTimetableEntry
+);
+
+/**
+ * @swagger
+ * /timetable/{userId}/{year}/{month}:
+ *   delete:
+ *     summary: Clear all timetable entries for a specific month
+ *     tags: 
+ *        - Timetable
+ *     description: Permanently delete all shift records for a user within a target month (Admin or HR only).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: year
+ *         required: true
+ *         schema: { type: integer }
+ *       - in: path
+ *         name: month
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Month cleared successfully
+ *       400:
+ *         description: Bad request
+ *       403:
+ *         description: Forbidden
+ *       500:
+ *         description: Server Error
+ */
+router.delete(
+  "/timetable/:userId/:year/:month",
+  authenticate,
+  authorize(["Admin", "HR"]),
+  clearMonthTimetable
 );
 
 export default router;

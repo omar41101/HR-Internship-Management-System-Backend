@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Timetable from "../models/Timetable.js";
 import AppError from "../utils/AppError.js";
+import { io } from "../server.js";
 
 // Get timetable (shifts) for a specific user
 export const getTimetableByUser = async (req, res, next) => {
@@ -71,6 +72,14 @@ export const updateTimetableEntry = async (req, res, next) => {
       { new: true, upsert: true, runValidators: true },
     );
 
+    /**
+     * WHAT: Real-time update broadcast
+     * WHY: Emitting this event allows the frontend to refresh the timetable 
+     *      instantly if the logged-in user's schedule is being edited by an admin.
+     *      Crucial for "Sync Admin Edits with User Personal Timetable" feature.
+     */
+    io.emit("timetableUpdated", { userId });
+
     res.status(200).json({
       status: "Success",
       message: "Timetable entry updated successfully!",
@@ -125,6 +134,9 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
       updatedShifts.push(shift);
     }
 
+    // Notify user of schedule change
+    io.emit("timetableUpdated", { userId });
+
     res.status(200).json({
       status: "Success",
       message: `${updatedShifts.length} timetable entries updated successfully!`,
@@ -161,9 +173,61 @@ export const deleteTimetableEntry = async (req, res, next) => {
 
     await Timetable.findOneAndDelete({ userId, date: normalizedDate });
 
+    // Notify user of schedule change
+    io.emit("timetableUpdated", { userId });
+
     res.status(200).json({
       status: "Success",
       message: "Timetable entry deleted successfully!",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Clear all shift records for a specific month (Admin/HR Only)
+export const clearMonthTimetable = async (req, res, next) => {
+  try {
+    const { userId, year: yearParam, month: monthParam } = req.params;
+
+    if (!userId || yearParam === undefined || monthParam === undefined) {
+      throw new AppError("Missing required parameters (userId, year, month)", 400);
+    }
+
+    const year = parseInt(yearParam);
+    const month = parseInt(monthParam);
+
+    if (isNaN(year) || isNaN(month) || month < 0 || month > 11) {
+      throw new AppError("Invalid year or month format", 400);
+    }
+
+    // Check the user existence
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
+
+    // Compute first and last day of the month
+    const startDate = new Date(year, month, 1);
+    const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
+
+    /**
+     * WHY deleteMany?
+     * This provides an atomic "wipe" of the month's schedule for a target user.
+     * The filter ensures we only affect the targeted user and time range.
+     */
+    const result = await Timetable.deleteMany({
+      userId,
+      date: { $gte: startDate, $lte: endDate },
+    });
+
+    // Notify user of schedule change
+    io.emit("timetableUpdated", { userId });
+
+    res.status(200).json({
+      status: "Success",
+      message: `${startDate.toLocaleString("default", { month: "long" })} timetable cleared successfully!`,
+      deletedCount: result.deletedCount,
     });
   } catch (err) {
     next(err);

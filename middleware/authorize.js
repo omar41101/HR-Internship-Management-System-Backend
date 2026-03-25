@@ -11,14 +11,16 @@ const authorize = (roles = [], options = {}) => {
         return next();
       }
 
-      // Determine the target ID (fallback to req.params.id if not explicitly set by previous middleware)
-      const targetId = req.targetUserId || req.params.id;
+      // Determine the target ID (fallback to req.params.id or req.params.userId if not explicitly set by previous middleware)
+      const targetId = req.targetUserId || req.params.id || req.params.userId;
 
       // Check if the user himself has self access
       if (options.allowSelf) {
         const tokenUserId = (user.id || user._id || "").toString();
         // Use either targetUserId overlay or the id from params
         const finalTargetId = (targetId || "").toString();
+
+        console.log(`[AUTH-DEBUG] TokenUserID: ${tokenUserId}, TargetID: ${finalTargetId}, Match: ${tokenUserId === finalTargetId}`);
 
         if (finalTargetId === "current" || tokenUserId === finalTargetId) {
           return next();

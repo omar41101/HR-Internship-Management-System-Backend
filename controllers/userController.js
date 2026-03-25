@@ -212,6 +212,13 @@ export const addUser = async (req, res, next) => {
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
+    // Backend Safety: Strict one-way association: Admin must be HR
+    const roleCheck = (role || "").toLowerCase();
+    const deptCheck = (department || "").toLowerCase();
+    if (roleCheck === "admin" && deptCheck !== "hr") {
+      return sendError(res, "Admin role must belong strictly to the HR department", 400);
+    }
+
     // Validate common field Inputs (Don't require DB checks)
     validateUserData({
       name,
@@ -448,6 +455,17 @@ export const updateUser = async (req, res, next) => {
     if (updateData.isActive !== undefined) {
       updateData.status = updateData.isActive ? "Active" : "Inactive";
       delete updateData.isActive;
+    }
+
+    // Backend Safety: Verify strict one-way combination of Admin Role -> HR Department before applying updates
+    const existingObj = await User.findById(id).populate("role_id").populate("department_id");
+    if (!existingObj) throw new AppError("User not found!", 404);
+
+    const finalRoleName = (newRoleName || existingObj.role_id?.name || "").toLowerCase();
+    const finalDeptName = (updateData.department_id ? (await Department.findById(updateData.department_id))?.name : existingObj.department_id?.name || "").toLowerCase();
+
+    if (finalRoleName === "admin" && finalDeptName !== "hr") {
+      return sendError(res, "Admin role must belong strictly to the HR department", 400);
     }
 
     // Update the user
