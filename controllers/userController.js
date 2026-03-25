@@ -426,12 +426,21 @@ export const updateUser = async (req, res, next) => {
       delete updateData.department;
     }
 
-    // Check the supervisor validity
-    if (updateData.supervisor_full_name) {
-      updateData.supervisor_id = await validateSupervisor(
-        updateData.supervisor_full_name,
-        action
-      );
+    // Check the supervisor validity and handle explicit unassigning
+    if ("supervisor_full_name" in req.body) {
+      const assignedName = req.body.supervisor_full_name;
+      if (!assignedName || assignedName === "Not assigned yet") {
+        /*
+          WHAT: Explicitly set supervisor_id to null when unassigned.
+          WHY: The frontend sends an empty string "" when "Not assigned yet" is picked.
+        */
+        updateData.supervisor_id = null;
+      } else {
+        updateData.supervisor_id = await validateSupervisor(
+          assignedName,
+          action
+        );
+      }
       delete updateData.supervisor_full_name;
     }
 

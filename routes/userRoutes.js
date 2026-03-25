@@ -148,7 +148,12 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *       500:
  *         description: Server error
  */
-router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
+/*
+ * WHAT: Added "Supervisor" to authorize list for GET /users.
+ * WHY: Supervisors need to read the user list to filter their team members in the Attendance view.
+ *      Write operations (POST/PUT/DELETE) remain Admin-only.
+ */
+router.get("/users", authenticate, authorize(["Admin", "Supervisor"]), getAllUsers);
 
 // Route to get active supervisors (Admin Only)
 /**
