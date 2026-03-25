@@ -64,7 +64,7 @@ export const login = async (req, res, next) => {
     // Check if status blocked or inactive
     validateUserStatus(user);
 
-    // Get the user role
+    // Get the user role (For the JWT token generation)
     const userRole = await UserRole.findById(user.role_id);
     if (!userRole) {
       throw new AppError("User role not found!", 404);
@@ -309,9 +309,11 @@ export const requestPasswordReset = async (req, res, next) => {
   try {
     const { email } = req.body;
 
+    // Check user existance
     const user = await User.findOne({ email: email.trim().toLowerCase() });
     if (!user) throw new AppError("User not found!", 404);
 
+    // Check if account status blocked or inactive
     validateUserStatus(user);
 
     // Generate a random unique token
@@ -327,6 +329,7 @@ export const requestPasswordReset = async (req, res, next) => {
     user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
     await user.save();
 
+    // Generate the password reset URL
     const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
 
     await sendEmail({
@@ -361,8 +364,10 @@ export const forgetPassword = async (req, res, next) => {
     if (!user)
       return sendError(res, "Invalid or Expired password reset token!");
 
+    // Check if account status blocked or inactive
     if (validateUserStatus(user, res)) return;
 
+    // Validate the new password
     if (isEmpty(newPassword)) return sendError(res, "Missing Password!");
 
     if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
@@ -372,6 +377,7 @@ export const forgetPassword = async (req, res, next) => {
       );
     }
 
+    // Hash the new password and reset the password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
     user.resetPasswordToken = null;
