@@ -57,7 +57,17 @@ export const getTimetableByUser = async (req, res, next) => {
   }
 };
 
-// Update or create a timetable entry (shift) for a user on a specific date
+// Add a new timetable entry (shift) for a user on a specific date (Admin only)
+export const addTimetableEntry = async (req, res, next) => {
+  try{
+
+  }
+  catch(err){
+    next(err);
+  }
+};
+
+// Update timetable entry (shift) for a user on a specific date
 export const updateTimetableEntry = async (req, res, next) => {
   try {
     const {
@@ -218,6 +228,16 @@ export const updateTimetableEntry = async (req, res, next) => {
       result: shift,
     });
   } catch (err) {
+    next(err);
+  }
+};
+
+// Add multiple timetable entries (shifts)
+export const addMultipleTimetableEntries = async (req, res, next) => {
+  try {
+    
+  }
+  catch(err){
     next(err);
   }
 };
@@ -414,11 +434,7 @@ export const clearMonthTimetable = async (req, res, next) => {
     const startDate = new Date(year, month, 1);
     const endDate = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-    /**
-     * WHY deleteMany?
-     * This provides an atomic "wipe" of the month's schedule for a target user.
-     * The filter ensures we only affect the targeted user and time range.
-     */
+    // Delete all timetable entries for the user within the specified month
     const result = await Timetable.deleteMany({
       userId,
       date: { $gte: startDate, $lte: endDate },
