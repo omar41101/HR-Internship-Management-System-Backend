@@ -13,19 +13,21 @@ const timetableSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: [
-        "Morning Shift",
-        "Evening Shift",
-        "Day Off",
-        "Special Shift",
-      ],
+      enum: ["Morning Shift", "Evening Shift", "Full-time Shift", "Day Off", "Special Shift"],
       required: true,
     },
     startTime: {
       // Shift Start time in HH:mm format
       type: String,
       required: function () {
+        // Start and end times are required for all shift types except "Day Off"
         return this.type !== "Day Off";
+      },
+      validate: {
+        validator: function (v) {
+          return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v); // Validates the HH:mm format
+        },
+        message: "The Start Time must be in HH:mm format",
       },
     },
     endTime: {
@@ -33,6 +35,12 @@ const timetableSchema = mongoose.Schema(
       type: String,
       required: function () {
         return this.type !== "Day Off";
+      },
+      validate: {
+        validator: function (v) {
+          return /^([01]\d|2[0-3]):([0-5]\d)$/.test(v); // Validates the HH:mm format
+        },
+        message: "The End Time must be in HH:mm format",
       },
     },
     gracePeriod: {
@@ -43,12 +51,12 @@ const timetableSchema = mongoose.Schema(
     location: {
       type: String,
       enum: ["Remote", "Onsite"],
-      required: true,
+      required: function () {
+        // Location is required for all shift types except "Day Off"
+        return this.type !== "Day Off";
+      },
     },
     color: {
-      type: String,
-    },
-    duration: {
       type: String,
     },
   },
@@ -57,10 +65,7 @@ const timetableSchema = mongoose.Schema(
   },
 );
 
-// Compound index to ensure multiple shifts per day but not the same shift type (This allows the 2 shifts for the full-time shift)
-timetableSchema.index(
-  { userId: 1, date: 1, type: 1 },
-  { unique: true }
-);
+// Compound index to ensure a single shift per day per user
+timetableSchema.index({ userId: 1, date: 1}, { unique: true });
 
 export default mongoose.model("Timetable", timetableSchema);

@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getTimetableByUser,
+  addTimetableEntry,
   updateTimetableEntry,
   bulkUpdateTimetableEntries,
   deleteTimetableEntry,
@@ -76,8 +77,16 @@ const router = express.Router();
 router.get(
   "/timetable/:userId",
   authenticate,
-  authorize(["Admin", "HR", "Supervisor"], { allowSelf: true }),
+  authorize(["Admin", "Supervisor"], { allowSelf: true }),
   getTimetableByUser
+);
+
+// Add a timetable entry (Admin Only)
+router.post(
+  "/timetable",
+  authenticate,
+  authorize(["Admin"]),
+  addTimetableEntry
 );
 
 // Update a timetable entry (Admin Only)
@@ -136,7 +145,7 @@ router.get(
 router.put(
   "/timetable",
   authenticate,
-  authorize(["Admin", "HR"]),
+  authorize(["Admin"]),
   updateTimetableEntry
 );
 
@@ -191,7 +200,7 @@ router.put(
 router.put(
   "/timetable/bulk",
   authenticate,
-  authorize(["Admin", "HR"]),
+  authorize(["Admin"]),
   bulkUpdateTimetableEntries
 );
 
@@ -236,7 +245,7 @@ router.put(
 router.delete(
   "/timetable",
   authenticate,
-  authorize(["Admin", "HR"]),
+  authorize(["Admin"]),
   deleteTimetableEntry
 );
 
@@ -276,7 +285,7 @@ router.delete(
 router.delete(
   "/timetable/:userId/:year/:month",
   authenticate,
-  authorize(["Admin", "HR"]),
+  authorize(["Admin"]),
   clearMonthTimetable
 );
 
