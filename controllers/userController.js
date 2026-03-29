@@ -570,16 +570,29 @@ export const getAllUsers = async (req, res, next) => {
     const {
       page = 1,
       limit = 10,
-      department,
-      role,
-      status,
-      search,
     } = req.query;
+
+    const parsedPage = parseInt(page); // The pages of users
+    const parsedLimit = Math.min(parseInt(limit), 10); // Limit of users per page (Max 10)
+
+    // Get total count for the frontend pagination 
+    const totalUsers = await User.countDocuments();
+
+    // Check the validity of the page number
+    if (parsedPage > Math.ceil(totalUsers / parsedLimit) || parsedPage < 1) {
+      return res.status(400).json({ 
+        status: "Error", 
+        message: "Invalid page number!" 
+      });
+    }
 
     const users = await User.find()
       .populate("role_id")
       .populate("department_id")
-      .populate("supervisor_id");
+      .populate("supervisor_id")
+      .skip((parsedPage - 1) * parsedLimit) // Skip the previous pages
+      .limit(parsedLimit)                   // 10 Users per page limit
+      .sort({ joinDate: -1 });              // Sort by the newest users first
 
     // Map users to a clean format
     const cleanUsers = users.map((user) => ({
@@ -618,7 +631,14 @@ export const getAllUsers = async (req, res, next) => {
         : null,
     }));
 
-    res.status(200).json(cleanUsers);
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: parsedLimit,
+      totalPages: Math.ceil(totalUsers / parsedLimit),
+      totalUsers,
+      users: cleanUsers,
+    });
   } catch (err) {
     next(err);
   }
