@@ -262,7 +262,7 @@ export const getTimetableByUser = async (req, res, next) => {
     }
 
     // Check if the id (if supervisor) is the user's supervisor id
-    if (user.supervisorId.toString() !== req.user._id.toString()) {
+    if (req.user.role === "Supervisor" && user.supervisor_id && user.supervisor_id !== req.user._id.toString()) {
       throw new AppError("Unauthorized!", 403);
     }
 
