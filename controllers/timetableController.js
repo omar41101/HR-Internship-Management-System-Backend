@@ -261,6 +261,11 @@ export const getTimetableByUser = async (req, res, next) => {
       throw new AppError("User not found", 404);
     }
 
+    // Check if the id (if supervisor) is the user's supervisor id
+    if (user.supervisorId.toString() !== req.user._id.toString()) {
+      throw new AppError("Unauthorized!", 403);
+    }
+
     let query = { userId };
 
     // If the client provided start and end dates, filter the timetable entries accordingly

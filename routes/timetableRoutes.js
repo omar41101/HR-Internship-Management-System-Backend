@@ -17,9 +17,133 @@ const router = express.Router();
  * tags:
  *   - name: Timetable
  *     description: Endpoints for the Timetable (Shift Scheduling) CRUDs
- */ 
+ */  
 
-// All users can see their own timetable, Admin can see all timetables, Supervisor can see the timetable of the users they supervise
+// Route to add a timetable entry (Admin Only)
+/**
+ * @swagger
+ * /timetable:
+ *   post:
+ *     summary: Add a timetable entry (Admin only)
+ *     tags: 
+ *       - Timetable
+ *     description: It allows an admin to create a new timetable entry for a user.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, date, type]
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               date:
+ *                 type: string
+ *                 format: date-time
+ *               type:
+ *                 type: string
+ *                 enum:
+ *                   - Morning Shift
+ *                   - Evening Shift
+ *                   - Full-time Shift
+ *                   - Day Off
+ *                   - Special Shift
+ *               location:
+ *                 type: string
+ *                 enum: [Remote, Onsite]
+ *               color:
+ *                 type: string
+ *               startTime:
+ *                 type: string
+ *                 example: "08:00"
+ *               endTime:
+ *                 type: string
+ *                 example: "16:00"
+ *     responses:
+ *       201:
+ *         description: Timetable entry created successfully
+ *       400:
+ *         description: Missing/Invalid fields | Duplicate timetable entry for the same date
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized (Admin only)
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server Error
+ */
+router.post(
+  "/timetable",
+  authenticate,
+  authorize(["Admin"]),
+  addTimetableEntry
+);
+
+// Route to update a timetable entry (Admin Only)
+/**
+ * @swagger
+ * /timetable:
+ *   put:
+ *     summary: Update a timetable entry (Admin only)
+ *     tags: 
+ *        - Timetable
+ *     description: It allows an admin to update an existing timetable entry for a user.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [userId, date, type, location]
+ *             properties:
+ *               userId:
+ *                 type: string
+ *               date:
+ *                 type: string
+ *                 format: date-time
+ *               type:
+ *                 type: string
+ *                 enum:
+ *                   - Morning Shift
+ *                   - Evening Shift
+ *                   - Full-time Shift
+ *                   - Day Off
+ *                   - Special Shift
+ *               location:
+ *                 type: string
+ *                 enum: [Remote, Onsite]
+ *               color:
+ *                 type: string
+ *               duration:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Timetable entry updated successfully
+ *       400: 
+ *         description: Missing/Invalid fields
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found | Timetable Entry not found
+ *       500:
+ *         description: Server Error
+ */
+router.put(
+  "/timetable",
+  authenticate,
+  authorize(["Admin"]),
+  updateTimetableEntry
+);
+
+// Route to get a user's timetable: All users can see their own timetable, Admin can see all timetables, Supervisor can see the timetable of the users they supervise
 /**
  * @swagger
  * /timetable/{userId}:
@@ -27,7 +151,7 @@ const router = express.Router();
  *     summary: Get a timetable for a specific user
  *     tags: 
  *        - Timetable
- *     description: Retrieve the timetable for a specific user. Admins and Supervisors can access any user's timetable, while regular users can only access their own.
+ *     description: It allows to retrieve the timetable for a specific user. Admins can access any user's timetable, Supervisors can access the timetable of the users they supervise, while regular users can only access their own.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -63,8 +187,6 @@ const router = express.Router();
  *                   type: array
  *                   items:
  *                     $ref: '#/components/schemas/Timetable'
- *       400:
- *         description: Bad request (e.g., invalid userId format)
  *       401:
  *         description: Missing/Invalid token
  *       403:
@@ -81,83 +203,15 @@ router.get(
   getTimetableByUser
 );
 
-// Add a timetable entry (Admin Only)
-router.post(
-  "/timetable",
-  authenticate,
-  authorize(["Admin"]),
-  addTimetableEntry
-);
-
-// Update a timetable entry (Admin Only)
-/**
- * @swagger
- * /timetable:
- *   put:
- *     summary: Update or create a timetable entry
- *     tags: 
- *        - Timetable
- *     description: Update or create a timetable entry for a user (Admin only).
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [userId, date, type, location]
- *             properties:
- *               userId:
- *                 type: string
- *               date:
- *                 type: string
- *                 format: date-time
- *               type:
- *                 type: string
- *                 enum:
- *                   - Morning Shift
- *                   - Evening Shift
- *                   - Full-time Shift
- *                   - Day Off
- *                   - Special Shift
- *               location:
- *                 type: string
- *                 enum: [Remote, Onsite]
- *               color:
- *                 type: string
- *               duration:
- *                 type: string
- *     responses:
- *       200:
- *         description: Timetable entry updated successfully
- *       400: 
- *         description: Bad request (e.g., missing required fields, invalid userId format)
- *       401:
- *         description: Missing/Invalid token
- *       403:
- *         description: Unauthorized (only Admins can update timetable entries)
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
-router.put(
-  "/timetable",
-  authenticate,
-  authorize(["Admin"]),
-  updateTimetableEntry
-);
-
-// Bulk update timetable entries
+// Route to bulk update timetable entries
 /**
  * @swagger
  * /timetable/bulk:
  *   put:
- *     summary: Bulk update or create timetable entries
+ *     summary: Bulk update or create timetable entries (Admin only)
  *     tags: 
  *        - Timetable
- *     description: Bulk update or create multiple timetable entries at the same time for a user (Admin only).
+ *     description: It allows an admin to bulk update or create multiple timetable entries at the same time for a user.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -187,11 +241,11 @@ router.put(
  *       200:
  *         description: Bulk updated successfully
  *       400:
- *         description: Bad request (e.g., missing required fields, invalid userId format)
+ *         description: Missing/Invalid fields
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (only Admins can bulk update timetable entries)
+ *         description: Unauthorized
  *       404:
  *         description: User not found
  *       500:
@@ -204,15 +258,15 @@ router.put(
   bulkUpdateTimetableEntries
 );
 
-// Only Admin can delete timetable entries
+// Route to delete a timetable entry (Admin Only)
 /**
  * @swagger
  * /timetable:
  *   delete:
- *     summary: Delete a timetable entry
+ *     summary: Delete a timetable entry (Admin only)
  *     tags: 
  *        - Timetable
- *     description: Delete a specific timetable entry for a user (Admin only).
+ *     description: It allows an admin to delete a specific timetable entry for a user.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -232,13 +286,13 @@ router.put(
  *       200:
  *         description: Timetable entry deleted successfully
  *       400:
- *         description: Bad request (e.g., missing required fields, invalid userId format)
+ *         description: Missing required fields
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (only Admins can delete timetable entries)
+ *         description: Unauthorized
  *       404:
- *         description: User or timetable entry not found
+ *         description: User not found | Timetable Entry not found
  *       500:
  *         description: Server Error
  */
@@ -249,14 +303,15 @@ router.delete(
   deleteTimetableEntry
 );
 
+// Route to clear all timetable entries for a specific month and year (Admin Only)
 /**
  * @swagger
  * /timetable/{userId}/{year}/{month}:
  *   delete:
- *     summary: Clear all timetable entries for a specific month
+ *     summary: Clear all timetable entries for a specific month (Admin only)
  *     tags: 
  *        - Timetable
- *     description: Permanently delete all shift records for a user within a target month (Admin or HR only).
+ *     description: It allows an admin to permanently delete all shift records for a user within a target month.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -276,9 +331,13 @@ router.delete(
  *       200:
  *         description: Month cleared successfully
  *       400:
- *         description: Bad request
+ *         description: Missing/Invalid fields
+ *       401:
+ *         description: Missing/Invalid token
  *       403:
- *         description: Forbidden
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
  *       500:
  *         description: Server Error
  */
