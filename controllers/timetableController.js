@@ -251,9 +251,9 @@ export const updateTimetableEntry = async (req, res, next) => {
 
 // Get timetable (shifts) for a specific user
 export const getTimetableByUser = async (req, res, next) => {
-  try {
+  try { 
     const { userId } = req.params; // Get userId from URL parameters
-    const { start, end } = req.query; // Optional query parameters for date range filtering
+    const { month, year } = req.query; // Month and year filtering (Pagination)
 
     // Check the user existance
     const user = await User.findById(userId);
@@ -266,28 +266,30 @@ export const getTimetableByUser = async (req, res, next) => {
       throw new AppError("Unauthorized!", 403);
     }
 
-    let query = { userId };
+    // Pagination of shifts  by month and year (Default: current month timetable)
+    const now = new Date();
+    const queryMonth = month ? Number(month) : now.getUTCMonth() + 1;
+    const queryYear = year ? Number(year) : now.getUTCFullYear();
 
-    // If the client provided start and end dates, filter the timetable entries accordingly
-    if (start && end) {
-      const startDate = new Date(start);
-      startDate.setUTCHours(0, 0, 0, 0);
+    // Calculate the first and last day of the month 
+    const startDate = new Date(Date.UTC(queryYear, queryMonth - 1, 1));
+    const endDate = new Date(Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999));
 
-      const endDate = new Date(end);
-      endDate.setUTCHours(23, 59, 59, 999);
-
-      query.date = {
-        $gte: startDate,
-        $lte: endDate,
-      };
-    }
-
-    const shifts = await Timetable.find(query).sort({ date: 1 }); // date: 1: oldest to latest shifts
+    // Find all shifts for the user within the specified month
+    const shifts = await Timetable.find({
+      userId,
+      date: { $gte: startDate, $lte: endDate },
+    }).sort({ date: 1 });
 
     res.status(200).json({
       status: "Success",
       message: "Timetable fetched successfully!",
       result: shifts,
+      meta: {
+        month: queryMonth,
+        year: queryYear,
+        total: shifts.length,
+      },
     });
   } catch (err) {
     next(err);

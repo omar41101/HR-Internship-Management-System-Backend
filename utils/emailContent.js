@@ -3,23 +3,28 @@
 // Email of adding a new user
 export const getAddUserContent = ({ name, password, code }) => {
   return `
-    <h2 style="color: #101D42;">Welcome to HRcoM!</h2>
+    <h2 style="color: #232ED1;">Welcome to HRcoM!</h2>
 
     <p>Dear ${name},</p>
-    <p>We are truly excited to have you on board among us in HRcoM!</p>
-    <p>Your account has been created successfully! Please use the following credentials to login:</p>
-    <p><strong style="color: #101D42;">Password:</strong> ${password}</p>
-    <p><strong style="color: #101D42;">OTP Code:</strong> ${code}</p>
     <p>
-      <strong style="color: #101D42;">Platform URL:</strong> 
-      <a href=${process.env.PLATFORM_URL} target="_blank">HRcoM Platform</a>
+      We are truly excited to have you on board among us in HRcoM!
+    </p>
+
+    <p> 
+      Your account has been created successfully! Please use the following credentials to login:
+      <strong> Password: </strong> ${password} </br>
+      <strong> OTP Code: </strong> ${code} </br>
+      <strong>Platform URL:</strong> 
+      <a href=${process.env.PLATFORM_URL} target="_blank" style="color: #232ED1; text-decoration: underline; text-align: center; font-weight: bold;">
+        HRcoM Platform
+      </a>
     </p>
 
     <p> <strong> Please note that for security reasons, this verification code will expire in 24 hours! </strong> </p>
   
     <p> <strong> Next Steps: </strong> </p>
     <p> 
-      1. Go to the HRcoM platform. </br>
+      1. Go to the HRcoM platform via the link above. </br>
       2. Log in using your email and the temporary password provided above. </br>
       3. Enter the verification code when prompted to activate your account. </br>
       4. Reset your password. </br>
@@ -29,13 +34,15 @@ export const getAddUserContent = ({ name, password, code }) => {
     <p>
       - Do not share this email or your credentials with anyone. </br>
     </p>
+
+    <p> <strong> We are glad to have you on board and look forward to achieving great things together! </strong> </p>
   `;
 };
 
 // Email of updating an existing user if the role is changed
 export const getUpdateUserContent = ({ name, newRole }) => {
   return `
-    <h2 style="color: #101D42;">Role Update Notification!</h2>
+    <h2 style="color: #232ED1;">Role Update Notification!</h2>
 
     <p>Dear ${name},</p>
     <p>
@@ -53,12 +60,12 @@ export const getUpdateUserContent = ({ name, newRole }) => {
 // Email of resending OTP code
 export const getResendOTPContent = ({ name, code }) => {
   return `
-    <h2 style="color: #101D42;">OTP Code Sending request!</h2>
+    <h2 style="color: #232ED1;">OTP Code Sending request!</h2>
 
     <p> Dear ${name},</p>
     <p>You requested a new verification code to activate your HRcoM account.</p>
     <p>Your new verification code is:</p>
-    <p><strong style="color: #101D42;">OTP Code: </strong> ${code}</p>
+    <p><strong style="color: #232ED1;">OTP Code: </strong> ${code}</p>
 
     Please note that this code will expire in 24 hours!
   `;
@@ -67,7 +74,7 @@ export const getResendOTPContent = ({ name, code }) => {
 // Email of forget password validation link
 export const getForgetPasswordValidationContent = ({ name, resetLink }) => {
   return `
-    <h2 style="color: #101D42;">Password Reset Request!</h2>
+    <h2 style="color: #232ED1;">Password Reset Request!</h2>
 
     <p> Dear ${name},</p>
     <p>You requested a password reset for your HRcoM account.</p>
