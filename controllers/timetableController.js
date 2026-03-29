@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Timetable from "../models/Timetable.js";
 import AppError from "../utils/AppError.js";
+import mongoose from "mongoose";
 import { io } from "../server.js";
 
 // -------------------------------------------------------------------- //
@@ -262,7 +263,7 @@ export const getTimetableByUser = async (req, res, next) => {
     }
 
     // Check if the id (if supervisor) is the user's supervisor id
-    if (req.user.role === "Supervisor" && user.supervisor_id && user.supervisor_id !== req.user._id.toString()) {
+    if (req.user.role === "Supervisor" && (user.supervisor_id && !user.supervisor_id.equals(new mongoose.Types.ObjectId(req.user.id)))) {
       throw new AppError("Unauthorized!", 403);
     }
 
