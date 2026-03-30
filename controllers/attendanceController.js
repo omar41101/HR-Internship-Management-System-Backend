@@ -139,8 +139,19 @@ export const getMyStatus = async (req, res, next) => {
 // Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {
   try {
-    const { userId, startDate, endDate, status, role, department, search } =
-      req.query;
+    const { userId, 
+      startDate, 
+      endDate, 
+      status, 
+      role, 
+      department, 
+      search,
+      page = 1, 
+    } = req.query;
+
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+    const limit = 10;
+
     const filter = {}; // Allow filtering
 
     // Check for user existance if userId is provided
@@ -212,10 +223,23 @@ export const getAttendance = async (req, res, next) => {
       );
     }
 
+    // Total records after filtering for the frontend
+    const totalRecords = attendanceRecords.length;
+
+    // Get the paginated records
+    const paginatedRecords = attendanceRecords.slice(
+      (parsedPage - 1) * limit,
+      parsedPage * limit
+    );
+
     res.status(200).json({
       status: "success",
-      results: attendanceRecords.length,
-      result: attendanceRecords,
+      page: parsedPage,
+      limit: limit,
+      totalRecords,
+      totalPages: Math.ceil(totalRecords / limit),
+      results: paginatedRecords.length,
+      result: paginatedRecords,
     });
   } catch (error) {
     next(error);
