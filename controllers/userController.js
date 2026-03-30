@@ -1178,7 +1178,11 @@ export const resetFace = async (req, res, next) => {
 // Get team members under a supervisor (Supervisor and Admin)
 export const getTeamMembers = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { id } = req.params; // Supervisor ID
+    const { page = 1} = req.query;
+
+    const limit = 10; // 10 team members per page
+    const parsedPage = Math.max(parseInt(page), 1);
 
     // Check if the user exists
     const existingUser = await User.findById(id);
@@ -1191,13 +1195,26 @@ export const getTeamMembers = async (req, res, next) => {
       return sendError(res, "Unauthorized access to this team!", 403);
     }
 
-    // Find all team members of the supervisor
-    const teamMembers = await User.find({ supervisor_id: id })
+    // Build the query
+    const query = { supervisor_id: id };
+
+    // Count the total team members
+    const totalMembers = await User.countDocuments(query);
+
+    // Find the paginated list of team members of the supervisor (10 per page)
+    const teamMembers = await User.find(query)
       .populate("role_id", "name")
-      .populate("department_id", "name");
+      .populate("department_id", "name")
+      .skip((parsedPage - 1) * limit)
+      .limit(limit)
+      .sort({ joinDate: -1 });
 
     res.status(200).json({
       status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalMembers / limit),
+      totalMembers,
       data: teamMembers,
     });
   } catch (err) {
