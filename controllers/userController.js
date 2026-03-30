@@ -354,6 +354,10 @@ export const updateUser = async (req, res, next) => {
     const updateData = { ...req.body };
     const action = "UPDATE";
 
+    // Check the user existence
+    const existingUser = await User.findById(id);
+    if (!existingUser) throw new AppError("User not found!", 404);
+
     // Check the email validity and the user existence
     if (updateData.email) {
       const trimmedEmail = updateData.email.trim().toLowerCase();
@@ -412,16 +416,26 @@ export const updateUser = async (req, res, next) => {
 
     // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)
     let roleChanged = false;
-    let newRoleName = null;
+    let newRoleId = null;
+    let newRoleName = "";
 
-    if (updateData.role) {
+    // Get the id of the old role
+    const oldRoleId = existingUser.role_id;
+
+    if (updateData.role) {      
       // Validate the new role and get its ID
-      updateData.role_id = await validateUserRole(updateData.role, action);
+      newRoleId = await validateUserRole(updateData.role, action);
 
-      roleChanged = true;
-      newRoleName = updateData.role;
+      // Check if the role is changed
+      if (!oldRoleId.equals(newRoleId)) {
+        roleChanged = true;
 
-      delete updateData.role; 
+        const roleDoc = await UserRole.findById(newRoleId).select("name");
+        newRoleName = roleDoc?.name || "";
+        updateData.role_id = newRoleId;
+      }
+
+      delete updateData.role;
     }
 
     // Check the department validity
@@ -437,10 +451,6 @@ export const updateUser = async (req, res, next) => {
     if ("supervisor_full_name" in req.body) {
       const assignedName = req.body.supervisor_full_name;
       if (!assignedName || assignedName === "Not assigned yet") {
-        /*
-          WHAT: Explicitly set supervisor_id to null when unassigned.
-          WHY: The frontend sends an empty string "" when "Not assigned yet" is picked.
-        */
         updateData.supervisor_id = null;
       } else {
         updateData.supervisor_id = await validateSupervisor(
@@ -455,17 +465,6 @@ export const updateUser = async (req, res, next) => {
     if (updateData.isActive !== undefined) {
       updateData.status = updateData.isActive ? "Active" : "Inactive";
       delete updateData.isActive;
-    }
-
-    // Backend Safety: Verify strict one-way combination of Admin Role -> HR Department before applying updates
-    const existingObj = await User.findById(id).populate("role_id").populate("department_id");
-    if (!existingObj) throw new AppError("User not found!", 404);
-
-    const finalRoleName = (newRoleName || existingObj.role_id?.name || "").toLowerCase();
-    const finalDeptName = (updateData.department_id ? (await Department.findById(updateData.department_id))?.name : existingObj.department_id?.name || "").toLowerCase();
-
-    if (finalRoleName === "admin" && finalDeptName !== "hr") {
-      return sendError(res, "Admin role must belong strictly to the HR department", 400);
     }
 
     // Update the user
@@ -569,17 +568,16 @@ export const getAllUsers = async (req, res, next) => {
   try {
     const {
       page = 1,
-      limit = 10,
     } = req.query;
 
+    const limit = 10;
     const parsedPage = parseInt(page); // The pages of users
-    const parsedLimit = Math.min(parseInt(limit), 10); // Limit of users per page (Max 10)
 
     // Get total count for the frontend pagination 
     const totalUsers = await User.countDocuments();
 
     // Check the validity of the page number
-    if (parsedPage > Math.ceil(totalUsers / parsedLimit) || parsedPage < 1) {
+    if (parsedPage > Math.ceil(totalUsers / limit) || parsedPage < 1) {
       return res.status(400).json({ 
         status: "Error", 
         message: "Invalid page number!" 
@@ -590,9 +588,9 @@ export const getAllUsers = async (req, res, next) => {
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id")
-      .skip((parsedPage - 1) * parsedLimit) // Skip the previous pages
-      .limit(parsedLimit)                   // 10 Users per page limit
-      .sort({ joinDate: -1 });              // Sort by the newest users first
+      .sort({ joinDate: -1 })         // Sort by the newest users first
+      .skip((parsedPage - 1) * limit) // Skip the previous pages
+      .limit(limit);                  // 10 Users per page limit
 
     // Map users to a clean format
     const cleanUsers = users.map((user) => ({
@@ -634,8 +632,8 @@ export const getAllUsers = async (req, res, next) => {
     res.status(200).json({
       status: "Success",
       page: parsedPage,
-      limit: parsedLimit,
-      totalPages: Math.ceil(totalUsers / parsedLimit),
+      limit: limit,
+      totalPages: Math.ceil(totalUsers / limit),
       totalUsers,
       users: cleanUsers,
     });
@@ -694,21 +692,43 @@ export const getUserById = async (req, res, next) => {
 export const searchUser = async (req, res, next) => {
   try {
     // The user query (Search by name/lastname and email)
-    const { q } = req.query;
+    const { q = "", page = 1} = req.query;
 
-    // Search
-    const users = await User.find({
+    const limit = 10; // 10 users per page max
+    const parsedPage = Math.max(parseInt(page), 1); 
+
+    // Build the search query
+    const query = {
       $or: [
         { name: { $regex: q, $options: "i" } },
         { lastName: { $regex: q, $options: "i" } },
         { email: { $regex: q, $options: "i" } },
       ],
-    })
+    };
+
+    // Count the total users of the search query for pagination purposes
+    const totalUsers = await User.countDocuments(query);
+
+    // Fetch the paginated users
+    const users = await User.find(query)
       .populate("role_id")
       .populate("department_id")
-      .populate("supervisor_id", "name lastName email"); // To get the role, department and supervisor names in the response
+      .populate("supervisor_id", "name lastName email")
+      .skip((parsedPage - 1) * limit) // Skip the previous pages
+      .limit(limit)
+      .sort({ joinDate: -1 }); // Sort by the newest users first
+    
 
-    res.status(200).json(users);
+    res.status(200).json({
+      status: "Success",
+      message: "User Search results",
+      result: users,
+      meta: {
+        page: parsedPage,
+        totalPages: Math.ceil(totalUsers / limit),
+        totalUsers,
+      }
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -720,7 +740,10 @@ export const searchUser = async (req, res, next) => {
 // Filter users by Role, Department or status (only for Admins)
 export const filterUsers = async (req, res, next) => {
   try {
-    const { role, department, status } = req.query; // Get the filters wanted
+    const { role, department, status, page = 1 } = req.query; // Get the filters wanted
+
+    const limit = 10; // 10 users per page maximum
+    const parsedPage = Math.max(parseInt(page), 1); 
 
     let roleId, departmentId;
 
@@ -751,20 +774,33 @@ export const filterUsers = async (req, res, next) => {
     if (roleId) query.role_id = roleId;
     if (departmentId) query.department_id = departmentId;
     if (status) {
-      if (status === "Active") query.status = "Active";
-      else if (status === "Inactive") query.status = "Inactive";
-      else if (status === "Blocked") query.status = "Blocked";
-      else if (status === "Pending") query.status = "Pending";
+      const allowedStatus = ["Active", "Inactive", "Blocked", "Pending"];
+      if (!allowedStatus.includes(status)) {
+        return sendError(res, "Invalid status!");
+      }
+      query.status = status;
     }
 
-    // Execute query and populate relevant fields
+    // Count the total filtered users
+    const totalUsers = await User.countDocuments(query);
+
+    // Fetch the paginated filtered users
     const users = await User.find(query)
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id", "name lastName email")
+      .skip((parsedPage - 1) * limit)
+      .limit(limit)
       .lean(); // Convert to plain JSON for the frontend later
 
-    res.status(200).json({ status: "Success", data: users });
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalUsers / limit),
+      totalUsers,
+      data: users,
+    });
   } catch (err) {
     return handleError(res, err);
   }
