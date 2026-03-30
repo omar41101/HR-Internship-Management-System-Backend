@@ -1,10 +1,6 @@
 import AuditLog from "../models/AuditLog.js";
 
-/**
- * @desc    Helper to format audit logs for the frontend
- * @param   {Object} log - The raw lean AuditLog document
- * @returns {Object} Formatted log object
- */
+// Format Audit logs for the frontend
 const formatAuditLog = (log) => {
   let description = "";
 
@@ -72,9 +68,7 @@ const formatAuditLog = (log) => {
   };
 };
 
-// @desc    Get recent audit logs
-// @route   GET /api/audit-logs/recent
-// @access  Private (Admin/HR)
+// Get the 5 most recent audit logs
 export const getRecentAuditLogs = async (req, res, next) => {
   try {
     // Fetch the 5 most recent audit logs
@@ -93,20 +87,24 @@ export const getRecentAuditLogs = async (req, res, next) => {
   }
 };
 
-// @desc    Get all audit logs with pagination and filters
-// @route   GET /api/audit-logs
-// @access  Private (Admin/HR)
+// Get all audit logs with pagination and filters
 export const getAllAuditLogs = async (req, res, next) => {
   try {
     const {
       page = 1,
-      limit = 20,
       search,
       admin,
       action,
       startDate,
       endDate,
     } = req.query;
+
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+    const limit = 20;
+    
+    // Calculate how many documents to skip based on the current page and limit
+    const skip = (parsedPage - 1) * limit;
+
     const query = {};
 
     // Filter by specific Admin name/ID
@@ -124,7 +122,9 @@ export const getAllAuditLogs = async (req, res, next) => {
     // Date Range
     if (startDate || endDate) {
       query.createdAt = {};
+      
       if (startDate) query.createdAt.$gte = new Date(startDate);
+      
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
@@ -141,26 +141,28 @@ export const getAllAuditLogs = async (req, res, next) => {
       ];
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
+    // Fetch logs and total count for pagination
     const [logs, total] = await Promise.all([
       AuditLog.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit))
+        .limit(limit)
         .populate("admin_id", "name lastName email")
         .lean(),
-      AuditLog.countDocuments(query),
+      
+        AuditLog.countDocuments(query),
     ]);
 
     // Format similarly to recent logs
     const formattedLogs = logs.map(formatAuditLog);
 
     res.status(200).json({
-      logs: formattedLogs,
+      status: "Success",
       total,
-      page: parseInt(page),
+      page: parsedPage,
+      limit: limit,
       pages: Math.ceil(total / parseInt(limit)),
+      logs: formattedLogs,
     });
   } catch (error) {
     next(error);
