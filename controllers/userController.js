@@ -576,14 +576,6 @@ export const getAllUsers = async (req, res, next) => {
     // Get total count for the frontend pagination 
     const totalUsers = await User.countDocuments();
 
-    // Check the validity of the page number
-    if (parsedPage > Math.ceil(totalUsers / limit) || parsedPage < 1) {
-      return res.status(400).json({ 
-        status: "Error", 
-        message: "Invalid page number!" 
-      });
-    }
-
     const users = await User.find()
       .populate("role_id")
       .populate("department_id")

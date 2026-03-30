@@ -224,6 +224,13 @@ export const getAllPersonalDocuments = async (req, res, next) => {
     // Get the Owner of docs's Id
     const targetUserId = req.params.id;
 
+    const { page = 1 } = req.query;
+
+    const limit = 5; // 5 personal documents per page
+    const parsedPage = Math.max(parseInt(page), 1);
+    
+    const skip = (parsedPage - 1) * limit;
+
     // Check the user's existance
     const user = await User.findById(targetUserId);
     if (!user) throw new AppError("User not found!", 404);
@@ -231,14 +238,28 @@ export const getAllPersonalDocuments = async (req, res, next) => {
     // Get the Personal document type object
     const personalType = await checkPersonalTypeExistence();
 
-    // Get the list of documents
-    const documents = await Document.find({
+    // Build the query to fetch all personal documents of the user
+    const query = {
       user_id: targetUserId,
       documentType_id: personalType._id,
-    }).select("-filePublicId -fileHash"); // Exclude sensitive fields
+    };
+
+    // Get the total documents count
+    const totalDocuments = await Document.countDocuments(query);
+
+    // Fetch the paginated documents
+    const documents = await Document.find(query)
+      .select("-filePublicId -fileHash")
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalDocuments,
+      totalPages: Math.ceil(totalDocuments / limit),
       documents,
     });
   } catch (err) {
@@ -252,6 +273,13 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
     // Get the owner Id
     const targetUserId = req.params.id;
 
+    const { page = 1 } = req.query;
+
+    const limit = 5; // 5 non-confidential personal documents per page
+    const parsedPage = Math.max(parseInt(page), 1);
+
+    const skip = (parsedPage - 1) * limit;
+
     // Check the user's existance
     const user = await User.findById(targetUserId);
     if (!user) throw new AppError("User not found!", 404);
@@ -259,15 +287,29 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
     // Get the Personal document type object
     const personalType = await checkPersonalTypeExistence();
 
-    // Get the list of non-confidential documents
-    const documents = await Document.find({
+    // Build the query
+    const query = {
       user_id: targetUserId,
       documentType_id: personalType._id,
       isConfidential: false,
-    }).select("-filePublicId -fileHash"); // Exclude sensitive fields
+    };
+
+    // Count the total non-confidential personal documents
+    const totalDocuments = await Document.countDocuments(query);
+
+    // Fetch the list of non-confidential documents
+    const documents = await Document.find(query)
+      .select("-filePublicId -fileHash")
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 });
 
     res.status(200).json({
       status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalDocuments,
+      totalPages: Math.ceil(totalDocuments / limit),
       documents,
     });
   } catch (err) {
