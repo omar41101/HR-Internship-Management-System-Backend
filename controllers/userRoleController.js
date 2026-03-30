@@ -58,7 +58,7 @@ export const getAllUserRoles = async (req, res, next) => {
 
     const skip = (parsedPage - 1) * limit; 
 
-    // Get the total roles count
+    // Get the total roles 
     const totalRoles = await UserRole.countDocuments();
 
     // Fetch the paginated roles
