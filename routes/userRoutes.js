@@ -5,6 +5,7 @@ import {
   deleteUser,
   getAllUsers,
   getActiveSupervisors,
+  getRecentSupervisors,
   getUserById,
   searchUser,
   filterUsers,
@@ -148,11 +149,6 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *       500:
  *         description: Server error
  */
-/*
- * WHAT: Added "Supervisor" to authorize list for GET /users.
- * WHY: Supervisors need to read the user list to filter their team members in the Attendance view.
- *      Write operations (POST/PUT/DELETE) remain Admin-only.
- */
 router.get("/users", authenticate, authorize(["Admin", "Supervisor"]), getAllUsers);
 
 // Route to get active supervisors (Admin Only)
@@ -173,6 +169,9 @@ router.get("/users", authenticate, authorize(["Admin", "Supervisor"]), getAllUse
  *    description: Server error
  * */
 router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisors);
+
+// Route to get the 3 recent supervisors (Admin Only)
+router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getRecentSupervisors);
 
 // Route to get user by ID (Admin, the user himself and his supervisor)
 /**
@@ -202,7 +201,6 @@ router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getA
 router.get(
   "/users/:id",
   authenticate,
-  authorize(["Admin"], { allowSelf: true, allowSupervisor: true }),
   getUserById
 );
 

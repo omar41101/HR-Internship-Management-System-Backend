@@ -11,7 +11,7 @@ export const getAddUserContent = ({ name, password, code }) => {
     </p>
 
     <p> 
-      Your account has been created successfully! Please use the following credentials to login:
+      Your account has been created successfully! Please use the following credentials to login: </br>
       <strong> Password: </strong> ${password} </br>
       <strong> OTP Code: </strong> ${code} </br>
       <strong>Platform URL:</strong> 

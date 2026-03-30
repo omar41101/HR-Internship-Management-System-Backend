@@ -645,16 +645,69 @@ export const getAllUsers = async (req, res, next) => {
 // Get available active supervisors (Admin only)
 export const getActiveSupervisors = async (req, res, next) => {
   try {
-    // Get the Supervisor role ID
-    const supervisorRoleId = await UserRole.findOne({
-      name: "Supervisor",
-    }).select("_id");
+    let { page = 1 } = req.query;
 
-    // Search available active supervisors
+    const limit = 10;
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+
+    // Get the Supervisor role ID
+    const supervisorRole = await UserRole.findOne({ name: "Supervisor" }).select("_id");
+    if (!supervisorRole) {
+      return res.status(404).json({ 
+        status: "Error",
+        message: "Supervisor role not found!" 
+      });
+    }
+
+    // Count the total active supervisors
+    const totalSupervisors = await User.countDocuments({
+      status: "Active",
+      role_id: supervisorRole._id,
+    });
+
+    // Fetch the paginated supervisors (10 per page)
     const supervisors = await User.find({
       status: "Active",
-      role_id: supervisorRoleId,
-    }).select("name lastName email");
+      role_id: supervisorRole._id,
+    })
+      .select("name lastName email")
+      .skip((parsedPage - 1) * limit)
+      .limit(limit)
+      .sort({ name: 1 }); 
+
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalSupervisors / limit),
+      totalSupervisors,
+      data: supervisors,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get the 3 recent supervisors (For the dropdown in the Edit/update user form)
+export const getRecentSupervisors = async (req, res, next) => {
+  try {
+    // Get Supervisor role ID
+    const supervisorRole = await UserRole.findOne({ name: "Supervisor" }).select("_id");
+    if (!supervisorRole) {
+      return res.status(404).json({ 
+        status: "Error", 
+        message: "Supervisor role not found!" 
+      });
+    }
+
+    // Find the 3 most recent active supervisors
+    const supervisors = await User.find({
+      role_id: supervisorRole._id,
+      status: "Active",
+    })
+      .select("name lastName email")
+      .sort({ joinDate: -1 }) // Get the newest supervisors first
+      .limit(3); // Limit to only 3 supervisors
 
     res.status(200).json({
       status: "Success",
