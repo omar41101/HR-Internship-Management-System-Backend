@@ -627,16 +627,20 @@ export const getAllUsers = async (req, res, next) => {
 // Get available active supervisors (Admin only)
 export const getActiveSupervisors = async (req, res, next) => {
   try {
-    // Get the Supervisor role ID
-    const supervisorRoleId = await UserRole.findOne({
-      name: "Supervisor",
+    // Get the Supervisor role ID dynamically (case-insensitive)
+    const supervisorRole = await UserRole.findOne({
+      name: { $regex: "^supervisor$", $options: "i" }
     }).select("_id");
+
+    if (!supervisorRole) {
+      return res.status(200).json({ status: "Success", data: [] });
+    }
 
     // Search available active supervisors
     const supervisors = await User.find({
-      status: "Active",
-      role_id: supervisorRoleId,
-    }).select("name lastName email");
+      status: { $regex: "^active$", $options: "i" },
+      role_id: supervisorRole._id,
+    }).select("name lastName email status");
 
     res.status(200).json({
       status: "Success",

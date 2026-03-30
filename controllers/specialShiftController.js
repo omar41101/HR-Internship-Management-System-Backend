@@ -1,0 +1,103 @@
+import SpecialShift from "../models/SpecialShift.js";
+import AppError from "../utils/AppError.js";
+
+/**
+ * WHAT: Get all reusable Special Shift types
+ * WHY: Admins need to browse and select existing types when editing timetable slots.
+ *      Returns sorted by createdAt descending so newest appear first.
+ */
+export const getSpecialShifts = async (req, res, next) => {
+  try {
+    const shifts = await SpecialShift.find()
+      .sort({ createdAt: -1 })
+      .populate("createdBy", "name lastName");
+
+    res.status(200).json({
+      status: "Success",
+      data: shifts,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * WHAT: Create a new reusable Special Shift type
+ * WHY: Admins can define named shift structures (e.g. "Night Shift") once and reuse them.
+ *
+ * Validation (early rejection):
+ *   - type must be "single" or "double"
+ *   - periods must be provided and match the type count exactly
+ *   - "single" → exactly 1 period
+ *   - "double" → exactly 2 periods
+ *   - Each period must have startTime and endTime in HH:MM format
+ *
+ * Saving reusable Special Shift to DB
+ */
+export const createSpecialShift = async (req, res, next) => {
+  try {
+    const { name, description, type, periods } = req.body;
+
+    // ─── Early Validation ────────────────────────────────────────────────────
+    if (!name || !name.trim()) {
+      throw new AppError("Shift name is required", 400);
+    }
+
+    if (!type || !["single", "double"].includes(type)) {
+      throw new AppError("Type must be 'single' or 'double'", 400);
+    }
+
+    if (!Array.isArray(periods) || periods.length === 0) {
+      throw new AppError("Periods array is required", 400);
+    }
+
+    // Enforce type ↔ period count consistency
+    if (type === "single" && periods.length !== 1) {
+      throw new AppError(
+        "A 'single' shift type must have exactly 1 period",
+        400
+      );
+    }
+    if (type === "double" && periods.length !== 2) {
+      throw new AppError(
+        "A 'double' shift type must have exactly 2 periods",
+        400
+      );
+    }
+
+    // Validate each period's time format (HH:MM)
+    const timeRegex = /^\d{2}:\d{2}$/;
+    for (let i = 0; i < periods.length; i++) {
+      const { startTime, endTime } = periods[i] || {};
+      if (!startTime || !timeRegex.test(startTime)) {
+        throw new AppError(
+          `Period ${i + 1}: startTime must be in HH:MM format`,
+          400
+        );
+      }
+      if (!endTime || !timeRegex.test(endTime)) {
+        throw new AppError(
+          `Period ${i + 1}: endTime must be in HH:MM format`,
+          400
+        );
+      }
+    }
+    // ─── End Validation ───────────────────────────────────────────────────────
+
+    const specialShift = await SpecialShift.create({
+      name: name.trim(),
+      description: description?.trim() || "",
+      type,
+      periods,
+      createdBy: req.user.id,
+    });
+
+    res.status(201).json({
+      status: "Success",
+      message: "Special Shift type created successfully",
+      data: specialShift,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

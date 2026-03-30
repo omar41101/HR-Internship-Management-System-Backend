@@ -25,7 +25,9 @@ export const getTimetableByUser = async (req, res, next) => {
       };
     }
 
-    const shifts = await Timetable.find(query).sort({ date: 1 }); // date: 1: oldest to latest shifts 
+    const shifts = await Timetable.find(query)
+      .populate("specialShiftId", "name description type periods")
+      .sort({ date: 1 }); // date: 1: oldest to latest shifts 
 
     res.status(200).json({
       status: "Success",
@@ -40,7 +42,7 @@ export const getTimetableByUser = async (req, res, next) => {
 // Update or create a timetable entry (shift) for a user on a specific date
 export const updateTimetableEntry = async (req, res, next) => {
   try {
-    const { userId, date, type, location, color, duration } = req.body;
+    const { userId, date, type, location, color, duration, specialShiftId, specialShiftData, specialShiftName } = req.body;
 
     if (!userId || !date || !type || !location) {
       throw new AppError(
@@ -66,6 +68,9 @@ export const updateTimetableEntry = async (req, res, next) => {
         location,
         color,
         duration,
+        specialShiftId,
+        specialShiftData,
+        specialShiftName,
       },
       // upsert: true = Creates a new document if no document matches the filter
       // runValidators: true = Ensures that the update operation respects the schema validation rules
@@ -93,7 +98,7 @@ export const updateTimetableEntry = async (req, res, next) => {
 // Bulk update or create multiple timetable entries
 export const bulkUpdateTimetableEntries = async (req, res, next) => {
   try {
-    const { userId, dates, type, location, color, duration } = req.body;
+    const { userId, dates, type, location, color, duration, specialShiftId, specialShiftData, specialShiftName } = req.body;
 
     if (
       !userId ||
@@ -128,6 +133,9 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
           location,
           color,
           duration,
+          specialShiftId,
+          specialShiftData,
+          specialShiftName,
         },
         { new: true, upsert: true, runValidators: true },
       );
