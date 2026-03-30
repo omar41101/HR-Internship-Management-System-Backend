@@ -59,7 +59,7 @@ export const getAllDepartments = async (req, res, next) => {
   try {
     const { page = 1} = req.query;
 
-    const limit = 5; // 5 departments per page
+    const limit = 6; // 6 departments per page
     const parsedPage = Math.max(parseInt(page), 1);
 
     const skip = (parsedPage - 1) * limit;
