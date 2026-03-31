@@ -563,7 +563,7 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
-// Get all Users (Only for Admins) - with Filtering & Pagination
+// Get all Users (Only for Admins) - with Pagination  
 export const getAllUsers = async (req, res, next) => {
   try {
     const {
@@ -680,7 +680,7 @@ export const getActiveSupervisors = async (req, res, next) => {
   }
 };
 
-// Get the 3 recent supervisors (For the dropdown in the Edit/update user form)
+// Get the 3 recent supervisors (For the dropdown in the Create/Edit user form)
 export const getRecentSupervisors = async (req, res, next) => {
   try {
     // Get Supervisor role ID
