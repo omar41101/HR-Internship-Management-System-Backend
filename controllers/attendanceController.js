@@ -20,6 +20,13 @@ const getStartOfDay = (date) => {
   return d;
 };
 
+// Helper to get end of day in UTC
+const getEndOfDay = (date) => {
+  const d = new Date(date);
+  d.setUTCHours(23, 59, 59, 999);
+  return d;
+};
+
 // Check-in function
 export const checkIn = async (req, res, next) => {
   try {
@@ -139,7 +146,8 @@ export const getMyStatus = async (req, res, next) => {
 // Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {
   try {
-    const { userId, 
+    const { 
+      userId, 
       startDate, 
       endDate, 
       status, 
@@ -151,6 +159,7 @@ export const getAttendance = async (req, res, next) => {
 
     const parsedPage = Math.max(parseInt(page) || 1, 1);
     const limit = 10;
+    const skip = (parsedPage - 1) * limit;
 
     const filter = {}; // Allow filtering
 
@@ -165,7 +174,7 @@ export const getAttendance = async (req, res, next) => {
       }
     }
 
-    // Authorization & Identity
+    // Authorization & checking the Identity
     if (req.user.role.name === "Admin" || req.user.role.name === "Supervisor") {
       if (userId) filter.userId = userId;
     } else {
@@ -184,62 +193,80 @@ export const getAttendance = async (req, res, next) => {
       filter.status = status;
     }
 
+    const userFilter = {};
+
+    // Search by name/lastName or email
+    if (search) {
+      userFilter.$or = [
+        { name: { $regex: search, $options: "i" } },
+        { lastName: { $regex: search, $options: "i" } },
+        { email: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    // Filter by role
+    if (role) {
+      const roleDoc = await UserRole.findOne({
+        name: { $regex: `^${role}$`, $options: "i" },
+      });
+      if (roleDoc) userFilter.role_id = roleDoc._id;
+      else return res.status(404).json({ status: "Error", message: "Role not found" });
+    }
+
+    // Filter by department
+    if (department) {
+      const deptDoc = await Department.findOne({
+        name: { $regex: `^${department}$`, $options: "i" },
+      });
+      if (deptDoc) userFilter.department_id = deptDoc._id;
+      else return res.status(404).json({ status: "Error", message: "Department not found" });
+    }
+
+    // Search for users matching the userFilter criteria and get their IDs
+    let userIds = null;
+    if (Object.keys(userFilter).length > 0) {
+      const users = await User.find(userFilter).select("_id");
+      userIds = users.map((u) => u._id);
+
+      // If no users match, then we return an empty result
+      if (userIds.length === 0) {
+        return res.status(200).json({
+          status: "Success",
+          page: parsedPage,
+          totalPages: 0,
+          totalRecords: 0,
+          result: [],
+        });
+      }
+
+      filter.userId = { $in: userIds };
+    }
+
+    // Get total count for pagination
+    const totalRecords = await Attendance.countDocuments(filter);
+
     // Get attendance records
-    let attendanceRecords = await Attendance.find(filter)
+    const attendanceRecords = await Attendance.find(filter)
       .populate({
         path: "userId",
-        populate: [{ path: "role_id" }, { path: "department_id" }],
+        populate: [
+          { path: "role_id", select: "name" },
+          { path: "department_id", select: "name" },
+        ],
       })
       .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    // Search user by name/lastName or email
-    if (search) {
-      const q = search.toLowerCase();
-
-      attendanceRecords = attendanceRecords.filter((a) => {
-        const user = a.userId;
-        return (
-          user?.name?.toLowerCase().includes(q) ||
-          user?.lastName?.toLowerCase().includes(q) ||
-          user?.email?.toLowerCase().includes(q)
-        );
-      });
-    }
-
-    // Filter By Role
-    if (role) {
-      attendanceRecords = attendanceRecords.filter(
-        (a) => a.userId?.role_id?.name?.toLowerCase() === role.toLowerCase(),
-      );
-    }
-
-    // Filter By Department
-    if (department) {
-      attendanceRecords = attendanceRecords.filter(
-        (a) =>
-          a.userId?.department_id?.name?.toLowerCase() ===
-          department.toLowerCase(),
-      );
-    }
-
-    // Total records after filtering for the frontend
-    const totalRecords = attendanceRecords.length;
-
-    // Get the paginated records
-    const paginatedRecords = attendanceRecords.slice(
-      (parsedPage - 1) * limit,
-      parsedPage * limit
-    );
-
     res.status(200).json({
-      status: "success",
+      status: "Success",
       page: parsedPage,
       limit: limit,
       totalRecords,
       totalPages: Math.ceil(totalRecords / limit),
-      results: paginatedRecords.length,
-      result: paginatedRecords,
+      results: attendanceRecords.length,
+      result: attendanceRecords,
     });
   } catch (error) {
     next(error);
