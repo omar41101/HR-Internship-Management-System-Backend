@@ -51,27 +51,10 @@ export const addUserRole = async (req, res, next) => {
 // Get All Roles Functionnality
 export const getAllUserRoles = async (req, res, next) => {
   try {
-    const { page = 1} = req.query;
-
-    const limit = 4; // 4 roles per page
-    const parsedPage = Math.max(parseInt(page), 1);
-
-    const skip = (parsedPage - 1) * limit; 
-
-    // Get the total roles 
-    const totalRoles = await UserRole.countDocuments();
-
-    // Fetch the paginated roles
-    const userRoles = await UserRole.find()
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 }); // Sort the roles by creation date (newest first)
+    const userRoles = await UserRole.find().sort({ createdAt: -1 });
 
     res.status(200).json({
       status: "Success",
-      totalRoles: totalRoles,
-      page: parsedPage,
-      limit: limit,
       roles: userRoles,
     });
   } catch (err) {

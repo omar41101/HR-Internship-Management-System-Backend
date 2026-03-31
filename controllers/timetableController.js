@@ -142,6 +142,7 @@ export const updateTimetableEntry = async (req, res, next) => {
       color,
       startTime,
       endTime,
+      specialShiftName,
     } = req.body;
 
     if (!userId || !date || !type) {
@@ -198,6 +199,7 @@ export const updateTimetableEntry = async (req, res, next) => {
 
         shiftData.startTime = startTime;
         shiftData.endTime = endTime;
+        shiftData.specialShiftName = specialShiftName || "Custom";
       } 
       else {
         // Handle the standard shifts (Morning, Evening and Full-time)

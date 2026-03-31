@@ -57,27 +57,10 @@ export const addDepartment = async (req, res, next) => {
 // Get All Departments Functionnality
 export const getAllDepartments = async (req, res, next) => {
   try {
-    const { page = 1} = req.query;
-
-    const limit = 6; // 6 departments per page
-    const parsedPage = Math.max(parseInt(page), 1);
-
-    const skip = (parsedPage - 1) * limit;
-
-    // Get the total departments count  
-    const totalDepartments = await Department.countDocuments();
-
-    // Fetch the paginated departments
-    const departments = await Department.find()
-      .skip(skip)
-      .limit(limit)
-      .sort({ createdAt: -1 }); // Sort the departments by creation date (newest first)
+    const departments = await Department.find().sort({ createdAt: -1 });
 
     res.status(200).json({
       status: "Success",
-      totalDepartments: totalDepartments,
-      page: parsedPage,
-      limit: limit,
       departments: departments,
     });
   } catch (err) {
