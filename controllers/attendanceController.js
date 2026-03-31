@@ -13,6 +13,30 @@ import {
 } from "../utils/exportHelpers.js";
 import { exportAttendanceStats } from "../services/attendanceExportService.js";
 
+// The company location (For the location check-in)
+const COMPANY_LOCATION = {
+  lat: 51.5271,
+  lng: -0.0896,
+};
+
+// Function to calculate distance in meters between two coordinates
+const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
+  const R = 6371000; // Earth radius in meters
+  const toRad = (x) => (x * Math.PI) / 180;
+
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
 // Helper to get start of day in UTC
 const getStartOfDay = (date) => {
   const d = new Date(date);
@@ -30,10 +54,9 @@ const getEndOfDay = (date) => {
 // Check-in function
 export const checkIn = async (req, res, next) => {
   try {
+    // Get the user ID
     const userId = req.user._id;
-
-    // Get the user location (Remote/Onsite)
-    const { location } = req.body;
+    const { latitude, longitude } = req.body || {}; // Optional location data from the client (for onsite check-in)
 
     const now = new Date(); // Contains UTC internally but displays in local time when logged
 
@@ -53,6 +76,14 @@ export const checkIn = async (req, res, next) => {
       });
     }
 
+    // See if the user has his face enrolled (For facial recognition check-in)
+    if (!user.faceEnrolled) {
+      return res.status(403).json({
+        status: "Error",
+        message: "Face not enrolled! Please enroll your face before your check-in!",
+      });
+    }
+
     // Get the user's shift for today to determine if they are late
     const shift = await Timetable.findOne({
       userId,
@@ -61,7 +92,29 @@ export const checkIn = async (req, res, next) => {
         $lt: new Date(todayUTC.getTime() + 86400000),
       },
     });
+    if(!shift) {
+      return res.status(404).json({
+        status: "Error",
+        message: "No shift found for today!",
+      });
+    }
 
+    // Determine the supposed location
+    let locationStatus = "Remote"; // The Default location
+    if (shift.location === "Onsite") {
+      if (!latitude || !longitude) {
+        return res.status(400).json({
+          status: "Error",
+          message: "User location required for onsite shift!",
+        });
+      }
+
+      const distance = getDistanceInMeters(latitude, longitude, COMPANY_LOCATION.lat, COMPANY_LOCATION.lng);
+      const MAX_DISTANCE_METERS = 200;
+      locationStatus = distance <= MAX_DISTANCE_METERS ? "Onsite" : "Remote";
+    }
+
+    // Check the presence status of the user based on the shift
     let status = "present";
     if (shift && shift.startTime) {
       // Convert shift startTime to a Date
@@ -85,10 +138,11 @@ export const checkIn = async (req, res, next) => {
       {
         checkInTime: now,
         status,
-        location,
+        location: { latitude, longitude },
+        workLocation: locationStatus,
         checkOutTime: null,
       },
-      { upsert: true, new: true },
+      { upsert: true, returnDocument: 'after' },
     );
 
     // Emit (Sends a message) real-time event to all connected clients

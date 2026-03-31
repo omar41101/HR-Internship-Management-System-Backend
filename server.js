@@ -15,13 +15,7 @@ const app = express();
 // Create HTTP server and attach Socket.io (mangage websocket connections)
 const httpServer = createServer(app);
 
-/**
- * WHAT: Socket.io Instance
- * WHY: This must be defined and exported BEFORE the routes are imported.
- *      Controllers (like timetableController) import 'io' from server.js.
- *      If routes are imported first, they trigger controller initialization 
- *      before 'io' is ready, causing a crash.
- */
+// Activate Socket.io with CORS Settings
 export const io = new Server(httpServer, {
   cors: {
     origin: process.env.CLIENT_URL || "http://localhost:5173",
@@ -40,7 +34,6 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import documentTypeRoutes from "./routes/documentTypeRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
-
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
