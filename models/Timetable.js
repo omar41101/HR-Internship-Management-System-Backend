@@ -59,9 +59,6 @@ const timetableSchema = mongoose.Schema(
     color: {
       type: String,
     },
-    duration: {
-      type: String,
-    },
     specialShiftId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SpecialShift",
