@@ -59,10 +59,39 @@ const timetableSchema = mongoose.Schema(
     color: {
       type: String,
     },
+    duration: {
+      type: String,
+    },
+    specialShiftId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "SpecialShift",
+      default: null,
+    },
+    // Inline custom shift data (custom one-time, not saved to SpecialShift collection)
+    specialShiftData: {
+      type: new mongoose.Schema(
+        {
+          shiftType: { type: String, enum: ["single", "double"] },
+          periods: [
+            {
+              startTime: { type: String },
+              endTime: { type: String },
+              _id: false,
+            },
+          ],
+        },
+        { _id: false }
+      ),
+      default: null,
+    },
+    specialShiftName: {
+      type: String,
+      default: null,
+    },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 // Compound index to ensure a single shift per day per user

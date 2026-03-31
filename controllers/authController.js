@@ -28,13 +28,7 @@ const validateUserStatus = (user) => {
 
 // Goal: Only show the face enrollment prompt only once on the first login.
 const consumeFaceEnrollmentPrompt = (user) => {
-  const requiresFaceEnrollment = user.faceEnrollmentPromptRequired === true;
-
-  if (requiresFaceEnrollment) {
-    user.faceEnrollmentPromptRequired = false;
-  }
-
-  return requiresFaceEnrollment;
+  return user.faceEnrollmentPromptRequired === true;
 };
 
 // --------------------------------------------------------------------------- //

@@ -34,6 +34,7 @@ import attendanceRoutes from "./routes/attendanceRoutes.js";
 import documentTypeRoutes from "./routes/documentTypeRoutes.js";
 import documentRoutes from "./routes/documentRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
+import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -71,6 +72,7 @@ app.use('/api', attendanceRoutes);
 app.use('/api', documentTypeRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', testRoutes);
+app.use('/api', specialShiftRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
