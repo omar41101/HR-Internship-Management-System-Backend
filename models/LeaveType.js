@@ -5,6 +5,7 @@ const leaveTypeSchema = mongoose.Schema(
     name: {
       type: String,
       required: true,
+      unique: true,
     },
     description: {
       type: String,
@@ -14,6 +15,12 @@ const leaveTypeSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    status: {
+      // For the Archive/Restore functionality
+      type: String,
+      enum: ["Active", "Archived"],
+      default: "Active"
+    }
   },
   {
     timestamps: true,
