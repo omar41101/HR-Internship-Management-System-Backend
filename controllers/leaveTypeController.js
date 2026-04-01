@@ -24,7 +24,7 @@ export const checkLeaveTypeNameExistence = async (name, id) => {
   });
 
   if (existingLeaveType) {
-    throw new AppError("Leave type already exists!", 400);
+    throw new AppError("Leave type already exists!", 409);
   }
 };
 
