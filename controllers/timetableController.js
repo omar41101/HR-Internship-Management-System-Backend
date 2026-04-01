@@ -134,87 +134,37 @@ export const addTimetableEntry = async (req, res, next) => {
 // Update timetable entry (shift) for a user on a specific date: For already existing shifts (Admin only)
 export const updateTimetableEntry = async (req, res, next) => {
   try {
-    const {
-      userId,
-      date,
-      type,
-      location,
-      color,
-      startTime,
-      endTime,
-      specialShiftName,
-    } = req.body;
+    const { userId, date, type, location, color, duration, specialShiftId, specialShiftData, specialShiftName } = req.body;
 
-    if (!userId || !date || !type) {
-      throw new AppError("Missing required fields!", 400);
+    if (!userId || !date || !type || !location) {
+      throw new AppError(
+        "Missing required fields (userId, date, type, location)",
+        400,
+      );
     }
 
-    // Check the user existence
+    // Check the user existance
     const user = await User.findById(userId);
-    if (!user) throw new AppError("User not found!", 404);
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
 
-    // Normalize the date
+    // Normalize date to midnight to ensure consistent indexing
     const normalizedDate = new Date(date);
     normalizedDate.setUTCHours(0, 0, 0, 0);
 
-    // Check existing shift
-    let existingEntry = await Timetable.findOne({
-      userId,
-      date: normalizedDate,
-    });
-    if (!existingEntry) {
-      throw new AppError("Timetable entry not found for the specified date!", 404);
-    }
-
-    let shiftData = {
-      userId,
-      date: normalizedDate,
-      type,
-      color,
-    };
-
-    // Handle the Day Off case
-    if (type === "Day Off") {
-      shiftData.location = undefined;
-      shiftData.startTime = "";
-      shiftData.endTime = "";
-    } 
-    else {
-      // Validate location
-      if (!location || !isValidLocation(location)) {
-        throw new AppError("Invalid or missing location!", 400);
-      }
-
-      shiftData.location = location;
-
-      // Handle the Special Shift case
-      if (type === "Special Shift") {
-        if (!startTime || !endTime) {
-          throw new AppError("Special Shift requires startTime and endTime!", 400);
-        }
-
-        if (!isValidTime(startTime) || !isValidTime(endTime)) {
-          throw new AppError("Invalid time format!", 400);
-        }
-
-        shiftData.startTime = startTime;
-        shiftData.endTime = endTime;
-        shiftData.specialShiftName = specialShiftName || "Custom";
-      } 
-      else {
-        // Handle the standard shifts (Morning, Evening and Full-time)
-        const config = SHIFT_CONFIG[type];
-        if (!config) throw new AppError("Invalid shift type!", 400);
-
-        shiftData = { ...shiftData, ...config };
-      }
-    }
-
-    // Update/create the timetable entry
     const shift = await Timetable.findOneAndUpdate(
       { userId, date: normalizedDate },
-      shiftData,
-      { returnDocument: 'after', upsert: true, runValidators: true }
+      {
+        type,
+        location,
+        color,
+        duration,
+        specialShiftId,
+        specialShiftData,
+        specialShiftName,
+      },
+      { new: true, upsert: true, runValidators: true },
     );
 
     io.emit("timetableUpdated", { userId });
@@ -224,7 +174,6 @@ export const updateTimetableEntry = async (req, res, next) => {
       message: "Timetable entry updated successfully!",
       result: shift,
     });
-
   } catch (err) {
     next(err);
   }
