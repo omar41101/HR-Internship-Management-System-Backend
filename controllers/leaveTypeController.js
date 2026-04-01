@@ -1,5 +1,6 @@
 import LeaveType from "../models/LeaveType.js";
 import AppError from "../utils/AppError.js";
+import { logAuditAction } from "../utils/logger.js"; // For audit logs
 
 // ---------------------------------------------------------------- //
 // ----------------------- HELPER FUNCTIONS ----------------------- //
@@ -10,14 +11,16 @@ export const validateLeaveTypeName = (name) => {
   }
 
   // Normalize the leave type name
-  return name.trim().charAt(0).toUpperCase() + name.trim().slice(1).toLowerCase();
+  return (
+    name.trim().charAt(0).toUpperCase() + name.trim().slice(1).toLowerCase()
+  );
 };
 
 // Check the name existance
 export const checkLeaveTypeNameExistence = async (name, id) => {
   const existingLeaveType = await LeaveType.findOne({
     name: { $regex: new RegExp(`^${name}$`, "i") },
-    _id: { $ne: id }
+    _id: { $ne: id },
   });
 
   if (existingLeaveType) {
@@ -48,6 +51,20 @@ export const addLeaveType = async (req, res, next) => {
       isPaid,
     });
 
+    // Logging the action
+    try {
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "CREATE_LEAVE_TYPE",
+        targetType: "LeaveType",
+        targetId: newLeaveType._id,
+        targetName: newLeaveType.name,
+        ipAddress: req.ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+
     res.status(201).json({
       status: "Success",
       message: "Leave type created successfully!",
@@ -72,7 +89,10 @@ export const updateLeaveType = async (req, res, next) => {
 
     // Prevent updating an archived leave type
     if (existingLeaveType.status === "Archived") {
-      throw new AppError("Cannot update an archived leave type. Restore it first!", 400);
+      throw new AppError(
+        "Cannot update an archived leave type. Restore it first!",
+        400,
+      );
     }
 
     const updateData = {};
@@ -80,7 +100,7 @@ export const updateLeaveType = async (req, res, next) => {
     // Update name (if provided)
     if (name) {
       name = await validateLeaveTypeName(name);
-      await checkLeaveTypeNameExistence(name, id); 
+      await checkLeaveTypeNameExistence(name, id);
       updateData.name = name.trim();
     }
 
@@ -94,11 +114,24 @@ export const updateLeaveType = async (req, res, next) => {
       updateData.isPaid = isPaid;
     }
 
-    const updatedLeaveType = await LeaveType.findByIdAndUpdate(
-      id,
-      updateData,
-      { returnDocument: "after", runValidators: true }
-    );
+    const updatedLeaveType = await LeaveType.findByIdAndUpdate(id, updateData, {
+      returnDocument: "after",
+      runValidators: true,
+    });
+
+    // Logging the action
+    try {
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "UPDATE_LEAVE_TYPE",
+        targetType: "LeaveType",
+        targetId: updatedLeaveType._id,
+        targetName: updatedLeaveType.name,
+        ipAddress: req.ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
 
     res.status(200).json({
       status: "Success",
@@ -130,13 +163,27 @@ export const archiveLeaveType = async (req, res, next) => {
     existingLeaveType.status = "Archived";
     await existingLeaveType.save();
 
+    // Logging the action
+    try {
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "ARCHIVE_LEAVE_TYPE",
+        targetType: "LeaveType",
+        targetId: existingLeaveType._id,
+        targetName: existingLeaveType.name,
+        ipAddress: req.ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+
     res.status(200).json({
       status: "Success",
       message: "Leave type archived successfully!",
       result: existingLeaveType,
     });
   } catch (err) {
-    next(err); 
+    next(err);
   }
 };
 
@@ -160,6 +207,20 @@ export const restoreLeaveType = async (req, res, next) => {
     existingLeaveType.status = "Active";
     await existingLeaveType.save();
 
+    // Logging the action
+    try {
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "RESTORE_LEAVE_TYPE",
+        targetType: "LeaveType",
+        targetId: existingLeaveType._id,
+        targetName: existingLeaveType.name,
+        ipAddress: req.ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+
     res.status(200).json({
       status: "Success",
       message: "Leave type restored successfully!",
@@ -170,11 +231,13 @@ export const restoreLeaveType = async (req, res, next) => {
   }
 };
 
-// Get all active leave types 
+// Get all active leave types
 export const getAllActiveLeaveTypes = async (req, res, next) => {
   try {
     // Sort the leave types by creation date (newest first)
-    const leaveTypes = await LeaveType.find({ status: "Active" }).sort({ createdAt: -1 }); 
+    const leaveTypes = await LeaveType.find({ status: "Active" }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       status: "Success",
@@ -190,7 +253,9 @@ export const getAllActiveLeaveTypes = async (req, res, next) => {
 export const getAllArchivedLeaveTypes = async (req, res, next) => {
   try {
     // Sort the leave types by creation date (newest first)
-    const leaveTypes = await LeaveType.find({ status: "Archived" }).sort({ createdAt: -1 });
+    const leaveTypes = await LeaveType.find({ status: "Archived" }).sort({
+      createdAt: -1,
+    });
 
     res.status(200).json({
       status: "Success",
