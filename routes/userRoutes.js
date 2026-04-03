@@ -19,7 +19,8 @@ import {
   requestPasswordReset,
   forgetPassword,
   enrollFace,
-  resetFace
+  resetFace,
+  getPublicInterns
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -70,6 +71,9 @@ const router = express.Router();
  *         description: Server error
  */
 router.post("/login", login);
+
+// Public interns listing for marketing site
+router.get("/public/interns", getPublicInterns);
 
 // Route to verify user's OTP code
 /**

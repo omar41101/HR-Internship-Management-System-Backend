@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
+    "start": "node server.js",
     "test": "cross-env NODE_ENV=test jest",
     "seed:admin": "node scripts/seedAdmin.js"
   },

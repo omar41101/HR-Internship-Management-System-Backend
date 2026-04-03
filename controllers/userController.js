@@ -72,14 +72,15 @@ const consumeFaceEnrollmentPrompt = (user) => {
 // Login Functionality (All users can do it)
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const trimmedEmail = (email || "").trim().toLowerCase();
+    const { email, identifier, password } = req.body;
+    const loginIdentifier = (email ?? identifier ?? "").toString();
+    const trimmedEmail = loginIdentifier.trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
 
     console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
 
     // Check the User existence by Email or CIN/Passport number
-    const user = await User.findOne({email: trimmedEmail });
+    const user = await User.findOne({ email: trimmedEmail });
 
     if (!user) {
       throw new AppError(
@@ -101,21 +102,26 @@ export const login = async (req, res, next) => {
     // Compare password - hashPassword in DB
     const isMatch = await bcrypt.compare(trimmedPassword, user.password);
     if (!isMatch) {
-      console.log(`[LOGIN-DEBUG] Password mismatch for: ${identifier}`);
+      console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
 
-      user.loginAttempts += 1;
+      const nextAttempts = (user.loginAttempts || 0) + 1;
 
       // The user has 3 login attempts before account blockage
-      if (user.loginAttempts >= 3) {
-        user.status = "Blocked";
-        await user.save();
+      if (nextAttempts >= 3) {
+        await User.updateOne(
+          { _id: user._id },
+          { $set: { status: "Blocked", loginAttempts: nextAttempts } },
+        );
         throw new AppError(
           "Your Account is now Blocked. Please contact the Administration!",
           403,
         );
       }
 
-      await user.save();
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { loginAttempts: nextAttempts } },
+      );
 
       throw new AppError(
         "Invalid Email or password!",
@@ -150,8 +156,7 @@ export const login = async (req, res, next) => {
     const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
 
     // Reset Login attempts
-    user.loginAttempts = 0;
-    await user.save();
+    await User.updateOne({ _id: user._id }, { $set: { loginAttempts: 0 } });
 
     res.status(200).json({
       status: "Success",
@@ -1332,14 +1337,17 @@ export const enrollFace = async (req, res, next) => {
       throw new AppError("Face descriptors missing or invalid!", 400);
     }
 
-    const user = await User.findById(id);
-    if (!user) throw new AppError("User not found!", 404);
-
-    // Save the descriptors to the user's profile
-    user.faceDescriptors = descriptors;
-    user.faceEnrolled = true;
-    user.faceEnrollmentPromptRequired = false;
-    await user.save();
+    const result = await User.updateOne(
+      { _id: id },
+      {
+        $set: {
+          faceDescriptors: descriptors,
+          faceEnrolled: true,
+          faceEnrollmentPromptRequired: false,
+        },
+      },
+    );
+    if (result.matchedCount === 0) throw new AppError("User not found!", 404);
 
     res.status(200).json({
       status: "Success",
@@ -1355,19 +1363,42 @@ export const resetFace = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    const user = await User.findById(id);
-    if (!user) throw new AppError("User not found!", 404);
-
-    // Clear face descriptors and set faceEnrolled to false
-    user.faceDescriptors = [];
-    user.faceEnrolled = false;
-    user.faceEnrollmentPromptRequired = true;
-    await user.save();
+    const result = await User.updateOne(
+      { _id: id },
+      {
+        $set: {
+          faceDescriptors: [],
+          faceEnrolled: false,
+          faceEnrollmentPromptRequired: true,
+          faceEnrollmentPromptRequired: true,
+        },
+      },
+    );
+    if (result.matchedCount === 0) throw new AppError("User not found!", 404);
 
     res.status(200).json({
       status: "Success",
       message: "Face ID reset successfully!",
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Public: Get active interns for marketing site (no auth)
+export const getPublicInterns = async (req, res, next) => {
+  try {
+    const internRole = await UserRole.findOne({ name: "Intern" });
+    if (!internRole) {
+      return res.status(200).json([]);
+    }
+
+    const interns = await User.find({
+      role_id: internRole._id,
+      status: "Active",
+    }).select("name lastName email position bio profileImageURL");
+
+    res.status(200).json(interns);
   } catch (err) {
     next(err);
   }

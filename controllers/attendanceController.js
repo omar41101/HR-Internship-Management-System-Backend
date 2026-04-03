@@ -8,11 +8,21 @@ import { buildDateFilter } from "../utils/dateFilter.js";
 import { exportCSV, exportExcel, sanitize, getPeriodLabel } from "../utils/exportHelpers.js";
 import { exportAttendanceStats } from "../services/attendanceExportService.js";
 
-// Helper to get start of day in UTC
+// Helper to get start of day in UTC (used as the canonical key for "today")
 const getStartOfDay = (date) => {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
   return d;
+};
+
+// Helper to get an inclusive-exclusive UTC day range [start, end)
+// This is safer than querying by exact date equality because older records
+// may have non-midnight timestamps.
+const getUtcDayRange = (date) => {
+  const start = getStartOfDay(date);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end };
 };
 
 // Check-in function
@@ -21,22 +31,7 @@ export const checkIn = async (req, res, next) => {
     const userId = req.user._id;
     const { location } = req.body; // Get the user location (Remote/Onsite)
     const now = new Date();
-    const utcNow = new Date(Date.UTC(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-      now.getMilliseconds()
-    ));
-
-    const todayUTC = new Date(Date.UTC(
-      utcNow.getUTCFullYear(),
-      utcNow.getUTCMonth(),
-      utcNow.getUTCDate(),
-      0, 0, 0, 0
-    ));
+    const { start: todayUTC, end: tomorrowUTC } = getUtcDayRange(now);
 
     // Get the user's existance
     const user = await User.findById(userId);
@@ -48,7 +43,7 @@ export const checkIn = async (req, res, next) => {
     }
     
     // Get the user's shift for today to determine if they are late
-    const shift = await Timetable.findOne({ userId, date: today });
+    const shift = await Timetable.findOne({ userId, date: todayUTC });
 
     let status = "present";
     if (shift) {
@@ -68,14 +63,20 @@ export const checkIn = async (req, res, next) => {
 
     // Create or update attendance record
     const attendance = await Attendance.findOneAndUpdate(
-      { userId, date: todayUTC },
+      { userId, date: { $gte: todayUTC, $lt: tomorrowUTC } },
       {
-        checkInTime: utcNow.toISOString(),
-        status,
-        location,
-        checkOutTime: null,
+        $set: {
+          checkInTime,
+          status,
+          location,
+          checkOutTime: null,
+        },
+        $setOnInsert: {
+          userId,
+          date: todayUTC,
+        },
       },
-      { upsert: true, new: true },
+      { upsert: true, new: true, runValidators: true, setDefaultsOnInsert: true, sort: { date: -1, updatedAt: -1 } },
     );
 
     // Emit (Sends a message) real-time event to all connected clients
@@ -99,7 +100,10 @@ export const checkIn = async (req, res, next) => {
 export const getMyStatus = async (req, res, next) => {
   try {
     const userId = req.user._id;
-    const today = getStartOfDay(new Date());
+    const { start: today, end: tomorrow } = getUtcDayRange(new Date());
+
+    const indicatesCheckIn = (record) =>
+      !!record?.checkInTime || record?.status === "present" || record?.status === "late";
 
     // Check the user's existance
     const user = await User.findById(userId);
@@ -111,7 +115,40 @@ export const getMyStatus = async (req, res, next) => {
     }
 
     // Get today's attendance record for the user
-    const attendance = await Attendance.findOne({ userId, date: today });
+    let attendance = await Attendance.findOne({ userId, date: { $gte: today, $lt: tomorrow } }).sort({ date: -1 });
+
+    // Legacy/bad-data recovery:
+    // 1) If there's no "today" record, look for a record updated today that indicates check-in.
+    // 2) If there IS a "today" record but it doesn't indicate check-in (e.g. cron-created "absent"),
+    //    prefer/merge the updated-today check-in record into the "today" record.
+    const legacyCheckIn = await Attendance.findOne({
+      userId,
+      updatedAt: { $gte: today, $lt: tomorrow },
+      $or: [
+        { checkInTime: { $exists: true, $ne: null } },
+        { status: { $in: ["present", "late"] } },
+      ],
+    }).sort({ updatedAt: -1 });
+
+    if (!attendance && legacyCheckIn) {
+      attendance = legacyCheckIn;
+      const d = attendance.date ? new Date(attendance.date) : null;
+      const needsRepair = !d || d < today || d >= tomorrow;
+      if (needsRepair) {
+        attendance.date = today;
+        await attendance.save();
+      }
+    } else if (attendance && legacyCheckIn && !indicatesCheckIn(attendance)) {
+      // Merge legacy check-in details into the canonical "today" record
+      attendance.checkInTime = legacyCheckIn.checkInTime || attendance.checkInTime;
+      attendance.checkOutTime = legacyCheckIn.checkOutTime ?? attendance.checkOutTime;
+      attendance.location = legacyCheckIn.location || attendance.location;
+      if (legacyCheckIn.status === "present" || legacyCheckIn.status === "late") {
+        attendance.status = legacyCheckIn.status;
+      }
+      await attendance.save();
+    }
+
     if(!attendance) {
       return res.status(200).json({
         status: "success",
@@ -264,22 +301,7 @@ export const checkOut = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const now = new Date();
-    const utcNow = new Date(Date.UTC(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-      now.getMilliseconds()
-    ));
-
-    const todayUTC = new Date(Date.UTC(
-      utcNow.getUTCFullYear(),
-      utcNow.getUTCMonth(),
-      utcNow.getUTCDate(),
-      0, 0, 0, 0
-    ));
+    const { start: todayUTC, end: tomorrowUTC } = getUtcDayRange(now);
 
     // Check the user's existance
     const user = await User.findById(userId);
@@ -297,9 +319,9 @@ export const checkOut = async (req, res, next) => {
     });
 
     const attendance = await Attendance.findOneAndUpdate(
-      { userId, date: todayUTC },
-      { checkOutTime: utcNow.toISOString() },
-      { new: true },
+      { userId, date: { $gte: todayUTC, $lt: tomorrowUTC } },
+      { $set: { checkOutTime } },
+      { new: true, runValidators: true, sort: { date: -1, updatedAt: -1 } },
     );
 
     if (!attendance) {

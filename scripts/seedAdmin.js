@@ -1,6 +1,7 @@
 /**
  * Seed script: creates an "Admin" role and one admin user for testing.
  * Run from server folder: node scripts/seedAdmin.js
+ * Reset existing admin password: node scripts/seedAdmin.js --force-reset-password
  *
  * Default test admin:
  *   Email:    admin@example.com
@@ -19,6 +20,7 @@ dotenv.config();
 
 const ADMIN_EMAIL = "admin@example.com";
 const ADMIN_PASSWORD = "Admin123!";
+const FORCE_RESET_PASSWORD = process.argv.includes("--force-reset-password");
 
 async function seedAdmin() {
   const uri = process.env.MONGO_URI || "mongodb://localhost:27017/HR-DOTJCOM";
@@ -46,8 +48,31 @@ async function seedAdmin() {
     if (existingAdmin) {
       const existingRole = await UserRole.findById(existingAdmin.role_id);
       if (existingRole?.name === "Admin") {
+        if (FORCE_RESET_PASSWORD) {
+          const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
+          await User.updateOne(
+            { _id: existingAdmin._id },
+            {
+              $set: {
+                password: hashedPassword,
+                status: "Active",
+                mustResetPassword: false,
+                loginAttempts: 0,
+              },
+            },
+          );
+
+          console.log(`Admin user already exists: ${ADMIN_EMAIL}`);
+          console.log("Password has been reset due to --force-reset-password.");
+          console.log(`New password: ${ADMIN_PASSWORD}`);
+          process.exit(0);
+          return;
+        }
+
         console.log(`Admin user already exists: ${ADMIN_EMAIL}`);
-        console.log("No changes made. Exiting.");
+        console.log(
+          "No changes made. Use --force-reset-password to reset credentials.",
+        );
         process.exit(0);
         return;
       }
@@ -66,6 +91,11 @@ async function seedAdmin() {
       name: "Admin",
       lastName: "User",
       email: ADMIN_EMAIL.toLowerCase().trim(),
+      idType: "CIN",
+      idNumber: {
+        number: "00000000",
+        countryCode: "TN",
+      },
       password: hashedPassword,
       address: "Seed Address",
       joinDate: new Date(),
