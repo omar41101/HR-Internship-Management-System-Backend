@@ -7,7 +7,9 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "test": "cross-env NODE_ENV=test jest",
-    "seed:admin": "node scripts/seedAdmin.js"
+    "seed": "node seed/seed.js",
+    "seed:admin": "node scripts/seedAdmin.js",
+    "seed:interns": "node scripts/seedInterns.js"
   },
   "keywords": [],
   "author": "",

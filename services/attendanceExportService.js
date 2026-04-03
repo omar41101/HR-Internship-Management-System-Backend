@@ -1,7 +1,7 @@
 import AttendanceStats from "../models/AttendanceStats.js";
 import User from "../models/User.js";
 import Department from "../models/Department.js";
-import { aggregateStats } from "./attendanceStatsService.js";
+import { aggregateStats, generateStats } from "./attendanceStatsService.js";
 import { exportStatsCSV, exportStatsExcel } from "../utils/exportStats.js";
 import { sanitize } from "../utils/exportHelpers.js";
 
@@ -84,12 +84,33 @@ export const exportAttendanceStats = async ({
   }
 
   // Fetch stats for selected users and period
-  const stats = await AttendanceStats.find({
+  let stats = await AttendanceStats.find({
     userId: { $in: userIds },
     periodType,
     startDate: { $gte: new Date(startDate) },
     endDate: { $lte: new Date(endDate) },
   }).populate("userId", "name lastName email department_id");
+
+  // If no stats found, try to generate them on the fly
+  if (!stats.length) {
+    try {
+      await generateStats({
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        periodType,
+      });
+
+      // Try fetching again after generation
+      stats = await AttendanceStats.find({
+        userId: { $in: userIds },
+        periodType,
+        startDate: { $gte: new Date(startDate) },
+        endDate: { $lte: new Date(endDate) },
+      }).populate("userId", "name lastName email department_id");
+    } catch (genErr) {
+      console.error("Error generating stats on the fly:", genErr);
+    }
+  }
 
   if (!stats.length) {
     throw new Error("No attendance stats found for the export!");

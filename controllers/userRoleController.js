@@ -51,8 +51,12 @@ export const addUserRole = async (req, res, next) => {
 // Get All Roles Functionnality
 export const getAllUserRoles = async (req, res, next) => {
   try {
-    const userRoles = await UserRole.find();
-    res.status(200).json(userRoles);
+    const userRoles = await UserRole.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      status: "Success",
+      roles: userRoles,
+    });
   } catch (err) {
     next(err);
   }

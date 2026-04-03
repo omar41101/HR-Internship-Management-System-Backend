@@ -57,8 +57,12 @@ export const addDepartment = async (req, res, next) => {
 // Get All Departments Functionnality
 export const getAllDepartments = async (req, res, next) => {
   try {
-    const departments = await Department.find();
-    res.status(200).json(departments);
+    const departments = await Department.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      status: "Success",
+      departments: departments,
+    });
   } catch (err) {
     next(err);
   }

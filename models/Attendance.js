@@ -25,10 +25,14 @@ const attendanceSchema = mongoose.Schema(
       enum: ["present", "late", "absent", "leave", "day-off"],
       default: "absent",
     },
-    location: {
+    workLocation: {
       type: String,
       enum: ["Remote", "Onsite"],
     },
+    location: {
+      latitude: Number,
+      longitude: Number,
+    }
   },
   {
     timestamps: true,

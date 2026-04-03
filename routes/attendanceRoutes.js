@@ -1,13 +1,15 @@
 import express from "express";
 import {
   checkIn,
+  createFaceChallenge,
   checkOut,
   getAttendance,
   getMyStatus,
   updateAttendance,
   exportUserAttendance,
   exportDepartmentAttendance,
-  exportAttendanceStatistics
+  exportAttendanceStatistics,
+  getAllStatuses,
 } from "../controllers/attendanceController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -26,6 +28,8 @@ const router = express.Router();
 // ------------------------------------------------------------------------ //
 
 // Check-in
+router.post("/attendance/face-challenge", authenticate, createFaceChallenge);
+
 /**
  * @swagger
  * /attendance/check-in:
@@ -69,7 +73,7 @@ router.post("/attendance/check-in", authenticate, checkIn);
  * @swagger
  * /attendance/check-out:
  *   post:
- *     summary: Check out for today
+ *     summary: Check out for today (All authenticated users)
  *     tags: 
  *       - Attendance
  *     description: Check out for today. The system will update the attendance record with the check-out time.
@@ -183,6 +187,40 @@ router.get(
   authenticate,
   authorize(["Admin", "Supervisor"]),
   getAttendance
+);
+
+// Get statuses of Attendance (Admin/Supervisor)
+/**
+ * @swagger
+ * /attendance/statuses:
+ *   get:
+ *     summary: Get the list of attendance statuses
+ *     tags: 
+ *       - Attendance
+ *     description: Get the list of distinct attendance statuses (present, late, absent, leave, day-off).
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of attendance statuses
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: string
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server Error
+ */
+router.get(
+  "/attendance/statuses",
+  authenticate,
+  authorize(["Admin", "Supervisor"]),
+  getAllStatuses
 );
 
 // Update attendance record (Admin only)

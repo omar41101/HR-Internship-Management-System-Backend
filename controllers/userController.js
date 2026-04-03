@@ -1,7 +1,4 @@
-// FIX: Unified profile image upload using Cloudinary for both create and update.
-// Removed base64 usage in this flow.
-// Added proper upload + optional cleanup of old images.
-// Importations
+// Imports
 import {
   uploadImageToCloudinary,
   deleteFromCloudinary,
@@ -10,434 +7,162 @@ import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
 import Document from "../models/Document.js";
-import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
-import dotenv from "dotenv";
-import { sendEmail } from "../utils/sendEmail.js";
 import { Parser } from "json2csv";
 import ExcelJS from "exceljs";
-import crypto from "crypto";
 import {
   isValidEmail,
-  isEmpty,
   validatePhoneNumber,
-  isWithinRange,
   generateRandomCode,
   validateCIN,
   validatePassport,
   getPassportHint,
+  validateUserData,
 } from "../middleware/UserValidation.js";
 import { countries } from "../middleware/countries.js"; // List of countries with their codes
 import { logAuditAction } from "../utils/logger.js";
+import { sendEmail } from "../utils/sendEmail.js";
+import { sendError, handleError } from "../utils/ErrorFunctions.js";
 import AppError from "../utils/AppError.js";
 
-dotenv.config();
-
 // --------------------------------------------------------------------------- //
-// -------------------------- HELPER FUNCTIONS ------------------------------- //
+// ---------------------------- HELPER FUNCTIONS ----------------------------- //
 // --------------------------------------------------------------------------- //
 
-const sendError = (res, message, code = 400) => {
-  return res.status(code).json({ status: "Error", message });
-};
+// Full phone number validation helper function (format + uniqueness)
+export const fullPhoneNumberValidation = async (countryCode, phoneNumber, userId = null) => {
+  const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
 
-const handleError = (res, err) => {
-  console.error(err);
-  return res.status(500).json({ status: "Error", message: err.message });
-};
-
-const validateUserStatus = (user) => {
-  if (user.status === "Blocked" || user.status === "Inactive") {
-    throw new AppError(
-      `Your Account is ${user.status}. Please contact the Administration!`,
-      403,
-    );
-  }
-};
-
-const consumeFaceEnrollmentPrompt = (user) => {
-  const requiresFaceEnrollment = user.faceEnrollmentPromptRequired === true;
-
-  if (requiresFaceEnrollment) {
-    user.faceEnrollmentPromptRequired = false;
+  if (!validatedPhoneNumber) {
+    throw new AppError("Invalid Phone Number Format!", 400);
   }
 
-  return requiresFaceEnrollment;
+  // Check the phone number uniqueness
+  const existingPhoneUser = await User.findOne({
+    phoneNumber: validatedPhoneNumber,
+  });
+
+  if (existingPhoneUser && existingPhoneUser._id.toString() !== userId) {
+    throw new AppError("Phone number not available!", 400);
+  }
+
+  return validatedPhoneNumber;
 };
 
-// --------------------------------------------------------------------------- //
-// ---------------------------------- AUTH ----------------------------------- //
-// --------------------------------------------------------------------------- //
+// Full CIN/Passport validation helper function (format + uniqueness)
+export const fullCINPassportValidation = async (idType, idCountryCode, trimmedIdNumber, userId = null) => {
+  // Check ID type validity
+  if (!["CIN", "Passport"].includes(idType)) {
+    throw new AppError("ID Type must be either CIN or Passport!", 400);
+  }
+  // Check the validity of IdNumber based on the ID type
+  switch (idType) {
+    case "CIN":
+      if (!validateCIN(trimmedIdNumber)) {
+        throw new AppError("Invalid CIN format!", 400);
+      }
+      break;
 
-// Login Functionality (All users can do it)
-export const login = async (req, res, next) => {
-  try {
-    const { email, identifier, password } = req.body;
-    const loginIdentifier = (email ?? identifier ?? "").toString();
-    const trimmedEmail = loginIdentifier.trim().toLowerCase();
-    const trimmedPassword = (password || "").trim();
-
-    console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
-
-    // Check the User existence by Email or CIN/Passport number
-    const user = await User.findOne({ email: trimmedEmail });
-
-    if (!user) {
-      throw new AppError(
-        "User not found!",
-        404,
-        "Invalid Email or password provided!",
-      );
-    }
-
-    // Check if status blocked or inactive
-    validateUserStatus(user);
-
-    // Get the user role
-    const userRole = await UserRole.findById(user.role_id);
-    if (!userRole) {
-      throw new AppError("User role not found!", 404);
-    }
-
-    // Compare password - hashPassword in DB
-    const isMatch = await bcrypt.compare(trimmedPassword, user.password);
-    if (!isMatch) {
-      console.log(`[LOGIN-DEBUG] Password mismatch for: ${trimmedEmail}`);
-
-      const nextAttempts = (user.loginAttempts || 0) + 1;
-
-      // The user has 3 login attempts before account blockage
-      if (nextAttempts >= 3) {
-        await User.updateOne(
-          { _id: user._id },
-          { $set: { status: "Blocked", loginAttempts: nextAttempts } },
-        );
+    case "Passport":
+      if (!idCountryCode || !countries.some((c) => c.code === idCountryCode)) {
+        throw new AppError("Invalid country code for Passport!", 400);
+      }
+      if (!validatePassport(trimmedIdNumber, idCountryCode)) {
+        const hint = getPassportHint(idCountryCode);
         throw new AppError(
-          "Your Account is now Blocked. Please contact the Administration!",
-          403,
+          `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
+          400,
         );
       }
+      break;
+  }
 
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { loginAttempts: nextAttempts } },
-      );
+  const existingUser = await User.findOne({
+    "idNumber.number": trimmedIdNumber,
+    "idNumber.countryCode": idType === "CIN" ? "TN" : idCountryCode,
+  });
 
-      throw new AppError(
-        "Invalid Email or password!",
-        401,
-        "Please check your credentials and try again.",
-      );
-    }
-
-    // For the Frontend, if the account is not verified, we redirect to the OTP code form
-    if (user.status !== "Active") {
-      return res.status(200).json({
-        status: "Success but OTPVerificationRequired",
-        message: "Account not verified!",
-      });
-    }
-
-    // Before access the user's Dashboard, Reset the password if not already done
-    if (user.mustResetPassword) {
-      return res.status(200).json({
-        status: "Success but MustResetPassword",
-        message: "Please Reset your password before continuing!",
-      });
-    }
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { id: user._id, role: userRole.name },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-    );
-
-    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
-
-    // Reset Login attempts
-    await User.updateOne({ _id: user._id }, { $set: { loginAttempts: 0 } });
-
-    res.status(200).json({
-      status: "Success",
-      message: "Logged in successfully!",
-      result: {
-        token,
-        userId: user._id,
-        role: userRole.name,
-        requiresFaceEnrollment,
-      },
-    });
-  } catch (err) {
-    next(err);
+  if (existingUser && existingUser._id.toString() !== userId) {
+    throw new AppError("Identification number unavailable!", 400);
   }
 };
 
-// Verify User's OTP code
-export const verifyUser = async (req, res, next) => {
-  try {
-    const { email, code } = req.body;
+// Check User Role validity helper function
+export const validateUserRole = async (role, action) => {
+  // Check user role existance
+  const userrole = await UserRole.findOne({
+    name: { $regex: new RegExp(`^${role}$`, "i") },
+  });
+  if (!userrole) throw new AppError("Invalid Role!", 400);
 
-    const user = await User.findOne({ email });
-    if (!user) throw new AppError("User not found!", 404);
+  // Get the role ID
+  const roleId = userrole._id;
+  console.log(`[${action}-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
 
-    validateUserStatus(user);
-
-    if (user.status === "Active")
-      throw new AppError("Account Already Verified!", 400);
-
-    if (!(await bcrypt.compare(code, user.verificationCode))) {
-      throw new AppError("Invalid OTP Code!", 400);
-    }
-
-    if (user.verificationCodeExpires < Date.now()) {
-      throw new AppError("OTP Code expired!", 400);
-    }
-
-    user.status = "Active";
-    user.verificationCode = null;
-    user.verificationCodeExpires = null;
-    user.mustResetPassword = true;
-    await user.save();
-
-    const userRole = await UserRole.findById(user.role_id);
-    const token = jwt.sign(
-      { id: user._id, role: userRole?.name || "Employee" },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-    );
-
-    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
-    await user.save();
-
-    res.status(200).json({
-      status: "Success",
-      message: "Account Verified Successfully!",
-      result: {
-        token,
-        userId: user._id,
-        role: userRole?.name || "Employee",
-        requiresPasswordChange: user.mustResetPassword,
-        requiresFaceEnrollment,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
+  return roleId;
 };
 
-// Resend OTP Code
-export const resendVerificationCode = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-    const trimmedEmail = (email || "").trim().toLowerCase();
-
-    const user = await User.findOne({ email: trimmedEmail });
-    if (!user) throw new AppError("User not found!", 404);
-
-    validateUserStatus(user);
-
-    if (user.status === "Active")
-      throw new AppError("Account Already Verified!", 400);
-
-    const today = new Date();
-    const lastResend = user.resendDate ? new Date(user.resendDate) : null;
-
-    if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
-      user.resendCount = 0;
-      user.resendDate = today;
-    }
-
-    if (user.resendCount >= 3) {
-      throw new AppError(
-        "Maximum OTP resend limit reached for today (3). Try again tomorrow.",
-        429,
-      );
-    }
-
-    const otpCode = generateRandomCode(6);
-    const hashedOTP = await bcrypt.hash(otpCode, 10);
-
-    user.verificationCode = hashedOTP;
-    user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    user.resendCount += 1;
-    user.resendDate = today;
-    await user.save();
-
-    await sendEmail({
-      to: user.email,
-      subject: "HRcoM – New Verification Code",
-      type: "resendOTP",
-      name: user.name,
-      code: otpCode,
-    });
-
-    return res.status(200).json({
-      status: "Success",
-      message: "OTP code resent successfully!",
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Reset Password
-export const resetPassword = async (req, res, next) => {
-  try {
-    const { email, newPassword } = req.body;
-
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) throw new AppError("User not found!", 404);
-
-    validateUserStatus(user);
-
-    if (!user.mustResetPassword) {
-      throw new AppError("Password Reset not required for this account!", 400);
-    }
-
-    if (isEmpty(newPassword)) throw new AppError("New Password Missing!", 400);
-
-    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      throw new AppError(
-        "Password must be at least 8 characters long, and contain at least one capital letter!",
-        400,
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    user.mustResetPassword = false;
-    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
-    await user.save();
-
-    const userRole = await UserRole.findById(user.role_id);
-    const token = jwt.sign(
-      { id: user._id, role: userRole?.name || "Employee" },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
-    );
-
-    res.status(200).json({
-      status: "Success",
-      message: "Password Reset successfully!",
-      result: {
-        token,
-        userId: user._id,
-        role: userRole?.name || "Employee",
-        requiresFaceEnrollment,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Forget Password Request
-export const requestPasswordReset = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    const user = await User.findOne({ email: email.trim().toLowerCase() });
-    if (!user) throw new AppError("User not found!", 404);
-
-    validateUserStatus(user);
-
-    const token = crypto.randomBytes(32).toString("hex");
+// Check supervisor validity helper function
+export const validateSupervisor = async (supervisor_full_name, action) => {
+  if (
+    supervisor_full_name &&
+    typeof supervisor_full_name === "string" &&
+    supervisor_full_name.trim() !== "" &&
+    supervisor_full_name !== "Not assigned yet"
+  ) {
     console.log(
-      `[FOREGET-PASSWORD-DEBUG] Password reset request for: ${user.email}: ${token}`,
+      `[${action}-USER-DEBUG] Attempting to look up supervisor: "${supervisor_full_name}"`,
     );
-    user.resetPasswordToken = crypto
-      .createHash("sha256")
-      .update(token)
-      .digest("hex");
 
-    user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
-    await user.save();
+    // Split the supervisor's full name
+    const parts = supervisor_full_name.trim().split(/\s+/);
+    const supervisor_name = parts[0];
+    const supervisor_lastName = parts.slice(1).join(" ");
 
-    const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${token}&email=${user.email}`;
-
-    await sendEmail({
-      to: user.email,
-      subject: "HRcoM Password Reset",
-      type: "forgetPasswordRequest",
-      name: user.name,
-      resetLink: resetURL,
+    // Check the supervisor existance
+    const supervisor = await User.findOne({
+      name: supervisor_name,
+      lastName: supervisor_lastName,
     });
 
-    res.status(200).json({
-      status: "Success",
-      message: "Password reset link sent to your email!",
-    });
-  } catch (err) {
-    next(err);
+    if (!supervisor) throw new AppError("Supervisor not found!", 404);
+
+    // Get the supervisor ID
+    const supervisorId = supervisor._id; 
+    console.log(`[${action}-USER-DEBUG] Supervisor found: ${supervisorId}`);
+
+    return supervisorId;
+  } else {
+    console.log(
+      `[${action}-USER-DEBUG] Skipping supervisor lookup (name is empty or N/A)`,
+    );
   }
 };
 
-// Forget Password Reset
-export const forgetPassword = async (req, res, next) => {
-  try {
-    const { email, token, newPassword } = req.body;
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
-
-    const user = await User.findOne({
-      email: email.trim().toLowerCase(),
-      resetPasswordToken: hashedToken,
-      resetPasswordExpires: { $gt: Date.now() },
+// Check department validity helper function
+export const validateDepartment = async (department, action) => {
+  if (department && department !== "Unassigned" && department !== "all") {
+    const userdepartment = await Department.findOne({
+      name: { $regex: new RegExp(`^${department}$`, "i") },
     });
 
-    if (!user)
-      return sendError(res, "Invalid or Expired password reset token!");
-
-    if (validateUserStatus(user, res)) return;
-
-    if (isEmpty(newPassword)) return sendError(res, "Missing Password!");
-
-    if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
-      return sendError(
-        res,
-        "Password must be at least 8 characters long, and contain at least one capital letter!",
-      );
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    user.resetPasswordToken = null;
-    user.resetPasswordExpires = null;
-    user.status = "Active";
-    user.mustResetPassword = false;
-    const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
-    await user.save();
-
-    const userRole = await UserRole.findById(user.role_id);
-    const tokenGen = jwt.sign(
-      { id: user._id, role: userRole?.name || "Employee" },
-      process.env.JWT_SECRET,
-      { expiresIn: "24h" },
+    if (!userdepartment) throw new AppError("Invalid Department!", 400);
+    
+    // Get the department ID
+    const departmentId = userdepartment._id; 
+    console.log(
+      `[${action}-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
     );
 
-    res.status(200).json({
-      status: "Success",
-      message: "Password Reset Successfully!",
-      result: {
-        token: tokenGen,
-        userId: user._id,
-        role: userRole?.name || "Employee",
-        requiresFaceEnrollment,
-      },
-    });
-  } catch (err) {
-    res.status(500).json({
-      status: "Error",
-      message: err.message,
-    });
+    return departmentId;
   }
-};
+}
 
 // --------------------------------------------------------------------------- //
 // ----------------------------- USER MANAGEMENT ----------------------------- //
 // --------------------------------------------------------------------------- //
 
-// Add User Functionnality (Only the Admin can do it)
+// Add User (Only the Admin can do it)
 export const addUser = async (req, res, next) => {
   try {
     const {
@@ -469,6 +194,8 @@ export const addUser = async (req, res, next) => {
     const trimmedEmail = (email || "").trim().toLowerCase();
     const trimmedIdNumber = (idNumber || "").trim();
 
+    const action = "ADD";
+
     // Check user existence
     console.log(
       `[ADD-USER-DEBUG] Checking if user already exists: ${trimmedEmail} - ${trimmedIdNumber}`,
@@ -476,153 +203,54 @@ export const addUser = async (req, res, next) => {
     const existingUser = await User.findOne({
       $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
     });
-    if (existingUser) return sendError(res, "User Already Existing!", 409);
+    
+    if (existingUser) {
+      if (existingUser.email === trimmedEmail) {
+        return sendError(res, "A user with this email already exists!", 409);
+      }
+      if (existingUser.idNumber?.number === trimmedIdNumber) {
+        return sendError(res, "A user with this ID number already exists!", 409);
+      }
+      return sendError(res, "User Already Existing!", 409);
+    }
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
     );
 
-    // Validate the field inputs
-    if (isEmpty(name))
-      return sendError(res, "First name is required!", 400);
-    
-    if (isEmpty(lastName))
-      return sendError(res, "Last name is required!", 400);
-
-    if (isEmpty(address))
-      return sendError(res, "Address is required!", 400);
-    
-      if (isEmpty(position))
-      return sendError(res, "Position is required!", 400);
-
-    if (!isValidEmail(email))
-      return sendError(res, "Invalid Email Format!", 400);
-
-    // Phone number validation and checking phone number uniqueness
-    if (!validatePhoneNumber(countryCode, phoneNumber)) {
-      return sendError(res, "Invalid Phone Number Format!", 400);
+    // Backend Safety: Strict one-way association: Admin must be HR
+    const roleCheck = (role || "").toLowerCase();
+    const deptCheck = (department || "").toLowerCase();
+    if (roleCheck === "admin" && deptCheck !== "hr") {
+      return sendError(res, "Admin role must belong strictly to the HR department", 400);
     }
 
-    const existingPhoneUser = await User.findOne({
-      phoneNumber: validatePhoneNumber(countryCode, phoneNumber),
+    // Validate common field Inputs (Don't require DB checks)
+    validateUserData({
+      name,
+      lastName,
+      trimmedEmail,
+      address,
+      position,
+      bonus,
+      bio,
+      hasChildren,
+      nbOfChildren,
     });
-    if (existingPhoneUser) {
-      return sendError(res, "Phone number not available!", 400);
-    }
+
+    // Get the full validated Phone number (After format and uniqueness checks)
+    const validatedPhoneNumber = await fullPhoneNumberValidation(countryCode, phoneNumber);
 
     // CIN/Passport validation
-    if (!["CIN", "Passport"].includes(idType)) {
-      return sendError(res, "ID Type must be either CIN or Passport!", 400);
-    }
+    await fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
 
-    // P.S: The country code for the CIN is automatically = "TN"
-    switch (idType) {
-      case "CIN":
-        if (!validateCIN(trimmedIdNumber)) {
-          return sendError(res, "Invalid CIN format!", 400);
-        }
-        break;
+    // Get the role Id if the Role is valid
+    const roleId = await validateUserRole(role, action);
 
-      case "Passport":
-        if (
-          !idCountryCode ||
-          !countries.some((c) => c.code === idCountryCode)
-        ) {
-
-          return sendError(res, "Invalid country code for Passport!", 400);
-        } else if (!validatePassport(trimmedIdNumber, idCountryCode)) {
-          const hint = getPassportHint(idCountryCode);
-          return sendError(
-            res, 
-            `Invalid Passport format! ${idCountryCode} Passport must match: ${hint}`,
-            400
-          );
-        }
-        break;
-    }
-
-    if (bio && !isWithinRange(bio, 0, 500))
-      return sendError(res, "Bio must be under 500 characters!", 400);
-
-    if (hasChildren && nbOfChildren <= 0)
-      return sendError(res, "Please specify the number of children!", 400);
-    if (nbOfChildren < 0)
-      return sendError(res, "Invalid Number of children!", 400);
-
-    if (bonus < 0)
-      return sendError(res, "Invalid Bonus value!", 400);
-
-    // Check Role validity
-    const userrole = await UserRole.findOne({
-      name: { $regex: new RegExp(`^${role}$`, "i") },
-    });
-    if (!userrole) throw new AppError("Invalid Role!", 400);
-
-    // Get the role ID
-    const roleId = userrole._id;
-    console.log(`[ADD-USER-DEBUG] Role found: ${userrole.name} (${roleId})`);
-
-    // --- Supervisor is now optional for the Intern and Employee (can use "Not assigned yet") ---
-    // Check the validity of the supervisor
-    let supervisorId = null;
-
-    if (
-      supervisor_full_name &&
-      typeof supervisor_full_name === "string" &&
-      supervisor_full_name.trim() !== "" &&
-      supervisor_full_name !== "Not assigned yet"
-    ) {
-      console.log(
-        `[ADD-USER-DEBUG] Attempting to look up supervisor: "${supervisor_full_name}"`,
-      );
-
-      const parts = supervisor_full_name.trim().split(/\s+/);
-      const supervisor_name = parts[0];
-      const supervisor_lastName = parts.slice(1).join(" ");
-
-      const supervisor = await User.findOne({
-        name: supervisor_name,
-        lastName: supervisor_lastName,
-      });
-
-      if (!supervisor) throw new AppError("Supervisor not found!", 404);
-      supervisorId = supervisor._id; // Get the supervisor ID
-      console.log(`[ADD-USER-DEBUG] Supervisor found: ${supervisorId}`);
-    } else {
-      console.log(
-        `[ADD-USER-DEBUG] Skipping supervisor lookup (name is empty or N/A)`,
-      );
-    }
-
-    // Check the validity of the department
-    let departmentId = null;
-    const departmentValue =
-      typeof department === "string" ? department.trim() : department;
-    const isUnassigned =
-      !departmentValue ||
-      departmentValue === "" ||
-      departmentValue === "Unassigned" ||
-      departmentValue === "all";
-
-    if (!isUnassigned) {
-      const userdepartment = await Department.findOne({
-        name: { $regex: new RegExp(`^${departmentValue}$`, "i") },
-      });
-
-      if (!userdepartment) {
-        throw new AppError(
-          `Department "${departmentValue}" not found. Create it first (Roles/Departments) or choose Unassigned.`,
-          400,
-        );
-      }
-      departmentId = userdepartment._id;
-      console.log(
-        `[ADD-USER-DEBUG] Department found: ${userdepartment.name} (${departmentId})`,
-      );
-    }
-
-    // Get the full validated Phone number
-    const validatedPhoneNumber = validatePhoneNumber(countryCode, phoneNumber);
+    // Check the validity of the supervisor (Optional field) and get the supervisor ID
+    const supervisorId = await validateSupervisor(supervisor_full_name, action);
+    // Check the validity of the department and get the department ID
+    const departmentId = await validateDepartment(department, action);
 
     // Generate password (length = 8)
     const password = generateRandomCode();
@@ -638,8 +266,9 @@ export const addUser = async (req, res, next) => {
     // Hash OTP code
     const hashedOTP = await bcrypt.hash(otpCode, 10);
 
-    // No base64 handling here. Image upload uses a separate FormData endpoint (uploadProfileImage).
-    let finalProfileImageURL = typeof profileImageURL === "string" ? profileImageURL : "";
+    // Get the profile Image URL
+    let finalProfileImageURL =
+      typeof profileImageURL === "string" ? profileImageURL : "";
 
     // Create user
     console.log(`[ADD-USER-DEBUG] Creating user in DB...`);
@@ -725,151 +354,177 @@ export const addUser = async (req, res, next) => {
 export const updateUser = async (req, res, next) => {
   try {
     let { id } = req.params;
-    if (id === "current") {
-      id = req.user.id;
-    }
-    const updateData = { ...req.body };
+    if (id === "current") id = req.user.id;
 
+    const updateData = { ...req.body };
+    const action = "UPDATE";
+
+    // Check the user existence
+    const existingUser = await User.findById(id);
+    if (!existingUser) throw new AppError("User not found!", 404);
+
+    // Check the email validity and the user existence
     if (updateData.email) {
-      if (!isValidEmail(updateData.email)) {
+      const trimmedEmail = updateData.email.trim().toLowerCase();
+
+      if (!isValidEmail(trimmedEmail)) {
         return sendError(res, "Invalid Email Format!", 400);
       }
-      
-      const trimmedEmail = updateData.email.trim().toLowerCase();
+
       const existingEmailUser = await User.findOne({ email: trimmedEmail });
-      
-      // We check if the email belongs to another user. If an Admin is editing another user's profile,
-      // id variable holds the target user's ID. If a user edits their own profile, id holds their ID.
+
       if (existingEmailUser && existingEmailUser._id.toString() !== id) {
-        return res.status(400).json({ status: "Error", message: "Email already in use!" });
+        return sendError(res, "Unavailable Email!", 400);
       }
-      
+
       updateData.email = trimmedEmail;
     }
 
-    // Check phone number validity and uniqueness
-    let updatedPhoneNumber = null;
+    // Input validation for common fields (those that don't require DB checks)
+    validateUserData({
+      name: updateData.name,
+      lastName: updateData.lastName,
+      trimmedEmail: updateData.email,
+      address: updateData.address,
+      position: updateData.position,
+      bonus: updateData.bonus,
+      bio: updateData.bio,
+      hasChildren: updateData.hasChildren,
+      nbOfChildren: updateData.nbOfChildren,
+    });
 
+    // Check the phone number validity 
     if (updateData.phoneNumber) {
-      updatedPhoneNumber = validatePhoneNumber(
+      updateData.phoneNumber = await fullPhoneNumberValidation(
         updateData.countryCode,
         updateData.phoneNumber,
+        id 
+      );
+    }
+
+    // Check the CIN/Passport validity
+    if (updateData.idType || updateData.idNumber) {
+      const trimmedIdNumber = updateData.idNumber?.number?.trim();
+      const idCountryCode = updateData.idNumber?.countryCode;
+
+      await fullCINPassportValidation(
+        updateData.idType,
+        idCountryCode,
+        trimmedIdNumber,
+        id
       );
 
-      if (!updatedPhoneNumber) {
-        return sendError(res, "Invalid Phone Number!", 400);
-      } else {
-        // Check phone number uniqueness
-        const existingPhoneUser = await User.findOne({
-          phoneNumber: updatedPhoneNumber,
-        });
-
-        if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
-          return sendError(res, "Phone number not available!", 400);  
-        }
-
-        // Save the updated version
-        updateData.phoneNumber = updatedPhoneNumber;
+      if (updateData.idType === "CIN" && updateData.idNumber) {
+        updateData.idNumber.countryCode = "TN";
       }
     }
 
-    // Check ID number uniqueness and validity
-    const idNumber = updateData.idNumber?.number;
-    const idCountryCode = updateData.idNumber?.countryCode;
+    // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)
+    let roleChanged = false;
+    let newRoleId = null;
+    let newRoleName = "";
 
-    if (updateData.idType && !["CIN", "Passport"].includes(updateData.idType)) {
-      return sendError(res, "ID Type must be either CIN or Passport!", 400);
-    }
+    // Get the id of the old role
+    const oldRoleId = existingUser.role_id;
 
-    // Check if the updated ID number already exists for another user
-    if (idNumber) {
-      const existingUser = await User.findOne({
-        "idNumber.number": idNumber,
-        "idNumber.countryCode": idCountryCode || "TN",
-      });
+    if (updateData.role) {      
+      // Validate the new role and get its ID
+      newRoleId = await validateUserRole(updateData.role, action);
 
-      if (existingUser && existingUser._id.toString() !== id) {
-        return sendError(res, `Unable to process this ${updateData.idType} Number!`, 400);
+      // Check if the role is changed
+      if (!oldRoleId.equals(newRoleId)) {
+        roleChanged = true;
+
+        const roleDoc = await UserRole.findById(newRoleId).select("name");
+        newRoleName = roleDoc?.name || "";
+        updateData.role_id = newRoleId;
       }
-    }
 
-    switch (updateData.idType) {
-      case "CIN":
-        if (idNumber && !validateCIN(idNumber)) {
-          return sendError(res, "Invalid CIN format!", 400);
-        }
-
-        if (updateData.idNumber) {
-          updateData.idNumber.countryCode = "TN";
-        }
-        break;
-
-      case "Passport":
-        if (idCountryCode && !countries.some((c) => c.code === idCountryCode)) {
-          return sendError(res, "Invalid country code for Passport!", 400);
-        } else if (
-          idNumber &&
-          idCountryCode &&
-          !validatePassport(idNumber, idCountryCode)
-        ) {
-          const hint = getPassportHint(idCountryCode);
-          return sendError(
-            res,
-            "Invalid Passport format for the specified country: " + idCountryCode + "!",
-            400
-          );
-        }
-        break;
-    }
-
-    // Map role name to role_id
-    if (updateData.role) {
-      const userrole = await UserRole.findOne({
-        name: { $regex: new RegExp(`^${updateData.role}$`, "i") },
-      });
-      if (userrole) {
-        updateData.role_id = userrole._id;
-      }
       delete updateData.role;
     }
 
-    // Map department name to department_id
+    // Check the department validity
     if (updateData.department) {
-      const userdepartment = await Department.findOne({
-        name: { $regex: new RegExp(`^${updateData.department}$`, "i") },
-      });
-      if (userdepartment) {
-        updateData.department_id = userdepartment._id;
-      }
+      updateData.department_id = await validateDepartment(
+        updateData.department,
+        action
+      );
       delete updateData.department;
     }
 
-    // Map supervisor name to supervisor_id
-    if (updateData.supervisor_full_name) {
-      const parts = updateData.supervisor_full_name.trim().split(/\s+/);
-      const sName = parts[0];
-      const sLastName = parts.slice(1).join(" ");
-
-      const supervisor = await User.findOne({
-        name: sName,
-        lastName: sLastName,
-      });
-      if (supervisor) {
-        updateData.supervisor_id = supervisor._id;
+    // Check the supervisor validity and handle explicit unassigning
+    if ("supervisor_full_name" in req.body) {
+      const assignedName = req.body.supervisor_full_name;
+      if (!assignedName || assignedName === "Not assigned yet") {
+        updateData.supervisor_id = null;
+      } else {
+        updateData.supervisor_id = await validateSupervisor(
+          assignedName,
+          action
+        );
       }
       delete updateData.supervisor_full_name;
     }
 
-    // Map isActive boolean to status string
+    // Backend Safety Check: Only update supervisor_id if explicitly sent and valid
+    if ("supervisor_id" in req.body) {
+      if (req.body.supervisor_id === undefined) {
+        delete updateData.supervisor_id;
+      } else if (req.body.supervisor_id === null || req.body.supervisor_id === "") {
+        updateData.supervisor_id = null;
+      } else {
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(String(req.body.supervisor_id));
+        if (!isValidObjectId) {
+          delete updateData.supervisor_id; // skip if invalid string like "Not Assigned"
+        } else {
+          updateData.supervisor_id = req.body.supervisor_id;
+        }
+      }
+    } else {
+      // If supervisor_id is not in req.body at all, ensure we don't accidentally update it
+      delete updateData.supervisor_id;
+    }
+
+    // Update the Status of the user
     if (updateData.isActive !== undefined) {
       updateData.status = updateData.isActive ? "Active" : "Inactive";
       delete updateData.isActive;
     }
 
+    // Update the user
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
-    }).populate("role_id").populate("department_id").populate("supervisor_id");
+    })
+      .select("-faceDescriptors")
+      .populate("role_id")
+      .populate("department_id")
+      .populate("supervisor_id");
 
+    // Send the update user email ONLY if role changed
+    if (roleChanged) {
+      try {
+        console.log(
+          `[UPDATE-USER-DEBUG] Sending Update user email to: ${user.email}`
+        );
+
+        await sendEmail({
+          to: user.email,
+          subject: "HRcoM! - Congratulations! Your Role Has Been Updated",
+          type: "updateUser",
+          name: user.name,
+          newRole: newRoleName,
+        });
+
+        console.log(`[UPDATE-USER-DEBUG] Email sent successfully.`);
+      } catch (emailErr) {
+        console.log(
+          `[UPDATE-USER-DEBUG] EMAIL FAILED:`,
+          emailErr.message
+        );
+      }
+    }
+
+    // Create the audit log for this action
     await logAuditAction({
       adminId: req.user.id,
       action: "UPDATE_USER",
@@ -880,7 +535,7 @@ export const updateUser = async (req, res, next) => {
       ipAddress: req.ip,
     });
 
-    res.status(200).json({
+    return res.status(200).json({
       status: "Success",
       message: "User updated successfully.",
       data: user,
@@ -933,22 +588,32 @@ export const deleteUser = async (req, res, next) => {
   }
 };
 
-// Get all Users (Only for Admins) - with Filtering & Pagination
+// Get all Users (Only for Admins) - with Pagination  
 export const getAllUsers = async (req, res, next) => {
   try {
     const {
       page = 1,
-      limit = 10,
-      department,
-      role,
-      status,
-      search,
+      limit: queryLimit, // [PAGINATION-FIX] Read limit from query to support full-dataset fetches (e.g. limit=9999 for attendance reconciliation)
     } = req.query;
 
+    // [PAGINATION-FIX] Respect the limit param; default to 10 for normal paginated views, capped at 9999
+    const limit = Math.min(parseInt(queryLimit) || 10, 9999);
+    const parsedPage = parseInt(page); // The pages of users
+
+    // [DEBUG-PAGINATION]
+    console.log(`[PAGINATION] Module: Users | Page: ${parsedPage} | Limit: ${limit} | Requested limit: ${queryLimit || 'default(10)'}`);
+
+    // Get total count for the frontend pagination 
+    const totalUsers = await User.countDocuments();
+
     const users = await User.find()
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
-      .populate("supervisor_id");
+      .populate("supervisor_id")
+      .sort({ joinDate: -1 })         // Sort by the newest users first
+      .skip((parsedPage - 1) * limit) // Skip the previous pages
+      .limit(limit);                  // 10 Users per page limit
 
     // Map users to a clean format
     const cleanUsers = users.map((user) => ({
@@ -970,8 +635,6 @@ export const getAllUsers = async (req, res, next) => {
       joinDate: user.joinDate,
       position: user.position,
       faceEnrolled: user.faceEnrolled,
-      faceEnrollmentPromptRequired: user.faceEnrollmentPromptRequired,
-      faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
         : null,
@@ -987,7 +650,85 @@ export const getAllUsers = async (req, res, next) => {
         : null,
     }));
 
-    res.status(200).json(cleanUsers);
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalUsers / limit),
+      totalUsers,
+      users: cleanUsers,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get available active supervisors (Admin only)
+export const getActiveSupervisors = async (req, res, next) => {
+  try {
+    let { page = 1, limit = 10, search = "" } = req.query; // ADD search
+
+    const parsedPage = Math.max(parseInt(page) || 1, 1);
+    const parsedLimit = Math.min(parseInt(limit) || 10, 100);
+
+    const supervisorRole = await UserRole.findOne({ name: "Supervisor" }).select("_id");
+    if (!supervisorRole) return res.status(404).json({ status: "Error", message: "Supervisor role not found!" });
+
+    // ADD: build filter with optional search
+    const filter = { status: "Active", role_id: supervisorRole._id };
+    if (search.trim()) {
+      filter.$or = [
+        { name: { $regex: search.trim(), $options: "i" } },
+        { lastName: { $regex: search.trim(), $options: "i" } },
+        { email: { $regex: search.trim(), $options: "i" } },
+      ];
+    }
+
+    const totalSupervisors = await User.countDocuments(filter);
+    const supervisors = await User.find(filter)
+      .select("name lastName email")
+      .skip((parsedPage - 1) * parsedLimit)
+      .limit(parsedLimit)
+      .sort({ name: 1 });
+
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: parsedLimit,
+      totalPages: Math.ceil(totalSupervisors / parsedLimit),
+      totalSupervisors,
+      data: supervisors,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get the 3 recent supervisors (For the dropdown in the Create/Edit user form)
+export const getRecentSupervisors = async (req, res, next) => {
+  try {
+    // Get Supervisor role ID
+    const supervisorRole = await UserRole.findOne({ name: "Supervisor" }).select("_id");
+    if (!supervisorRole) {
+      return res.status(404).json({ 
+        status: "Error", 
+        message: "Supervisor role not found!" 
+      });
+    }
+
+    // Find the 3 most recent active supervisors
+    const supervisors = await User.find({
+      role_id: supervisorRole._id,
+      status: "Active",
+    })
+      .select("name lastName email")
+      .sort({ joinDate: -1 }) // Get the newest supervisors first
+      .limit(3); // Limit to only 3 supervisors
+
+    res.status(200).json({
+      status: "Success",
+      data: supervisors,
+    });
   } catch (err) {
     next(err);
   }
@@ -1001,6 +742,7 @@ export const getUserById = async (req, res, next) => {
       id = req.user.id;
     }
     const user = await User.findById(id)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
@@ -1020,21 +762,44 @@ export const getUserById = async (req, res, next) => {
 export const searchUser = async (req, res, next) => {
   try {
     // The user query (Search by name/lastname and email)
-    const { q } = req.query;
+    const { q = "", page = 1} = req.query;
 
-    // Search
-    const users = await User.find({
+    const limit = 10; // 10 users per page max
+    const parsedPage = Math.max(parseInt(page), 1); 
+
+    // Build the search query
+    const query = {
       $or: [
         { name: { $regex: q, $options: "i" } },
         { lastName: { $regex: q, $options: "i" } },
         { email: { $regex: q, $options: "i" } },
       ],
-    })
+    };
+
+    // Count the total users of the search query for pagination purposes
+    const totalUsers = await User.countDocuments(query);
+
+    // Fetch the paginated users
+    const users = await User.find(query)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
-      .populate("supervisor_id", "name lastName email"); // To get the role, department and supervisor names in the response
+      .populate("supervisor_id", "name lastName email")
+      .skip((parsedPage - 1) * limit) // Skip the previous pages
+      .limit(limit)
+      .sort({ joinDate: -1 }); // Sort by the newest users first
+    
 
-    res.status(200).json(users);
+    res.status(200).json({
+      status: "Success",
+      message: "User Search results",
+      result: users,
+      meta: {
+        page: parsedPage,
+        totalPages: Math.ceil(totalUsers / limit),
+        totalUsers,
+      }
+    });
   } catch (err) {
     res.status(500).json({
       status: "Error",
@@ -1046,7 +811,10 @@ export const searchUser = async (req, res, next) => {
 // Filter users by Role, Department or status (only for Admins)
 export const filterUsers = async (req, res, next) => {
   try {
-    const { role, department, status } = req.query; // Get the filters wanted
+    const { role, department, status, page = 1 } = req.query; // Get the filters wanted
+
+    const limit = 10; // 10 users per page maximum
+    const parsedPage = Math.max(parseInt(page), 1); 
 
     let roleId, departmentId;
 
@@ -1077,20 +845,34 @@ export const filterUsers = async (req, res, next) => {
     if (roleId) query.role_id = roleId;
     if (departmentId) query.department_id = departmentId;
     if (status) {
-      if (status === "Active") query.status = "Active";
-      else if (status === "Inactive") query.status = "Inactive";
-      else if (status === "Blocked") query.status = "Blocked";
-      else if (status === "Pending") query.status = "Pending";
+      const allowedStatus = ["Active", "Inactive", "Blocked", "Pending"];
+      if (!allowedStatus.includes(status)) {
+        return sendError(res, "Invalid status!");
+      }
+      query.status = status;
     }
 
-    // Execute query and populate relevant fields
+    // Count the total filtered users
+    const totalUsers = await User.countDocuments(query);
+
+    // Fetch the paginated filtered users
     const users = await User.find(query)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id", "name lastName email")
+      .skip((parsedPage - 1) * limit)
+      .limit(limit)
       .lean(); // Convert to plain JSON for the frontend later
 
-    res.status(200).json({ status: "Success", data: users });
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalUsers / limit),
+      totalUsers,
+      data: users,
+    });
   } catch (err) {
     return handleError(res, err);
   }
@@ -1194,7 +976,7 @@ export const exportUsersToExcel = async (req, res, next) => {
       { header: "Name", key: "name", width: 20 },
       { header: "Last Name", key: "lastName", width: 20 },
       { header: "Email", key: "email", width: 30 },
-      { header: "Address", key: "address", width: 15 },
+      { header: "Address", key: "address", width: 25 },
       { header: "Phone", key: "phoneNumber", width: 15 },
       { header: "Position", key: "position", width: 20 },
       { header: "Role", key: "role", width: 15 },
@@ -1211,6 +993,36 @@ export const exportUsersToExcel = async (req, res, next) => {
         status: user.status,
       }),
     );
+
+    // Style the header (borders + background color)
+    sheet.getRow(1).eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "89D2DC" },
+      };
+      cell.font = { bold: true };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+
+    // Style data rows with borders (except the header)
+    sheet.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          left: { style: "thin" },
+          bottom: { style: "thin" },
+          right: { style: "thin" },
+        };
+      });
+    });
 
     res.setHeader(
       "Content-Type",
@@ -1370,7 +1182,6 @@ export const resetFace = async (req, res, next) => {
           faceDescriptors: [],
           faceEnrolled: false,
           faceEnrollmentPromptRequired: true,
-          faceEnrollmentPromptRequired: true,
         },
       },
     );
@@ -1404,7 +1215,53 @@ export const getPublicInterns = async (req, res, next) => {
   }
 };
 
-/*
-What was changed: Added email uniqueness validation in the updateUser function to prevent duplicated emails on updates.
-Why it was changed: To allow non-admin users to edit their own profile email safely and correctly reject taken emails.
-*/
+// --------------------------------------------------------------------------- //
+// ------------------------ TEAM MEMBERS MANAGEMENT -------------------------- //
+// --------------------------------------------------------------------------- //
+
+// Get team members under a supervisor (Supervisor and Admin)
+export const getTeamMembers = async (req, res, next) => {
+  try {
+    const { id } = req.params; // Supervisor ID
+    const { page = 1 } = req.query;
+
+    const limit = 10; // 10 team members per page
+    const parsedPage = Math.max(parseInt(page), 1);
+
+    // Check if the user exists
+    const existingUser = await User.findById(id);
+    if (!existingUser) {
+      return sendError(res, "User not found!", 404);
+    }
+
+    // Only the supervisor himself and the Admin can access the team members list
+    if (req.user.role !== "Admin" && req.user._id.toString() !== id) {
+      return sendError(res, "Unauthorized access to this team!", 403);
+    }
+
+    // Build the query
+    const query = { supervisor_id: id };
+
+    // Count the total team members
+    const totalMembers = await User.countDocuments(query);
+
+    // Find the paginated list of team members of the supervisor (10 per page)
+    const teamMembers = await User.find(query)
+      .populate("role_id", "name")
+      .populate("department_id", "name")
+      .skip((parsedPage - 1) * limit)
+      .limit(limit)
+      .sort({ joinDate: -1 });
+
+    res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      limit: limit,
+      totalPages: Math.ceil(totalMembers / limit),
+      totalMembers,
+      data: teamMembers,
+    });
+  } catch (err) {
+    next(err);
+  }
+};

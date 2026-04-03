@@ -81,6 +81,7 @@ const userSchema = mongoose.Schema(
       required: true,
     },
     joinDate: {
+      // UTC Join Date (No timezone issues)
       type: Date,
       required: true,
       default: Date.now,
