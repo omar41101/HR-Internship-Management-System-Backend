@@ -3,7 +3,6 @@ import Department from "../models/Department.js";
 import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
 import UserRole from "../models/UserRole.js";
-import { io } from "../server.js";
 import crypto from "crypto";
 
 import { buildDateFilter } from "../utils/dateFilter.js";
@@ -278,7 +277,7 @@ export const checkIn = async (req, res, next) => {
     );
 
     // Emit (Sends a message) real-time event to all connected clients
-    io.emit("attendanceUpdated", {
+    req.app?.get("io")?.emit("attendanceUpdated", {
       action: "checkIn",
       userId: String(userId),
       attendance,
@@ -634,7 +633,7 @@ export const updateAttendance = async (req, res, next) => {
     }
 
     // Emit real-time event for admin updates too
-    io.emit("attendanceUpdated", {
+    req.app?.get("io")?.emit("attendanceUpdated", {
       action: "adminUpdate",
       attendance,
     });
@@ -654,22 +653,7 @@ export const checkOut = async (req, res, next) => {
   try {
     const userId = req.user._id;
     const now = new Date();
-    const utcNow = new Date(Date.UTC(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      now.getHours(),
-      now.getMinutes(),
-      now.getSeconds(),
-      now.getMilliseconds()
-    ));
-
-    const todayUTC = new Date(Date.UTC(
-      utcNow.getUTCFullYear(),
-      utcNow.getUTCMonth(),
-      utcNow.getUTCDate(),
-      0, 0, 0, 0
-    ));
+    const { start: todayUTC, end: tomorrowUTC } = getUtcDayRange(now);
 
     // Check the user's existance
     const user = await User.findById(userId);
@@ -700,7 +684,7 @@ export const checkOut = async (req, res, next) => {
     }
 
     // Emit real-time event to all connected clients
-    io.emit("attendanceUpdated", {
+    req.app?.get("io")?.emit("attendanceUpdated", {
       action: "checkOut",
       userId: String(userId),
       attendance,

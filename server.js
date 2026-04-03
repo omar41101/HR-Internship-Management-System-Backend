@@ -23,6 +23,9 @@ export const io = new Server(httpServer, {
   },
 });
 
+// Make io accessible from controllers via req.app.get('io')
+app.set("io", io);
+
 import errorHandler from "./middleware/errorHandler.js";
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";

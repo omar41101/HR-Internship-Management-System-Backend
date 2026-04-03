@@ -739,10 +739,14 @@ export const getUserById = async (req, res, next) => {
   try {
     let { id } = req.params;
     if (id === "current") {
-      id = req.user.id;
+      id = req.user?._id || req.user?.id;
     }
+
+    const requesterId = req.user?._id || req.user?.id;
+    const isSelf = requesterId && String(requesterId) === String(id);
+
     const user = await User.findById(id)
-      .select("-faceDescriptors")
+      .select(isSelf ? undefined : "-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
