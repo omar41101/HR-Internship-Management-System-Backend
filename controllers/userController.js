@@ -745,8 +745,10 @@ export const getUserById = async (req, res, next) => {
     const requesterId = req.user?._id || req.user?.id;
     const isSelf = requesterId && String(requesterId) === String(id);
 
-    const user = await User.findById(id)
-      .select(isSelf ? undefined : "-faceDescriptors")
+    const query = User.findById(id);
+    if (!isSelf) query.select("-faceDescriptors");
+
+    const user = await query
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
