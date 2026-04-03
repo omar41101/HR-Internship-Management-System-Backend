@@ -23,12 +23,16 @@ const auditLogSchema = mongoose.Schema(
         "DELETE_ROLE",
         "UPLOAD_IMAGE",
         "REMOVE_IMAGE",
+        "CREATE_LEAVE_TYPE",
+        "UPDATE_LEAVE_TYPE",
+        "ARCHIVE_LEAVE_TYPE",
+        "RESTORE_LEAVE_TYPE",
       ],
     },
     target_type: {
       type: String,
       required: true,
-      enum: ["User", "Department", "UserRole"],
+      enum: ["User", "Department", "UserRole", "LeaveType"],
     },
     target_id: {
       type: mongoose.Schema.Types.ObjectId,

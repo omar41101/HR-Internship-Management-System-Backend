@@ -7,46 +7,58 @@ const formatAuditLog = (log) => {
   // Format description based on action and target
   switch (log.action) {
     case "DELETE_USER":
-      description = `Deleted User ${log.target_name}`;
+      description = `Deleted User ${log.target_name || ""}`;
       break;
     case "UPDATE_ROLE":
-      description = `Updated Role Permissions for ${log.target_name || log.target_id}`;
+      description = `Updated Role Permissions for ${log.target_name || ""}`;
       break;
     case "CREATE_USER":
       description = `Created ${log.target_name ? log.target_name + " " : ""}Account`;
       break;
     case "UPLOAD_IMAGE":
-      description = `Uploaded ${log.target_name || log.target_id}'s Profile Image`;
+      description = `Uploaded ${log.target_name || "a user"}'s Profile Image`;
       break;
     case "REMOVE_IMAGE":
-      description = `Removed ${log.target_name || log.target_id}'s Profile Image`;
+      description = `Removed ${log.target_name || "a user"}'s Profile Image`;
       break;
     case "UPDATE_USER":
-      description = `Updated User ${log.target_name || log.target_id}`;
+      description = `Updated User ${log.target_name || ""}`;
       break;
     case "TOGGLE_STATUS":
       description = `Changed System Settings`;
       if (log.details && log.details.status) {
-        description = `Changed ${log.target_name || log.target_id}'s Status to ${log.details.status}`;
+        description = `Changed ${log.target_name || "user"}'s Status to ${log.details.status}`;
       }
       break;
     case "CREATE_DEPARTMENT":
-      description = `Created Department ${log.target_name || log.target_id}`;
+      description = `Created Department ${log.target_name || ""}`;
       break;
     case "UPDATE_DEPARTMENT":
-      description = `Updated Department ${log.target_name || log.target_id}`;
+      description = `Updated Department ${log.target_name || ""}`;
       break;
     case "DELETE_DEPARTMENT":
-      description = `Deleted Department ${log.target_name || log.target_id}`;
+      description = `Deleted Department ${log.target_name || ""}`;
       break;
     case "CREATE_ROLE":
-      description = `Created Role ${log.target_name || log.target_id}`;
+      description = `Created Role ${log.target_name || ""}`;
       break;
     case "DELETE_ROLE":
-      description = `Deleted Role ${log.target_name || log.target_id}`;
+      description = `Deleted Role ${log.target_name || ""}`;
+      break;
+    case "CREATE_LEAVE_TYPE":
+      description = `Added Leave Type ${log.target_name || ""}`;
+      break;
+    case "UPDATE_LEAVE_TYPE":
+      description = `Updated Leave Type ${log.target_name || ""}`;
+      break;
+    case "ARCHIVE_LEAVE_TYPE":
+      description = `Archived Leave Type ${log.target_name || ""}`;
+      break;
+    case "RESTORE_LEAVE_TYPE":
+      description = `Restored Leave Type ${log.target_name || ""}`;
       break;
     default:
-      description = `Performed ${log.action} on ${log.target_type}`;
+      description = `Performed ${log.action} on ${log.target_type || "Target"}`;
   }
 
   // Also fallback description if provided explicitly in details

@@ -647,6 +647,44 @@ const options = {
             },
           },
         },
+
+        // ================== Leave Type Schemas ==================
+        LeaveType: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique Identifier for each leave type.",
+            },
+            name: {
+              type: "string",
+              description: "Name of the leave type.",
+            },
+            description: {
+              type: "string",
+              description: "Description of the leave type.",
+            },
+            isPaid: {
+              type: "boolean",
+              description: "Indicates if the leave type is paid or unpaid.",
+            },
+            status: {
+              type: "string",
+              enum: ["Active", "Archived"],
+              description: "Status of the leave type (for archive/restore functionality).",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",  
+              description: "Timestamp of when the leave type was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the leave type was last updated.",
+            },
+          },
+        },
       },
 
       securitySchemes: {
