@@ -254,6 +254,9 @@ export const getAllPersonalDocuments = async (req, res, next) => {
       .limit(limit)
       .sort({ createdAt: -1 });
 
+    // [DEBUG-PAGINATION] Added log to track pagination requests from frontend for testing purposes
+    console.log(`[PAGINATION] Module: Documents | Page: ${parsedPage || 1} | Limit: ${limit || 5} | Returned: ${documents?.length || 0} records`);
+
     res.status(200).json({
       status: "Success",
       page: parsedPage,
@@ -303,6 +306,9 @@ export const getNonConfidentialPersonalDocuments = async (req, res, next) => {
       .skip(skip)
       .limit(limit)
       .sort({ createdAt: -1 });
+
+    // [DEBUG-PAGINATION] Added log to track pagination requests from frontend for testing purposes
+    console.log(`[PAGINATION] Module: Documents (Non-Confidential) | Page: ${parsedPage || 1} | Limit: ${limit || 5} | Returned: ${documents?.length || 0} records`);
 
     res.status(200).json({
       status: "Success",

@@ -206,7 +206,16 @@ export const addUser = async (req, res, next) => {
     const existingUser = await User.findOne({
       $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
     });
-    if (existingUser) return sendError(res, "User Already Existing!", 409);
+    
+    if (existingUser) {
+      if (existingUser.email === trimmedEmail) {
+        return sendError(res, "A user with this email already exists!", 409);
+      }
+      if (existingUser.idNumber?.number === trimmedIdNumber) {
+        return sendError(res, "A user with this ID number already exists!", 409);
+      }
+      return sendError(res, "User Already Existing!", 409);
+    }
 
     console.log(
       `[ADD-USER-DEBUG] User does not exist, proceeding with creation!`,
@@ -461,6 +470,25 @@ export const updateUser = async (req, res, next) => {
       delete updateData.supervisor_full_name;
     }
 
+    // Backend Safety Check: Only update supervisor_id if explicitly sent and valid
+    if ("supervisor_id" in req.body) {
+      if (req.body.supervisor_id === undefined) {
+        delete updateData.supervisor_id;
+      } else if (req.body.supervisor_id === null || req.body.supervisor_id === "") {
+        updateData.supervisor_id = null;
+      } else {
+        const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(String(req.body.supervisor_id));
+        if (!isValidObjectId) {
+          delete updateData.supervisor_id; // skip if invalid string like "Not Assigned"
+        } else {
+          updateData.supervisor_id = req.body.supervisor_id;
+        }
+      }
+    } else {
+      // If supervisor_id is not in req.body at all, ensure we don't accidentally update it
+      delete updateData.supervisor_id;
+    }
+
     // Update the Status of the user
     if (updateData.isActive !== undefined) {
       updateData.status = updateData.isActive ? "Active" : "Inactive";
@@ -471,6 +499,7 @@ export const updateUser = async (req, res, next) => {
     const user = await User.findByIdAndUpdate(id, updateData, {
       returnDocument: "after",
     })
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
@@ -568,15 +597,21 @@ export const getAllUsers = async (req, res, next) => {
   try {
     const {
       page = 1,
+      limit: queryLimit, // [PAGINATION-FIX] Read limit from query to support full-dataset fetches (e.g. limit=9999 for attendance reconciliation)
     } = req.query;
 
-    const limit = 10;
+    // [PAGINATION-FIX] Respect the limit param; default to 10 for normal paginated views, capped at 9999
+    const limit = Math.min(parseInt(queryLimit) || 10, 9999);
     const parsedPage = parseInt(page); // The pages of users
+
+    // [DEBUG-PAGINATION]
+    console.log(`[PAGINATION] Module: Users | Page: ${parsedPage} | Limit: ${limit} | Requested limit: ${queryLimit || 'default(10)'}`);
 
     // Get total count for the frontend pagination 
     const totalUsers = await User.countDocuments();
 
     const users = await User.find()
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id")
@@ -604,8 +639,6 @@ export const getAllUsers = async (req, res, next) => {
       joinDate: user.joinDate,
       position: user.position,
       faceEnrolled: user.faceEnrolled,
-      faceEnrollmentPromptRequired: user.faceEnrollmentPromptRequired,
-      faceDescriptors: user.faceDescriptors,
       role: user.role_id
         ? { id: user.role_id._id, name: user.role_id.name }
         : null,
@@ -637,41 +670,36 @@ export const getAllUsers = async (req, res, next) => {
 // Get available active supervisors (Admin only)
 export const getActiveSupervisors = async (req, res, next) => {
   try {
-    let { page = 1 } = req.query;
+    let { page = 1, limit = 10, search = "" } = req.query; // ADD search
 
-    const limit = 10;
     const parsedPage = Math.max(parseInt(page) || 1, 1);
+    const parsedLimit = Math.min(parseInt(limit) || 10, 100);
 
-    // Get the Supervisor role ID
     const supervisorRole = await UserRole.findOne({ name: "Supervisor" }).select("_id");
-    if (!supervisorRole) {
-      return res.status(404).json({ 
-        status: "Error",
-        message: "Supervisor role not found!" 
-      });
+    if (!supervisorRole) return res.status(404).json({ status: "Error", message: "Supervisor role not found!" });
+
+    // ADD: build filter with optional search
+    const filter = { status: "Active", role_id: supervisorRole._id };
+    if (search.trim()) {
+      filter.$or = [
+        { name: { $regex: search.trim(), $options: "i" } },
+        { lastName: { $regex: search.trim(), $options: "i" } },
+        { email: { $regex: search.trim(), $options: "i" } },
+      ];
     }
 
-    // Count the total active supervisors
-    const totalSupervisors = await User.countDocuments({
-      status: "Active",
-      role_id: supervisorRole._id,
-    });
-
-    // Fetch the paginated supervisors (10 per page)
-    const supervisors = await User.find({
-      status: "Active",
-      role_id: supervisorRole._id,
-    })
+    const totalSupervisors = await User.countDocuments(filter);
+    const supervisors = await User.find(filter)
       .select("name lastName email")
-      .skip((parsedPage - 1) * limit)
-      .limit(limit)
-      .sort({ name: 1 }); 
+      .skip((parsedPage - 1) * parsedLimit)
+      .limit(parsedLimit)
+      .sort({ name: 1 });
 
     res.status(200).json({
       status: "Success",
       page: parsedPage,
-      limit: limit,
-      totalPages: Math.ceil(totalSupervisors / limit),
+      limit: parsedLimit,
+      totalPages: Math.ceil(totalSupervisors / parsedLimit),
       totalSupervisors,
       data: supervisors,
     });
@@ -718,6 +746,7 @@ export const getUserById = async (req, res, next) => {
       id = req.user.id;
     }
     const user = await User.findById(id)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id");
@@ -756,6 +785,7 @@ export const searchUser = async (req, res, next) => {
 
     // Fetch the paginated users
     const users = await User.find(query)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id", "name lastName email")
@@ -831,6 +861,7 @@ export const filterUsers = async (req, res, next) => {
 
     // Fetch the paginated filtered users
     const users = await User.find(query)
+      .select("-faceDescriptors")
       .populate("role_id")
       .populate("department_id")
       .populate("supervisor_id", "name lastName email")

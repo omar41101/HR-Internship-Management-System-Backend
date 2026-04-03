@@ -211,6 +211,9 @@ export const getTimetableByUser = async (req, res, next) => {
       date: { $gte: startDate, $lte: endDate },
     }).sort({ date: 1 });
 
+    // [DEBUG-PAGINATION] Added log to track pagination requests from frontend for testing purposes
+    console.log(`[PAGINATION] Module: Timetable | Month: ${queryMonth || ""} | Year: ${queryYear || ""} | Returned: ${shifts?.length || 0} records`);
+
     res.status(200).json({
       status: "Success",
       message: "Timetable fetched successfully!",

@@ -52,6 +52,10 @@ if (process.env.NODE_ENV === "test") {
   dotenv.config();
 }
 
+if (!process.env.FACE_ATTESTATION_SECRET) {
+  console.warn("[SECURITY-WARN] FACE_ATTESTATION_SECRET is not set. Biometric attendance check-in will be rejected.");
+}
+
 app.use(express.json({ limit: "10mb" })); // Handle JSON payloads (max size 10mb)
 app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data sent from HTML forms
 

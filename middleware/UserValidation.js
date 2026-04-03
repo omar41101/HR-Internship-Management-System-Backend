@@ -30,6 +30,16 @@ export const validatePhoneNumber = (code, number) => {
     }
 
     const nationalNumber = phoneNumber.getNationalNumber().toString();
+    const regionCode = phoneUtil.getRegionCodeForNumber(phoneNumber) || code || "TN";
+
+    // Validate Tunisian phone numbers (must start with 2,4,5,9 and be 8 digits)
+    if (regionCode === "TN") {
+      const tunisianPhoneRegex = /^[2459][0-9]{7}$/;
+      if (!tunisianPhoneRegex.test(nationalNumber)) {
+        throw new AppError("Invalid Tunisian phone number", 400);
+      }
+    }
+
     const digitCount = nationalNumber.length;
     console.log(
       `[Phone-Validation-Process] National: ${nationalNumber}, Count: ${digitCount}`,
@@ -46,6 +56,9 @@ export const validatePhoneNumber = (code, number) => {
     console.log(`[Phone-Validation-SUCCESS] Result: ${formatted}`);
     return formatted;
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     console.error("[Phone-Validation-ERROR]", error.message);
     return null;
   }

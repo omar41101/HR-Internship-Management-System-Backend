@@ -1,6 +1,7 @@
 import express from "express";
 import {
   checkIn,
+  createFaceChallenge,
   checkOut,
   getAttendance,
   getMyStatus,
@@ -27,6 +28,8 @@ const router = express.Router();
 // ------------------------------------------------------------------------ //
 
 // Check-in
+router.post("/attendance/face-challenge", authenticate, createFaceChallenge);
+
 /**
  * @swagger
  * /attendance/check-in:

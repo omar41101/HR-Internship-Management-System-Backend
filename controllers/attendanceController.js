@@ -2,7 +2,9 @@ import User from "../models/User.js";
 import Department from "../models/Department.js";
 import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
+import UserRole from "../models/UserRole.js";
 import { io } from "../server.js";
+import crypto from "crypto";
 
 import { buildDateFilter } from "../utils/dateFilter.js";
 import {
@@ -37,6 +39,119 @@ const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
   return R * c;
 };
 
+const FACE_NONCE_TTL_MS = 30 * 1000;
+const FACE_CLOCK_SKEW_MS = 30 * 1000;
+const FACE_ATTESTATION_SECRET = process.env.FACE_ATTESTATION_SECRET || "";
+const faceNonceStore = new Map();
+
+const nonceKey = (userId, nonce) => `${String(userId)}:${String(nonce)}`;
+
+const purgeExpiredFaceChallenges = () => {
+  const now = Date.now();
+  for (const [key, value] of faceNonceStore.entries()) {
+    if (!value || value.expiresAt <= now || value.used === true) {
+      faceNonceStore.delete(key);
+    }
+  }
+};
+
+const signablePayloadString = (payload) => {
+  return JSON.stringify(
+    {
+      nonce: String(payload.nonce),
+      result: String(payload.result),
+      timestamp: Number(payload.timestamp),
+      userId: String(payload.userId),
+    }
+  );
+};
+
+const safeEqualHex = (a, b) => {
+  try {
+    const ba = Buffer.from(String(a || ""), "hex");
+    const bb = Buffer.from(String(b || ""), "hex");
+    if (ba.length !== bb.length || ba.length === 0) return false;
+    return crypto.timingSafeEqual(ba, bb);
+  } catch {
+    return false;
+  }
+};
+
+const verifyFaceProof = (jwtUserId, faceProof) => {
+  if (!FACE_ATTESTATION_SECRET) return { ok: false, message: "Face attestation secret is not configured" };
+  if (!faceProof || typeof faceProof !== "object") return { ok: false, message: "Missing faceProof" };
+
+  const payload = faceProof.payload;
+  const signature = faceProof.signature;
+  if (!payload || !signature) return { ok: false, message: "Invalid faceProof format" };
+
+  if (String(payload.userId) !== String(jwtUserId)) {
+    return { ok: false, message: "Face proof user mismatch" };
+  }
+  if (String(payload.result) !== "success") {
+    return { ok: false, message: "Face proof result is not success" };
+  }
+
+  const now = Date.now();
+  const tsMs = Number(payload.timestamp) * 1000;
+  if (!Number.isFinite(tsMs) || Math.abs(now - tsMs) > FACE_CLOCK_SKEW_MS) {
+    return { ok: false, message: "Face proof is expired or not yet valid" };
+  }
+
+  const expectedSig = crypto
+    .createHmac("sha256", FACE_ATTESTATION_SECRET)
+    .update(signablePayloadString(payload))
+    .digest("hex");
+
+  if (!safeEqualHex(expectedSig, signature)) {
+    return { ok: false, message: "Invalid face proof signature" };
+  }
+
+  purgeExpiredFaceChallenges();
+  const key = nonceKey(jwtUserId, payload.nonce);
+  const challenge = faceNonceStore.get(key);
+  if (!challenge) return { ok: false, message: "Face challenge not found or expired" };
+  if (challenge.used) return { ok: false, message: "Face challenge already used" };
+  if (challenge.expiresAt <= now) {
+    faceNonceStore.delete(key);
+    return { ok: false, message: "Face challenge expired" };
+  }
+
+  challenge.used = true;
+  challenge.usedAt = now;
+  faceNonceStore.set(key, challenge);
+  return { ok: true };
+};
+
+export const createFaceChallenge = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    purgeExpiredFaceChallenges();
+
+    const nonce = crypto.randomBytes(24).toString("hex");
+    const now = Date.now();
+    const key = nonceKey(userId, nonce);
+    faceNonceStore.set(key, {
+      userId: String(userId),
+      nonce,
+      createdAt: now,
+      expiresAt: now + FACE_NONCE_TTL_MS,
+      used: false,
+      usedAt: null,
+    });
+
+    return res.status(200).json({
+      status: "success",
+      result: {
+        nonce,
+        expiresInMs: FACE_NONCE_TTL_MS,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Helper to get start of day in UTC
 const getStartOfDay = (date) => {
   const d = new Date(date);
@@ -56,10 +171,18 @@ export const checkIn = async (req, res, next) => {
   try {
     // Get the user ID
     const userId = req.user._id;
-    const { latitude, longitude } = req.body || {}; // Optional location data from the client (for onsite check-in)
+    const { latitude, longitude, faceProof } = req.body || {}; 
 
-    const now = new Date(); // Contains UTC internally but displays in local time when logged
+    // Face validation (Required for every check-in)
+    const faceValidation = verifyFaceProof(userId, faceProof);
+    if (!faceValidation.ok) {
+      return res.status(401).json({
+        status: "Error",
+        message: faceValidation.message,
+      });
+    }
 
+    const now = new Date();
     const todayUTC = new Date(Date.UTC(
       now.getUTCFullYear(),
       now.getUTCMonth(),
@@ -209,10 +332,11 @@ export const getAttendance = async (req, res, next) => {
       department, 
       search,
       page = 1, 
+      limit: queryLimit, // [PAGINATION-FIX]
     } = req.query;
 
     const parsedPage = Math.max(parseInt(page) || 1, 1);
-    const limit = 10;
+    const limit = Math.min(parseInt(queryLimit) || 10, 9999); // [PAGINATION-FIX] Respect requested limit up to 9999
     const skip = (parsedPage - 1) * limit;
 
     const filter = {}; // Allow filtering
@@ -247,9 +371,8 @@ export const getAttendance = async (req, res, next) => {
       filter.status = status;
     }
 
+    // SEARCH & FILTER CONFIGURATION (on Users)
     const userFilter = {};
-
-    // Search by name/lastName or email
     if (search) {
       userFilter.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -258,24 +381,102 @@ export const getAttendance = async (req, res, next) => {
       ];
     }
 
-    // Filter by role
     if (role) {
-      const roleDoc = await UserRole.findOne({
-        name: { $regex: `^${role}$`, $options: "i" },
-      });
+      const roleDoc = await UserRole.findOne({ name: { $regex: `^${role}$`, $options: "i" } });
       if (roleDoc) userFilter.role_id = roleDoc._id;
-      else return res.status(404).json({ status: "Error", message: "Role not found" });
     }
 
-    // Filter by department
     if (department) {
-      const deptDoc = await Department.findOne({
-        name: { $regex: `^${department}$`, $options: "i" },
-      });
+      const deptDoc = await Department.findOne({ name: { $regex: `^${department}$`, $options: "i" } });
       if (deptDoc) userFilter.department_id = deptDoc._id;
-      else return res.status(404).json({ status: "Error", message: "Department not found" });
     }
 
+    // ──────────────────────────────────────────────────────────────────────────
+    // [ATTENDANCE-FIX] New 'User-Centric' Daily Summary Logic (Left Join)
+    // ──────────────────────────────────────────────────────────────────────────
+    if (req.query.forSummary === "true") {
+      const totalUsers = await User.countDocuments(userFilter);
+      
+      const pagedUsers = await User.find(userFilter)
+        .populate("role_id", "name")
+        .populate("department_id", "name")
+        .populate("supervisor_id", "name lastName")
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+      // Find attendance records for these specific users on the target date
+      const attendanceFilter = {
+  date: {
+    $gte: getStartOfDay(startDate),
+    $lte: getEndOfDay(endDate),
+  },
+};
+      const userIds = pagedUsers.map(u => u._id);
+      attendanceFilter.userId = { $in: userIds };
+
+      const records = await Attendance.find(attendanceFilter)
+  .populate({
+    path: "userId",
+    populate: [
+      { path: "role_id", select: "name" },
+      { path: "department_id", select: "name" },
+      { path: "supervisor_id", select: "name lastName" },
+    ],
+  })
+  .lean();
+
+
+      // Map attendance onto the users (Left Join)
+      const mappedResults = pagedUsers.map(user => {
+        const record = records.find(r => r.userId.toString() === user._id.toString());
+return record || {
+  userId: {
+    _id: user._id,
+    name: user.name,
+    lastName: user.lastName,
+    email: user.email,
+    role_id: user.role_id,
+    department_id: user.department_id,
+    supervisor_id: user.supervisor_id,
+  },
+  date: getStartOfDay(startDate),
+  status: "absent",
+  checkInTime: null,
+  checkOutTime: null,
+  workLocation: null,
+  isImplicit: true,
+};
+      });
+
+      // Special handling: if we return the user object inside 'userId', it matches 'populate' format
+      const finalResults = mappedResults.map(res => {
+        if (res.isImplicit) {
+          // Flatten user if already populated
+          return res;
+        }
+        // For real records, we need to populate userId manually if not already (though we didn't populate it in find(filter) above)
+        // Actually, for consistency, let's keep the user object in 'userId'
+        return res;
+      });
+
+      // Mandatory Logging
+      // [DEBUG-ATTENDANCE] Total users: X | Users with attendance: Y | Date: selectedDate
+      console.log(`[DEBUG-ATTENDANCE] Total users: ${totalUsers} | Users with attendance: ${records.length} | Page: ${parsedPage} | Date: ${startDate}`);
+
+      return res.status(200).json({
+        status: "Success",
+        page: parsedPage,
+        limit: limit,
+        totalRecords: totalUsers, // Total pages based on USER count
+        totalPages: Math.ceil(totalUsers / limit),
+        results: finalResults.length,
+        result: finalResults,
+      });
+    }
+
+    // ─── Standard 'Record-Centric' Logic (For History / Calendar) ───────────────────
+    
     // Search for users matching the userFilter criteria and get their IDs
     let userIds = null;
     if (Object.keys(userFilter).length > 0) {
@@ -293,7 +494,23 @@ export const getAttendance = async (req, res, next) => {
         });
       }
 
-      filter.userId = { $in: userIds };
+      if (filter.userId && !Array.isArray(filter.userId)) {
+  // A specific userId was already set — check if it's in the matched set
+  const specificId = filter.userId.toString();
+  const inSet = userIds.some(id => id.toString() === specificId);
+  if (!inSet) {
+    return res.status(200).json({
+      status: "Success",
+      page: parsedPage,
+      totalPages: 0,
+      totalRecords: 0,
+      result: [],
+    });
+  }
+  // else: keep filter.userId as the specific ID (more precise than $in)
+} else {
+  filter.userId = { $in: userIds };
+}
     }
 
     // Get total count for pagination
@@ -312,6 +529,9 @@ export const getAttendance = async (req, res, next) => {
       .skip(skip)
       .limit(limit)
       .lean();
+
+    // [PAGINATION-DEBUG] Added log to track backend output
+    console.log(`[PAGINATION] Module: Attendance | Page: ${parsedPage || 1} | Limit: ${limit || 10} | Returned: ${attendanceRecords?.length || 0} records`);
 
     res.status(200).json({
       status: "Success",
