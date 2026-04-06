@@ -249,6 +249,7 @@ export const checkIn = async (req, res, next) => {
     });
 
     const updateSet = {
+      date: todayUTC, // Force the canonical day record
       checkInTime,
       status,
       workLocation,
@@ -264,7 +265,6 @@ export const checkIn = async (req, res, next) => {
         $set: updateSet,
         $setOnInsert: {
           userId,
-          date: todayUTC,
         },
       },
       {
@@ -398,7 +398,7 @@ export const getAttendance = async (req, res, next) => {
     }
 
     // Authorization & checking the Identity
-    if (req.user.role.name === "Admin" || req.user.role.name === "Supervisor") {
+    if (req.user.role === "Admin" || req.user.role === "Supervisor") {
       if (userId) filter.userId = userId;
     } else {
       filter.userId = req.user._id;

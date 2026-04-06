@@ -185,7 +185,7 @@ router.get("/attendance/me", authenticate, getMyStatus);
 router.get(
   "/attendance",
   authenticate,
-  authorize(["Admin", "Supervisor"]),
+  authorize(["Admin", "Supervisor", "Employee", "Intern"]),
   getAttendance
 );
 

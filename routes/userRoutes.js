@@ -153,7 +153,7 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *       500:
  *         description: Server error
  */
-router.get("/users", authenticate, authorize(["Admin", "Supervisor"]), getAllUsers);
+router.get("/users", authenticate, authorize(["Admin", "Supervisor", "Employee", "Intern"]), getAllUsers);
 
 // Route to get active supervisors (Admin Only)
 /**

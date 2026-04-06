@@ -39,6 +39,7 @@ import documentRoutes from "./routes/documentRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -82,6 +83,7 @@ app.use('/api', documentRoutes);
 app.use('/api', testRoutes);
 app.use('/api', specialShiftRoutes);
 app.use('/api', leaveTypeRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

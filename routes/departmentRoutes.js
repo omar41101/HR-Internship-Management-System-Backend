@@ -80,7 +80,7 @@ router.post("/departments", authenticate, authorize(["Admin"]), addDepartment);
  * WHY: Supervisors need department data to populate the filter dropdown in the Attendance modal.
  *      Write operations remain Admin-only.
  */
-router.get("/departments", authenticate, authorize(["Admin", "Supervisor"]), getAllDepartments);
+router.get("/departments", authenticate, authorize(["Admin", "Supervisor", "Employee", "Intern"]), getAllDepartments);
 
 // Route to get a department by Id
 /**
