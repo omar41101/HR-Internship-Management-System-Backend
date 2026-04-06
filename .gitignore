@@ -1,4 +1,9 @@
 .env
+<<<<<<< HEAD
 .env.*
 node_modules/
 dist/
+=======
+.env.test
+node_modules/
+>>>>>>> sprint1

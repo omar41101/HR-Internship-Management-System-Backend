@@ -1,0 +1,184 @@
+import User from "../models/User.js";
+import Department from "../models/Department.js";
+import { logAuditAction } from "../utils/logger.js";
+import AppError from "../utils/AppError.js";
+
+// Add new Department Functionnality
+export const addDepartment = async (req, res, next) => {
+  const { name, description } = req.body; // Get the new department credentials
+
+  // Check empty name field (required)
+  if (!name || name.trim() === "") {
+    throw new AppError("The department name field must be filled!", 400);
+  }
+
+  try {
+    // Check for department existence
+    const existingDepartment = await Department.findOne({ name: name.trim() });
+    if (existingDepartment)
+      throw new AppError("Department already existing!", 400);
+
+    // Check for department name existence
+    const existingDepartmentName = await Department.findOne({
+      name: name.trim(),
+    });
+    if (
+      existingDepartmentName &&
+      existingDepartmentName._id.toString() !== req.params.id
+    ) {
+      throw new AppError("Department name already exists!", 400);
+    }
+
+    // Save the new department in the Database
+    let department = await Department.create({
+      name,
+      description,
+    });
+
+    res.status(201).json({
+      status: "Success",
+      data: { department },
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "CREATE_DEPARTMENT",
+      targetType: "Department",
+      targetId: department._id,
+      targetName: department.name,
+      ipAddress: req.ip,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get All Departments Functionnality
+export const getAllDepartments = async (req, res, next) => {
+  try {
+    const departments = await Department.find().sort({ createdAt: -1 });
+
+    res.status(200).json({
+      status: "Success",
+      departments: departments,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get a Department by Id
+export const getDepartmentById = async (req, res, next) => {
+  try {
+    const department = await Department.findById(req.params.id);
+    if (!department) throw new AppError("Department not found!", 404);
+
+    res.status(200).json(department);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Delete a Department (All admins can do it)
+export const deleteDepartment = async (req, res, next) => {
+  try {
+    // Check for department existence
+    const department = await Department.findById(req.params.id);
+    if (!department) throw new AppError("Department is not found!", 404);
+
+    // Find the "Not assigned" department and create it if it doesn't exist
+    let notAssignedDepartment = await Department.findOne({
+      name: "Not assigned",
+    });
+    if (!notAssignedDepartment) {
+      notAssignedDepartment = await Department.create({
+        name: "Not assigned",
+        description: "Default department for unassigned users",
+      });
+    }
+
+    // Reassign users having the deleted department to "Not assigned"
+    await User.updateMany(
+      { department_id: department._id },
+      { $set: { department_id: notAssignedDepartment._id } },
+    );
+
+    // Delete the department
+    await Department.findByIdAndDelete(req.params.id);
+    res.status(200).json({
+      status: "Success",
+      message: "Department Deleted Successfully!",
+    });
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "DELETE_DEPARTMENT",
+      targetType: "Department",
+      targetId: department._id,
+      targetName: department.name,
+      ipAddress: req.ip,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Update a Department
+export const updateDepartment = async (req, res, next) => {
+  const { name, description } = req.body;
+
+  // Check for empty name field (required)
+  if (!name || name.trim() === "") {
+    throw new AppError("The name field must be filled!", 400);
+  }
+
+  try {
+    // Check for department existence
+    const department = await Department.findById(req.params.id);
+    if (!department) throw new AppError("Department not found!", 404);
+
+    // Check for department name existence
+    const existingDepartment = await Department.findOne({ name: name.trim() });
+    if (
+      existingDepartment &&
+      existingDepartment._id.toString() !== req.params.id
+    ) {
+      throw new AppError("Department name already exists!", 400);
+    }
+
+    // Get the old department name
+    const oldDepartmentName = department.name;
+
+    // Update Department
+    const departmentToUpdate = await Department.findByIdAndUpdate(
+      req.params.id,
+      {
+        name,
+        description,
+      },
+      { returnDocument: "after" },
+    );
+
+    // Update users having this department with the new department name
+    await User.updateMany(
+      { department: oldDepartmentName },
+      { department: departmentToUpdate.name },
+    );
+    res.status(200).json(departmentToUpdate);
+
+    // Logging the action
+    await logAuditAction({
+      adminId: req.user.id,
+      action: "UPDATE_DEPARTMENT",
+      targetType: "Department",
+      targetId: departmentToUpdate._id,
+      targetName: departmentToUpdate.name,
+      details: req.body,
+      ipAddress: req.ip,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
