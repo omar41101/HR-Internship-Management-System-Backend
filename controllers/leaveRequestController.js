@@ -1,9 +1,191 @@
 import LeaveRequest from "../models/LeaveRequest.js";
 import LeaveType from "../models/LeaveType.js";
 import User from "../models/User.js";
-import AppError from "../utils/AppError.js";
+import AppError from "../utils/AppError.js"; 
+import { getStatusesByRole } from "../utils/leaveStatusByRole.js";
+import { uploadDocToCloudinary } from "../utils/cloudinaryHelper.js";
 
-// Get All leave requests based on the user role (with pagination: 10 per page): Every authenticated user
+// --------------------------------------------------------- //
+// ------------------ HELPER FUNCTIONS --------------------- //
+// --------------------------------------------------------- //
+const buildLeaveRequestQuery = (user, queryParams) => {
+  const { typeId, status, month, year } = queryParams;
+
+  let roleFilter = {};
+  const allowedStatuses = getStatusesByRole(user.role);
+  const userId = user._id || user.id;
+
+  // ROLE FILTER
+  if (user.role === "Supervisor") {
+    roleFilter = {
+      $or: [
+        {
+          supervisorId: userId,
+          status: { $in: allowedStatuses },
+        },
+        {
+          employeeId: userId,
+        },
+      ],
+    };
+  } else if (user.role === "Admin") {
+    roleFilter = {
+      status: { $in: allowedStatuses },
+    };
+  } else if (user.role === "Employee" || user.role === "Intern") {
+    roleFilter = {
+      employeeId: userId,
+    };
+  } else {
+    throw new AppError("Unauthorized!", 403);
+  }
+
+  // THE OTHER FILTERS
+  let filters = {};
+
+  // Filter by the leave request type 
+  if (typeId) filters.typeId = typeId;
+
+  // Filter by the leave request status
+  if (status) {
+    if (!allowedStatuses.includes(status)) {
+      throw new AppError("Invalid status for your role!", 400);
+    }
+    filters.status = status;
+  }
+  
+  // Filter by month and year (for the startDate and endDate)
+  if (month || year) {
+    if (!year) {
+      throw new AppError("Year is required when filtering by month!", 400);
+    }
+
+    const parsedMonth = parseInt(month) - 1 || 0;
+    const parsedYear = parseInt(year);
+
+    const startDate = new Date(parsedYear, parsedMonth, 1);
+    const endDate = new Date(parsedYear, parsedMonth + 1, 0, 23, 59, 59);
+
+    filters.startDate = { $lte: endDate };
+    filters.endDate = { $gte: startDate };
+  }
+
+  return {
+    $and: [roleFilter, filters],
+  };
+};
+
+// --------------------------------------------------------- //
+// --------------- LEAVE REQUEST WORKFLOW ------------------ //
+// --------------------------------------------------------- //
+
+// Add a new leave request (Every authenticated user)
+export const addLeaveRequest = async (req, res, next) => {
+  try {
+    const user = req.user; // Get the user from the token
+    const { typeId, startDate, endDate, reason } = req.body;
+    let attachmentURL = "";
+
+    // Upload the attachment if it exists
+    if (req.file) {
+      const result = await uploadDocToCloudinary(req.file.buffer, req.file.originalname, "hrcom/leave_docs");
+      attachmentURL = result.secure_url;
+    }
+
+    // Validate required fields
+    if (!typeId || !startDate || !endDate) {
+      throw new AppError("Missing required fields!", 400);
+    }
+
+    // Validate the leave type
+    const leaveType = await LeaveType.findById(typeId);
+    if (!leaveType || leaveType.status === "Archived") {
+      throw new AppError("Invalid leave type!", 400);
+    }
+
+    // Validate the dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (isNaN(start) || isNaN(end)) {
+      throw new AppError("Invalid date format!", 400);
+    }
+    if (end < start) {
+      throw new AppError("End date cannot be before start date!", 400);
+    }
+
+    // Check overlapping leave requests
+    const overlappingRequest = await LeaveRequest.findOne({
+      employeeId: user._id,
+      status: {
+        $nin: ["Rejected by Supervisor", "Rejected by Admin"],
+      },
+      $or: [
+        {
+          startDate: { $lte: end },
+          endDate: { $gte: start },
+        },
+      ],
+    });
+
+    if (overlappingRequest) {
+      throw new AppError(
+        "You already have a leave request in this period!",
+        400,
+      );
+    }
+
+    // Calculate the duration in days
+    const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    // Fetch the user from the DB
+    const dbUser = await User.findById(req.user.id);
+
+    if (!dbUser) {
+      throw new AppError("User not found!", 404);
+    }
+        
+    // Determine the leave request's initial status based on the user's role
+    let supervisorId = null;
+    let status;
+
+    if (user.role === "Employee" || user.role === "Intern") {
+      supervisorId = dbUser.supervisor_id;
+
+      if (!supervisorId) {
+        throw new AppError("Supervisor not found!", 404);
+      }
+
+      status = "Pending Supervisor Approval";
+    } else if (user.role === "Supervisor") {
+      status = "Pending Admin Approval";
+    } else {
+      throw new AppError("Unauthorized to submit leave request!", 403);
+    }
+
+    const newLeaveRequest = await LeaveRequest.create({
+      employeeId: user._id,
+      supervisorId,
+      typeId,
+      startDate: start,
+      endDate: end,
+      reason,
+      attachmentURL: attachmentURL || "",
+      duration,
+      status,
+      reviewedBy: null,
+    });
+
+    res.status(201).json({
+      status: "Success",
+      message: "Leave Request submitted successfully!",
+      result: newLeaveRequest,
+    });
+  } catch (err) {
+    next(err);
+  }
+}; 
+
+// Get All leave requests based on the user role (with pagination: 10 leave requests per page): Every authenticated user
 export const getAllLeaveRequests = async (req, res, next) => {
   try {
     const user = req.user; // Get the user from the token
@@ -14,37 +196,7 @@ export const getAllLeaveRequests = async (req, res, next) => {
     const skip = (parsedPage - 1) * limit;
 
     // Build the query to determine which leave requests to show based on the user's role
-    let query = {};
-
-    if (user.role === "Supervisor") {
-      query = {
-        supervisorId: user._id,
-        status: {
-          $in: [
-            "Pending Supervisor Approval",
-            "Under Supervisor Review",
-            "Rejected by Supervisor",
-          ],
-        },
-      };
-    } else if (user.role === "Admin") {
-      query = {
-        status: {
-          $in: [
-            "Pending Admin Approval",
-            "Under Admin Review",
-            "Rejected by Admin",
-            "Approved",
-          ],
-        },
-      };
-    } else if (user.role === "Employee" || user.role === "Intern") {
-      query = {
-        employeeId: user._id,
-      };
-    } else {
-      throw new AppError("Unauthorized!", 403);
-    }
+    const query = buildLeaveRequestQuery(user, req.query);
 
     // Count the total leave requests (for pagination)
     const total = await LeaveRequest.countDocuments(query);
@@ -69,7 +221,7 @@ export const getAllLeaveRequests = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
+}; 
 
 // Get a leave request by ID (Every authenticated user)
 export const getLeaveRequestById = async (req, res, next) => {
@@ -110,101 +262,6 @@ export const getLeaveRequestById = async (req, res, next) => {
     res.status(200).json({
       status: "Success",
       result: leaveRequest,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Add a new leave request (Every authenticated user)
-export const addLeaveRequest = async (req, res, next) => {
-  try {
-    const user = req.user;
-
-    const { typeId, startDate, endDate, reason, attachmentURL } = req.body;
-
-    // Validate required fields
-    if (!typeId || !startDate || !endDate) {
-      throw new AppError("Missing required fields!", 400);
-    }
-
-    // Validate the leave type
-    const leaveType = await LeaveType.findById(typeId);
-    if (!leaveType || leaveType.status === "Archived") {
-      throw new AppError("Invalid leave type!", 400);
-    }
-
-    // Validate the dates
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-
-    if (isNaN(start) || isNaN(end)) {
-      throw new AppError("Invalid date format!", 400);
-    }
-
-    if (end < start) {
-      throw new AppError("End date cannot be before start date!", 400);
-    }
-
-    // Check overlapping leave requests
-    const overlappingRequest = await LeaveRequest.findOne({
-      employeeId: user._id,
-      status: {
-        $nin: ["Rejected by Supervisor", "Rejected by Admin"],
-      },
-      $or: [
-        {
-          startDate: { $lte: end },
-          endDate: { $gte: start },
-        },
-      ],
-    });
-
-    if (overlappingRequest) {
-      throw new AppError(
-        "You already have a leave request in this period!",
-        400,
-      );
-    }
-
-    // Calculate the duration in days
-    const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
-
-    // Determine the leave request's initial status based on the user's role
-    let supervisorId = null;
-    let status;
-
-    if (user.role === "Employee" || user.role === "Intern") {
-      supervisorId = user.supervisorId;
-
-      if (!supervisorId) {
-        throw new AppError("Supervisor not found!", 404);
-      }
-
-      status = "Pending Supervisor Approval";
-    } else if (user.role === "Supervisor") {
-      status = "Pending Admin Approval";
-    } else {
-      throw new AppError("Unauthorized to submit leave request!", 403);
-    }
-
-    const newLeaveRequest = await LeaveRequest.create({
-      employeeId: user._id,
-      supervisorId,
-      typeId,
-      startDate: start,
-      endDate: end,
-      reason,
-      attachmentURL: attachmentURL ?? "",
-      duration,
-      status,
-      reviewedBy: null,
-    });
-
-    res.status(201).json({
-      status: "Success",
-      message: "Leave Request submitted successfully!",
-      result: newLeaveRequest,
     });
   } catch (err) {
     next(err);
@@ -509,87 +566,16 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
   }
 };
 
-// Filter leave requests by leave types, month, year, status
-export const getFilteredLeaveRequests = async (req, res, next) => {
+// Get leave statuses based on the user role
+export const getLeaveStatuses = (req, res, next) => {
   try {
-    const user = req.user; // Get the user from the token
+    const user = req.user;
 
-    const {
-      page = 1,
-      limit: queryLimit,
-      typeId,
-      status,
-      month,
-      year,
-    } = req.query;
-
-    const limit = Math.min(parseInt(queryLimit) || 10, 9999);
-    const parsedPage = parseInt(page);
-    const skip = (parsedPage - 1) * limit;
-
-    let query = {};
-
-    // ROLE-BASED FILTERING
-    if (user.role === "Supervisor") {
-      query.supervisorId = user.id;
-    } 
-    else if (user.role === "Admin") {
-      // Admin sees all → no restriction
-    } 
-    else if (user.role === "Employee" || user.role === "Intern") {
-      query.employeeId = user.id;
-    } 
-    else {
-      throw new AppError("Unauthorized!", 403);
-    }
-
-    // Filter by leave type
-    if (typeId) {
-      query.typeId = typeId;
-    }
-
-    // Filter by status
-    if (status) {
-      query.status = status;
-    }
-
-    // Filter by month/year
-    if (month || year) {
-      if (!year) {
-        throw new AppError("Year is required when filtering by month!", 400);
-      }
-
-      const parsedMonth = parseInt(month) - 1 || 0; // JS months: 0–11
-      const parsedYear = parseInt(year);
-
-      const startDate = new Date(parsedYear, parsedMonth, 1);
-      const endDate = new Date(parsedYear, parsedMonth + 1, 0, 23, 59, 59);
-
-      query.startDate = {
-        $gte: startDate,
-        $lte: endDate,
-      };
-    }
-
-    // Get the total leave requests count for pagination
-    const total = await LeaveRequest.countDocuments(query);
-
-    // Fetch the filtered and paginated leave requests
-    const leaveRequests = await LeaveRequest.find(query)
-      .populate("employeeId", "name email")
-      .populate("supervisorId", "name email")
-      .populate("typeId", "name isPaid")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+    const statuses = getStatusesByRole(user.role);
 
     res.status(200).json({
       status: "Success",
-      page: parsedPage,
-      totalPages: Math.ceil(total / limit),
-      totalLeaveRequests: total,
-      totalLeaveRequestsPerPage: leaveRequests.length,
-      data: leaveRequests,
+      data: statuses,
     });
   } catch (err) {
     next(err);

@@ -110,7 +110,7 @@ export const login = async (req, res, next) => {
     const token = jwt.sign(
       { id: user._id, role: userRole.name },
       process.env.JWT_SECRET,
-      { expiresIn: "24h" },
+      { expiresIn: "10h" },
     );
 
     const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);

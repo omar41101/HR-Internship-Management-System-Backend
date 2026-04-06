@@ -7,21 +7,24 @@ import {
     cancelLeaveRequest,
     markLeaveRequestUnderReview,
     approveOrRejectLeaveRequest,
-    getFilteredLeaveRequests,
+    getLeaveStatuses,
 } from "../controllers/leaveRequestController.js";
+import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
-// import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
-// Route to get all leave requests with pagination (All authenticated users)
+// Route to add a new leave request (Every authenticated user)
+router.post("/leave-requests", authenticate, upload("doc").single("attachement"), addLeaveRequest); 
+
+// Route to get leave request statuses based on user role (Every authenticated user)
+router.get("/leave-statuses", authenticate, getLeaveStatuses);
+
+// Route to get all leave requests with pagination (Every authenticated user)
 router.get("/leave-requests", authenticate, getAllLeaveRequests);
 
 // Route to get a leave request by ID
 router.get("/leave-requests/:id", authenticate, getLeaveRequestById);
-
-// Route to add a new leave request (Every authenticated user)
-router.post("/leave-requests", authenticate, addLeaveRequest); 
 
 // Route to update a leave request (The user himself)
 router.patch("/leave-requests/:id", authenticate, updateLeaveRequest);
@@ -34,8 +37,5 @@ router.patch("/leave-requests/mark-under-review/:id", authenticate, markLeaveReq
 
 // Route to approve or reject a leave request (Supervisor/Admin)
 router.patch("/leave-requests/approve-reject/:id", authenticate, approveOrRejectLeaveRequest);
-
-// Route to filter leave requests with pagination (Supervisor/Admin)
-router.get("/leave-requests/filtered", authenticate, getFilteredLeaveRequests);
 
 export default router;
