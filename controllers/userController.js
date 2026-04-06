@@ -1,10 +1,31 @@
-<<<<<<< HEAD
 // Importations
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import {
+  uploadImageToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinaryHelper.js";
+import Department from "../models/Department.js";
+import Document from "../models/Document.js";
+import { Parser } from "json2csv";
+import ExcelJS from "exceljs";
+import {
+  isValidEmail,
+  validatePhoneNumber,
+  generateRandomCode,
+  validateCIN,
+  validatePassport,
+  getPassportHint,
+  validateUserData,
+} from "../middleware/UserValidation.js";
+import { countries } from "../middleware/countries.js"; // List of countries with their codes
+import { logAuditAction } from "../utils/logger.js";
+import { sendEmail } from "../utils/sendEmail.js";
+import { sendError, handleError } from "../utils/ErrorFunctions.js";
+import AppError from "../utils/AppError.js";
 // import {isValidEmail} from "../middleware/EmailValidation";
 
 dotenv.config();
@@ -84,37 +105,6 @@ export const login = async (req, res) => {
     message: "Logged in successfully!",
   });
 };
-
-// Add User (Just for testing the login functionnality for now : NOT COMPLETED)
-export const addUser = async (req, res) => {
-=======
-// Imports
-import {
-  uploadImageToCloudinary,
-  deleteFromCloudinary,
-} from "../utils/cloudinaryHelper.js";
-import User from "../models/User.js";
-import UserRole from "../models/UserRole.js";
-import Department from "../models/Department.js";
-import Document from "../models/Document.js";
-import bcrypt from "bcrypt";
-import { Parser } from "json2csv";
-import ExcelJS from "exceljs";
-import {
-  isValidEmail,
-  validatePhoneNumber,
-  generateRandomCode,
-  validateCIN,
-  validatePassport,
-  getPassportHint,
-  validateUserData,
-} from "../middleware/UserValidation.js";
-import { countries } from "../middleware/countries.js"; // List of countries with their codes
-import { logAuditAction } from "../utils/logger.js";
-import { sendEmail } from "../utils/sendEmail.js";
-import { sendError, handleError } from "../utils/ErrorFunctions.js";
-import AppError from "../utils/AppError.js";
-
 // --------------------------------------------------------------------------- //
 // ---------------------------- HELPER FUNCTIONS ----------------------------- //
 // --------------------------------------------------------------------------- //
@@ -254,69 +244,11 @@ export const validateDepartment = async (department, action) => {
 
 // Add User (Only the Admin can do it)
 export const addUser = async (req, res, next) => {
->>>>>>> sprint1
   try {
     const {
       name,
       lastName,
       email,
-<<<<<<< HEAD
-      password,
-      address,
-      phoneNumber,
-      bonus,
-      profileImageURL,
-      bio,
-      leaveBalance,
-      faceData,
-      socialStatus,
-      hasChildren,
-      nbOfChildren,
-      isActive,
-      isAvailable,
-      role_id,
-    } = req.body;
-
-    // Check if the user is already in the DB
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        status: "Error",
-        message: "User Already Existing!",
-      });
-    }
-
-    // Hash Password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Add user to the DB
-    const user = await User.create({
-      name,
-      lastName,
-      email,
-      password: hashedPassword,
-      address,
-      phoneNumber,
-      bonus,
-      profileImageURL,
-      bio,
-      leaveBalance,
-      faceData,
-      socialStatus,
-      hasChildren,
-      nbOfChildren,
-      isActive,
-      isAvailable,
-      role_id,
-    });
-
-    return res.status(201).json({
-        status: "Success",
-        data: {user}
-    });
-  } 
-  catch (err) {
-=======
       idType, // Passport or CIN
       idCountryCode, // Passport or CIN country code
       idNumber, // Passport or CIN number
@@ -351,7 +283,7 @@ export const addUser = async (req, res, next) => {
     const existingUser = await User.findOne({
       $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
     });
-    
+
     if (existingUser) {
       if (existingUser.email === trimmedEmail) {
         return sendError(res, "A user with this email already exists!", 409);
@@ -370,7 +302,11 @@ export const addUser = async (req, res, next) => {
     const roleCheck = (role || "").toLowerCase();
     const deptCheck = (department || "").toLowerCase();
     if (roleCheck === "admin" && deptCheck !== "hr") {
-      return sendError(res, "Admin role must belong strictly to the HR department", 400);
+      return sendError(
+        res,
+        "Admin role must belong strictly to the HR department",
+        400,
+      );
     }
 
     // Validate common field Inputs (Don't require DB checks)
@@ -387,7 +323,10 @@ export const addUser = async (req, res, next) => {
     });
 
     // Get the full validated Phone number (After format and uniqueness checks)
-    const validatedPhoneNumber = await fullPhoneNumberValidation(countryCode, phoneNumber);
+    const validatedPhoneNumber = await fullPhoneNumberValidation(
+      countryCode,
+      phoneNumber,
+    );
 
     // CIN/Passport validation
     await fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
@@ -396,7 +335,10 @@ export const addUser = async (req, res, next) => {
     const roleId = await validateUserRole(role, action);
 
     // Check the validity of the supervisor (Optional field) and get the supervisor ID
-    const supervisorId = await validateSupervisor(supervisor_full_name, action);
+    const supervisorId = await validateSupervisor(
+      supervisor_full_name,
+      action,
+    );
     // Check the validity of the department and get the department ID
     const departmentId = await validateDepartment(department, action);
 
@@ -1421,4 +1363,4 @@ export const getTeamMembers = async (req, res, next) => {
     next(err);
   }
 };
->>>>>>> sprint1
+

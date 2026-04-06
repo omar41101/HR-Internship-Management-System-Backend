@@ -1,12 +1,6 @@
-<<<<<<< HEAD
-import express from "express"
-import {
-    login,
-    addUser
-} from "../controllers/userController.js";
-=======
 import express from "express";
 import {
+  login,
   addUser,
   updateUser,
   deleteUser,
@@ -29,23 +23,17 @@ import {
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
->>>>>>> sprint1
-
+ 
 const router = express.Router();
 
 /**
  * @swagger
-<<<<<<< HEAD
- * /api/users:
+  * /api/users:
  *   post:
  *     summary: Add a new user
  *     description: Create a new user account
  *     tags:
  *       - Users
-=======
- * tags:
- *   - name: Users
- *     description: Endpoints for the users CRUDs
  */
 
 // -------------------------------------------------------------------------------------- //
@@ -65,14 +53,12 @@ router.get("/public/interns", getPublicInterns);
  *     summary: Add a new user (Admin only)
  *     security:
  *       - bearerAuth: []
->>>>>>> sprint1
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
-<<<<<<< HEAD
- *             $ref: '#/components/schemas/User'
+  *             $ref: '#/components/schemas/User'
  *     responses:
  *       201:
  *         description: User created successfully
@@ -95,8 +81,7 @@ router.post("/users", addUser);
  *     description: Authenticate user and return JWT token
  *     tags:
  *       - Users
-=======
- *             $ref: '#/components/schemas/CreateUserRequest'
+  *             $ref: '#/components/schemas/CreateUserRequest'
  *     responses:
  *       201:
  *         description: User created successfully
@@ -132,19 +117,16 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
  *         description: User ID
  *         schema:
  *           type: string
->>>>>>> sprint1
- *     requestBody:
+  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
-<<<<<<< HEAD
- *             $ref: '#/components/schemas/LoginRequest'
+  *             $ref: '#/components/schemas/LoginRequest'
  *     responses:
  *       200:
  *         description: Login successful
-=======
- *             $ref: '#/components/schemas/UpdateUserRequest'
+  *             $ref: '#/components/schemas/UpdateUserRequest'
  *     responses:
  *       200:
  *         description: User updated successfully
@@ -537,14 +519,12 @@ router.post(
  *     responses:
  *       200:
  *         description: Face ID reset successfully
->>>>>>> sprint1
- *         content:
+  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
-<<<<<<< HEAD
- *                 token:
+  *                 token:
  *                   type: string
  *                   description: JWT token
  *       401:
@@ -553,24 +533,6 @@ router.post(
  *         description: Server error
  */
 router.post("/login", login);   
-
-export default router; 
-=======
- *                 status:
- *                   type: string
- *                   example: Success
- *                 message:
- *                   type: string
- *                   example: Face ID reset successfully!
- *       401:
- *         description: Missing/Invalid token
- *       403:
- *         description: Unauthorized 
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
 router.post(
   "/users/:id/reset-face",
   authenticate,
@@ -590,5 +552,7 @@ router.get(
   getTeamMembers
 );
 
-export default router;
->>>>>>> sprint1
+export default router; 
+  
+
+ 

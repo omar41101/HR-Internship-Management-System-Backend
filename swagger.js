@@ -4,16 +4,10 @@ const options = {
   definition: {
     openapi: "3.0.0",
     info: {
-<<<<<<< HEAD
-      title: "User Management API",
-      version: "1.0.0",
-      description: "API for managing users and user roles",
-=======
       title: "HRcoM API",
       version: "1.0.0",
       description:
         "This is the API documentation for HRcoM, the DotJcoM's HR and Internship Management System!",
->>>>>>> sprint1
     },
     servers: [
       {
@@ -27,51 +21,6 @@ const options = {
     ],
     components: {
       schemas: {
-<<<<<<< HEAD
-        User: {
-          type: "object",
-          required: ["email", "password"],
-          properties: {
-            _id: {
-              type: "string",
-              description: "User ID",
-            },
-            email: {
-              type: "string",
-              description: "User email",
-            },
-            password: {
-              type: "string",
-              description: "User password",
-            },
-            role: {
-              type: "string",
-              description: "User role ID",
-            },
-          },
-        },
-        UserRole: {
-          type: "object",
-          required: ["name"],
-          properties: {
-            _id: {
-              type: "string",
-              description: "Role ID",
-            },
-            name: {
-              type: "string",
-              description: "Role name",
-            },
-            permissions: {
-              type: "array",
-              items: {
-                type: "string",
-              },
-              description: "Role permissions",
-            },
-          },
-        },
-=======
         // ================== User Schema ==================
         User: {
           type: "object",
@@ -327,20 +276,19 @@ const options = {
           },
         },
 
->>>>>>> sprint1
+
         LoginRequest: {
           type: "object",
           required: ["email", "password"],
           properties: {
             email: {
               type: "string",
-<<<<<<< HEAD
               description: "User email",
             },
             password: {
               type: "string",
               description: "User password",
-=======
+
               description: "Email address of the user.",
             },
             password: {
@@ -741,15 +689,11 @@ const options = {
               type: "string",
               format: "date-time",
               description: "Timestamp of when the leave type was last updated.",
->>>>>>> sprint1
             },
           },
         },
       },
-<<<<<<< HEAD
-=======
 
->>>>>>> sprint1
       securitySchemes: {
         bearerAuth: {
           type: "http",
@@ -759,10 +703,7 @@ const options = {
       },
     },
   },
-<<<<<<< HEAD
-=======
 
->>>>>>> sprint1
   apis: ["./routes/*.js"],
 };
 

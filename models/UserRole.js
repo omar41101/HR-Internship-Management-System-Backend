@@ -1,23 +1,6 @@
 import mongoose from "mongoose";
 
-const userRoleSchema = mongoose.Schema(
-<<<<<<< HEAD
-    {
-        name: {
-            type: String,
-            required: true
-        },
-        description: {
-            type: String
-        }
-    },
-    {
-        timestamps: true
-    }
-);
-
-export default mongoose.model("UserRole", userRoleSchema);
-=======
+const userRoleSchema = new mongoose.Schema(
   {
     name: {
       type: String,
@@ -25,13 +8,11 @@ export default mongoose.model("UserRole", userRoleSchema);
     },
     description: {
       type: String,
-    }
+    },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 export default mongoose.model("UserRole", userRoleSchema);
- 
->>>>>>> sprint1

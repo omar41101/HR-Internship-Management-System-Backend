@@ -1,21 +1,4 @@
-<<<<<<< HEAD
-// Importations
-import express from "express";
-import dotenv from "dotenv";
-import swaggerUi from "swagger-ui-express";
-import swaggerSpec from "./swagger.js";
-import connectMongo from "./config/db.js";
-
-import userRoutes from "./routes/userRoutes.js";
-import UserRoleRoutes from "./routes/userRoleRoutes.js";
-
-// Creation of an express app
-const app = express(); 
-dotenv.config();
-
-app.use(express.json());
-=======
-// Imports
+// Main server setup for HRcoM API
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
@@ -25,25 +8,11 @@ import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 
-
-// Creation of an express app
-const app = express();
-
-// Create HTTP server and attach Socket.io (mangage websocket connections)
-const httpServer = createServer(app);
-
-// Activate Socket.io with CORS Settings
-export const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
-
-// Make io accessible from controllers via req.app.get('io')
-app.set("io", io);
-
 import errorHandler from "./middleware/errorHandler.js";
+import authenticate from "./middleware/authenticate.js";
+import authorize from "./middleware/authorize.js";
+import swaggerAuth from "./middleware/swaggerAuth.js";
+
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
 import UserRoleRoutes from "./routes/userRoleRoutes.js";
@@ -58,14 +27,20 @@ import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 
-// Socket.io connection handler
-io.on("connection", (socket) => {
-  console.log(`[Socket.io] Client connected: ${socket.id}`);
+// Create Express app and HTTP server
+const app = express();
+const httpServer = createServer(app);
 
-  socket.on("disconnect", () => {
-    console.log(`[Socket.io] Client disconnected: ${socket.id}`);
-  });
+// Attach Socket.io
+export const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
+  },
 });
+
+// Make io accessible from controllers via req.app.get("io")
+app.set("io", io);
 
 // Load the right .env file based on NODE_ENV
 if (process.env.NODE_ENV === "test") {
@@ -75,55 +50,62 @@ if (process.env.NODE_ENV === "test") {
 }
 
 if (!process.env.FACE_ATTESTATION_SECRET) {
-  console.warn("[SECURITY-WARN] FACE_ATTESTATION_SECRET is not set. Biometric attendance check-in will be rejected.");
+  console.warn(
+    "[SECURITY-WARN] FACE_ATTESTATION_SECRET is not set. Biometric attendance check-in will be rejected."
+  );
 }
 
-app.use(express.json({ limit: "10mb" })); // Handle JSON payloads (max size 10mb)
-app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data sent from HTML forms
->>>>>>> sprint1
+// Body parsing
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
 
-// Swagger API Documentation
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+// Swagger API Documentation (env-controlled, basic auth in production)
+const enableSwagger =
+  process.env.ENABLE_SWAGGER === "true" || process.env.NODE_ENV !== "production";
+
+if (enableSwagger) {
+  if (process.env.NODE_ENV === "production") {
+    // In production, protect Swagger UI with simple Basic Auth
+    app.use(
+      "/api-docs",
+      swaggerAuth,
+      swaggerUi.serve,
+      swaggerUi.setup(swaggerSpec)
+    );
+  } else {
+    // In non-production environments, expose Swagger UI without auth
+    app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  }
+}
 
 // Connect to MongoDB
 connectMongo();
 
-// Activate routes
-<<<<<<< HEAD
-app.use('/api', userRoutes);
-app.use('/api', UserRoleRoutes);
-=======
-app.use('/api', authRoutes);
-app.use('/api', userRoutes);
-app.use('/api', UserRoleRoutes);
-app.use('/api', departmentRoutes);
-app.use('/api', auditLogRoutes);
-app.use('/api', timetableRoutes);
-app.use('/api', attendanceRoutes);
-app.use('/api', documentTypeRoutes);
-app.use('/api', documentRoutes);
-app.use('/api', testRoutes);
-app.use('/api', specialShiftRoutes);
-app.use('/api', leaveTypeRoutes);
-app.use('/api/dashboard', dashboardRoutes);
+// Routes
+app.use("/api", authRoutes);
+app.use("/api", userRoutes);
+app.use("/api", UserRoleRoutes);
+app.use("/api", departmentRoutes);
+app.use("/api", auditLogRoutes);
+app.use("/api", timetableRoutes);
+app.use("/api", attendanceRoutes);
+app.use("/api", documentTypeRoutes);
+app.use("/api", documentRoutes);
+app.use("/api", testRoutes);
+app.use("/api", specialShiftRoutes);
+app.use("/api", leaveTypeRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
-// GLOBAL ERROR HANDLER
+// Global error handler
 app.use(errorHandler);
->>>>>>> sprint1
 
-// Define our PORT
+// Define PORT
 const PORT = process.env.PORT || 3000;
 
-<<<<<<< HEAD
-// Start the express server
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
-=======
-// Export the app for the tests
+// Export the app for tests
 export default app;
 
-// Start the server only if not in test environment
+// Start the HTTP server (not in test environment)
 if (process.env.NODE_ENV !== "test") {
   httpServer.listen(PORT, () => {
     console.log("==================================================");
@@ -132,4 +114,3 @@ if (process.env.NODE_ENV !== "test") {
     console.log("==================================================");
   });
 }
->>>>>>> sprint1
