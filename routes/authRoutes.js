@@ -21,7 +21,7 @@ const router = express.Router();
 // Route to log the user
 /**
  * @swagger
- * /api/users/login:
+ * /api/v0/users/login:
  *   post:
  *     summary: User Login
  *     tags:
@@ -45,12 +45,12 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post("/login", login);
+router.post("/users/login", login);
 
 // Route to verify user's OTP code
 /**
  * @swagger
- * /users/verify-user:
+ * /api/v0/users/verify-user:
  *   post:
  *     summary: Verify user's OTP code
  *     tags: 
@@ -87,7 +87,7 @@ router.post("/users/verify-user", verifyUser);
 // Route to resend OTP code
 /**
  * @swagger
- * /users/resend-verification:
+ * /api/v0/users/resend-verification:
  *   post:
  *     summary: Resend OTP verification code
  *     tags: 
@@ -122,7 +122,7 @@ router.post("/users/resend-verification", resendVerificationCode);
 // Route to reset password
 /**
  * @swagger
- * /users/reset-password:
+ * /api/v0/users/reset-password:
  *   post:
  *     summary: Reset password after account verification
  *     tags: 
@@ -159,7 +159,7 @@ router.post("/users/reset-password", resetPassword);
 // Route to forget password request
 /**
  * @swagger
- * /users/request-password-reset:
+ * /api/v0/users/request-password-reset:
  *   post:
  *     summary: Request password reset link
  *     tags: 
@@ -190,7 +190,7 @@ router.post("/users/request-password-reset", requestPasswordReset);
 // Route to forget password reset
 /**
  * @swagger
- * /users/forget-password:
+ * /api/v0/users/forget-password:
  *   post:
  *     summary: Reset password using reset token
  *     tags: 

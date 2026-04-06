@@ -6,8 +6,30 @@ import authorize from "../middleware/authorize.js";
 const router = express.Router();
 
 /**
- * Route to fetch supervisor statistics for the team dashboard
+ * @swagger
+ * /api/v0/dashboard/supervisor:
+ *   get:
+ *     summary: Get supervisor dashboard statistics
+ *     tags:
+ *       - Dashboard
+ *     description: Returns aggregated statistics for a supervisor's team dashboard.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics returned successfully
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized (Admin or Supervisor only)
+ *       500:
+ *         description: Server error
  */
-router.get("/supervisor", authenticate, authorize(["Admin", "Supervisor"]), getSupervisorDashboardStats);
+router.get(
+	"/supervisor",
+	authenticate,
+	authorize(["Admin", "Supervisor"]),
+	getSupervisorDashboardStats
+);
 
 export default router;

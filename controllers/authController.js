@@ -74,14 +74,16 @@ export const login = async (req, res, next) => {
       // The user has 3 login attempts before account blockage
       if (user.loginAttempts >= 3) {
         user.status = "Blocked";
-        await user.save(); 
+        // Skip full validation here in case legacy users
+        // are missing newly required fields like idNumber.
+        await user.save({ validateBeforeSave: false }); 
         throw new AppError(
           "Your Account is now Blocked. Please contact the Administration!",
           403,
         );
       }
 
-      await user.save();
+      await user.save({ validateBeforeSave: false });
 
       throw new AppError(
         "Invalid Email or password!",
@@ -117,7 +119,7 @@ export const login = async (req, res, next) => {
 
     // Reset Login attempts
     user.loginAttempts = 0;
-    await user.save();
+    await user.save({ validateBeforeSave: false });
 
     res.status(200).json({
       status: "Success",

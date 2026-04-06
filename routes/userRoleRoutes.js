@@ -33,7 +33,7 @@ const router = express.Router();
 // Add new role
 /**
  * @swagger
- * /api/roles:
+ * /api/v0/roles:
  *   post:
  *     summary: Create a new user role (Admin Only)
  *     tags:
@@ -73,7 +73,7 @@ router.post("/roles", authenticate, authorize(["Admin"]), addUserRole);
 
 /**
  * @swagger
- * /api/roles:
+ * /api/v0/roles:
  *   get:
  
  *     summary: Get all user roles
@@ -102,7 +102,7 @@ router.get("/roles", authenticate, authorize(["Admin", "Supervisor"]), getAllUse
 
 /**
  * @swagger
- * /api/roles/{id}:
+ * /api/v0/roles/{id}:
  *   get:
  
  *     summary: Get role by ID
@@ -132,7 +132,7 @@ router.get("/roles/:id", getUserRoleById);
 
 /**
  * @swagger
- * /api/roles/{id}:
+ * /api/v0/roles/{id}:
  *   delete:
  *     summary: Delete a user role
  *     description: Delete a role by ID (Admin only)

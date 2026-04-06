@@ -22,7 +22,7 @@ const route = express.Router();
 // Route to add a new Leave Type (Admin only)
 /**
  * @swagger
- * /api/leaveType:
+ * /api/v0/leaveType:
  *   post:
  *     tags:
  *       - Leave Types
@@ -64,8 +64,8 @@ const route = express.Router();
  *       500:
  *         description: Server error
  */
-route.post( 
-  "/leaveType", 
+route.post(
+  "/leaveType",
   authenticate, 
   authorize(["Admin"]), 
   addLeaveType
@@ -74,7 +74,7 @@ route.post(
 // Route to update a Leave Type (Admin only)
 /**
  * @swagger
- * /api/leaveType/{id}:
+ * /api/v0/leaveType/{id}:
  *   patch:
  *     tags:
  *       - Leave Types
@@ -131,7 +131,7 @@ route.patch(
 // Route to archive a Leave Type (Admin only)
 /**
  * @swagger
- * /api/leaveType/archive/{id}:
+ * /api/v0/leaveType/archive/{id}:
  *   patch:
  *     tags:
  *       - Leave Types
@@ -170,7 +170,7 @@ route.patch(
 // Route to restore an archived Leave Type (Admin only)
 /**
  * @swagger
- * /api/leaveType/restore/{id}:
+ * /api/v0/leaveType/restore/{id}:
  *   patch:
  *     tags:
  *       - Leave Types
@@ -209,7 +209,7 @@ route.patch(
 // Route to get all active Leave Types (All authenticated users for the leave requests form)
 /**
  * @swagger
- * /api/leaveTypes/active:
+ * /api/v0/leaveTypes/active:
  *   get:
  *     tags:
  *       - Leave Types
@@ -226,7 +226,7 @@ route.patch(
  *         description: Server error
  */
 route.get(
-  "/leaveTypes/active", 
+  "/leaveTypes/active",
   authenticate, 
   getAllActiveLeaveTypes
 );
@@ -234,7 +234,7 @@ route.get(
 // Route to get all archived Leave Types (Admin only)
 /**
  * @swagger
- * /api/leaveTypes/archived:
+ * /api/v0/leaveTypes/archived:
  *   get:
  *     tags:
  *       - Leave Types
@@ -253,7 +253,7 @@ route.get(
  *         description: Server error
  */
 route.get(
-  "/leaveTypes/archived", 
+  "/leaveTypes/archived",
   authenticate, 
   authorize(["Admin"]), 
   getAllArchivedLeaveTypes

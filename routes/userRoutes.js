@@ -28,7 +28,7 @@ const router = express.Router();
 
 /**
  * @swagger
-  * /api/users:
+  * /api/v0/users:
  *   post:
  *     summary: Add a new user
  *     description: Create a new user account
@@ -46,7 +46,7 @@ router.get("/public/interns", getPublicInterns);
 // Route to Add user (Admin Only)
 /**
  * @swagger
- * /api/users:
+ * /api/v0/users:
  *   post:
  *     tags:
  *       - Users
@@ -75,7 +75,7 @@ router.post("/users", addUser);
 
 /**
  * @swagger
- * /api/login:
+ * /api/v0/login:
  *   post:
  *     summary: User login
  *     description: Authenticate user and return JWT token
@@ -103,7 +103,7 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
 // Route to Update user (Edit Profile) (Admin Only and the user himself)
 /**
  * @swagger
- * /api/users/{id}:
+ * /api/v0/users/{id}:
  *   put:
  *     tags:
  *       - Users
@@ -144,7 +144,7 @@ router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true })
 // Route to Delete user (Admin Only)
 /**
  * @swagger
- * /api/users/{id}:
+ * /api/v0/users/{id}:
  *   delete:
  *     tags:
  *       - Users
@@ -171,7 +171,7 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
 // Route to get all users (Admin Only)
 /**
  * @swagger
- * /api/users:
+ * /api/v0/users:
  *   get:
  *     tags:
  *       - Users
@@ -189,7 +189,7 @@ router.get("/users", authenticate, authorize(["Admin", "Supervisor", "Employee",
 // Route to get active supervisors (Admin Only)
 /**
  * @swagger
- * /api/users/active-supervisors:
+ * /api/v0/users/active-supervisors:
  *  get:
  *    summary: Get all active supervisors (Admin only)
  *    tags:
@@ -211,7 +211,7 @@ router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getR
 // Route to get user by ID (Admin, the user himself and his supervisor)
 /**
  * @swagger
- * /api/users/{id}:
+ * /api/v0/users/{id}:
  *   get:
  *     tags:
  *       - Users
@@ -242,7 +242,7 @@ router.get(
 // Route to search users
 /**
  * @swagger
- * /api/users/search:
+ * /api/v0/users/search:
  *   get:
  *     tags:
  *       - Users

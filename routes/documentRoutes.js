@@ -39,7 +39,7 @@ const attachDocumentOwner = async (req, res, next) => {
 // Route to upload a personal document (The User himself and Admin)
 /**
  * @swagger
- * /api/documents/personal-doc/{id}:
+ * /api/v0/documents/personal-doc/{id}:
  *   post:
  *     summary: Upload a personal document
  *     tags:
@@ -94,7 +94,7 @@ router.post(
 // Route to delete a personal document (The User himself and Admin)
 /**
  * @swagger
- * /api/documents/personal-doc/{id}:
+ * /api/v0/documents/personal-doc/{id}:
  *   delete:
  *     summary: Delete a personal document
  *     tags:
@@ -132,7 +132,7 @@ router.delete(
 // Route to Download a document (The User himself, Admin and the user's supervisor)
 /**
  * @swagger
- * /api/documents/personal-doc/download/{id}:
+ * /api/v0/documents/personal-doc/download/{id}:
  *   get:
  *     summary: Download a personal document
  *     tags:
@@ -170,7 +170,7 @@ router.get(
 // Route to consult a document (The User himself, Admin and the user's supervisor)
 /**
  * @swagger
- * /api/documents/personal-doc/consult/{id}:
+ * /api/v0/documents/personal-doc/consult/{id}:
  *   get:
  *     summary: Consult a personal document
  *     tags:
@@ -208,7 +208,7 @@ router.get(
 // Route to get all personal documents of a user (User himself or Admin)
 /**
  * @swagger
- * /api/documents/personal-docs/{id}:
+ * /api/v0/documents/personal-docs/{id}:
  *   get:
  *     summary: Get all personal documents of a user
  *     tags:
@@ -262,7 +262,7 @@ router.get(
 // Route to get all the non-confidential personal documents of a user (User himself or Admin or the supervisor)
 /**
  * @swagger
- * /api/documents/personal-docs/non-confidential/{id}:
+ * /api/v0/documents/personal-docs/non-confidential/{id}:
  *   get:
  *     summary: Get non-confidential personal documents
  *     tags:
@@ -314,7 +314,7 @@ router.get(
 // Route to toggle confidentiality of a personal document (The User himself and Admin)
 /**
  * @swagger
- * /api/documents/personal-doc/toggle-confidentiality/:id:
+ * /api/v0/documents/personal-doc/toggle-confidentiality/:id:
  *   put:
  *     tags:
  *       - Personal Documents

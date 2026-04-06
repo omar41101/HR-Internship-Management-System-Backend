@@ -81,7 +81,23 @@ if (enableSwagger) {
 // Connect to MongoDB
 connectMongo();
 
-// Routes
+// Routes (v0 versioned + legacy /api for backward compatibility)
+// Versioned base path
+app.use("/api/v0", authRoutes);
+app.use("/api/v0", userRoutes);
+app.use("/api/v0", UserRoleRoutes);
+app.use("/api/v0", departmentRoutes);
+app.use("/api/v0", auditLogRoutes);
+app.use("/api/v0", timetableRoutes);
+app.use("/api/v0", attendanceRoutes);
+app.use("/api/v0", documentTypeRoutes);
+app.use("/api/v0", documentRoutes);
+app.use("/api/v0", testRoutes);
+app.use("/api/v0", specialShiftRoutes);
+app.use("/api/v0", leaveTypeRoutes);
+app.use("/api/v0/dashboard", dashboardRoutes);
+
+// Legacy non-versioned base path (kept so existing clients keep working)
 app.use("/api", authRoutes);
 app.use("/api", userRoutes);
 app.use("/api", UserRoleRoutes);
