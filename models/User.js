@@ -116,7 +116,7 @@ const userSchema = new mongoose.Schema(
     },
     faceData: {
       type: String,
-      required: true,
+      default: "",
     },
     socialStatus: {
       type: String,
