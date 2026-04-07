@@ -57,7 +57,13 @@ const leaveRequestSchema = new mongoose.Schema(
     },
     attachmentURL: {
       type: String,
+      default: "",
     },
+    attachmentPublicId: {
+      // To store the Cloudinary public ID for deletion
+      type: String,
+      default: "",
+    }, 
     duration: {
       // Represents the total number of days for the leave request (automatically calculated)
       type: Number,

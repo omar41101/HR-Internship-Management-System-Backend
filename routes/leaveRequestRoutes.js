@@ -64,7 +64,7 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post("/leave-requests", authenticate, upload("doc").single("attachement"), addLeaveRequest); 
+router.post("/leave-requests", authenticate, upload("doc").single("attachment"), addLeaveRequest); 
 
 // Route to get leave request statuses based on user role (Every authenticated user)
 /**
@@ -225,7 +225,7 @@ router.get("/leave-requests/:id", authenticate, getLeaveRequestById);
  *       500:
  *         description: Server error
  */
-router.patch("/leave-requests/:id", authenticate, updateLeaveRequest);
+router.patch("/leave-requests/:id", authenticate, upload("doc").single("attachment"), updateLeaveRequest);
 
 // Route to cancel a leave request (The user himself)
 /**

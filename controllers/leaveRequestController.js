@@ -3,7 +3,7 @@ import LeaveType from "../models/LeaveType.js";
 import User from "../models/User.js";
 import AppError from "../utils/AppError.js"; 
 import { getStatusesByRole } from "../utils/leaveStatusByRole.js";
-import { uploadDocToCloudinary } from "../utils/cloudinaryHelper.js";
+import { uploadDocToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
 import { logAuditAction } from "../utils/logger.js";
 
 // --------------------------------------------------------- //
@@ -86,11 +86,13 @@ export const addLeaveRequest = async (req, res, next) => {
     const user = req.user; // Get the user from the token
     const { typeId, startDate, endDate, reason } = req.body;
     let attachmentURL = "";
+    let attachmentPublicId = "";
 
     // Upload the attachment if it exists
     if (req.file) {
       const result = await uploadDocToCloudinary(req.file.buffer, req.file.originalname, "hrcom/leave_docs");
       attachmentURL = result.secure_url;
+      attachmentPublicId = result.public_id;
     }
 
     // Validate required fields
@@ -171,6 +173,7 @@ export const addLeaveRequest = async (req, res, next) => {
       endDate: end,
       reason,
       attachmentURL: attachmentURL || "",
+      attachmentPublicId: attachmentPublicId || "",
       duration,
       status,
       reviewedBy: null,
@@ -291,7 +294,7 @@ export const updateLeaveRequest = async (req, res, next) => {
     const user = req.user;     // Get the user from the token
     const { id } = req.params; // Get the leave request ID
 
-    const { typeId, startDate, endDate, reason, attachmentURL } = req.body;
+    const { typeId, startDate, endDate, reason, removeAttachment } = req.body;
 
     // Check the leave request existence
     const leaveRequest = await LeaveRequest.findById(id);
@@ -361,16 +364,43 @@ export const updateLeaveRequest = async (req, res, next) => {
     }
 
     // Recalculate duration
-    const duration =
-      Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
+    const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
+    // Attachement handling (In case of deletion + new upload)
+    
+    // CASE 1: Upload new file
+    if (req.file) {
+      // Delete the old file from cloudinary if exists
+      if (leaveRequest.attachmentPublicId) {
+        await deleteFromCloudinary(leaveRequest.attachmentPublicId, "raw");
+      }
+
+      // Upload the new file to cloudinary
+      const result = await uploadDocToCloudinary(
+        req.file.buffer,
+        req.file.originalname,
+        "hrcom/leave_docs"
+      );
+
+      leaveRequest.attachmentURL = result.secure_url;
+      leaveRequest.attachmentPublicId = result.public_id;
+    }
+
+    // CASE 2: Delete the attachment
+    else if (removeAttachment === true) {
+      if (leaveRequest.attachmentPublicId) {
+        await deleteFromCloudinary(leaveRequest.attachmentPublicId, "raw");
+      }
+
+      leaveRequest.attachmentURL = "";
+      leaveRequest.attachmentPublicId = "";
+    }
     
     // Update the fields
     leaveRequest.typeId = updatedTypeId;
     leaveRequest.startDate = start;
     leaveRequest.endDate = end;
     leaveRequest.reason = reason ?? leaveRequest.reason;
-    leaveRequest.attachmentURL = attachmentURL ?? leaveRequest.attachmentURL;
     leaveRequest.duration = duration;
 
     await leaveRequest.save();
@@ -426,6 +456,11 @@ export const cancelLeaveRequest = async (req, res, next) => {
       );
     }
 
+    // Delete the attachment from cloudinary if exists
+    if (leaveRequest.attachmentPublicId) {
+      await deleteFromCloudinary(leaveRequest.attachmentPublicId, "raw");
+    }
+    
     // Delete the leave request
     await LeaveRequest.findByIdAndDelete(id);
 
