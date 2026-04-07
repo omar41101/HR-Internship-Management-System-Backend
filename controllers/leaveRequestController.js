@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import AppError from "../utils/AppError.js"; 
 import { getStatusesByRole } from "../utils/leaveStatusByRole.js";
 import { uploadDocToCloudinary } from "../utils/cloudinaryHelper.js";
+import { logAuditAction } from "../utils/logger.js";
 
 // --------------------------------------------------------- //
 // ------------------ HELPER FUNCTIONS --------------------- //
@@ -223,6 +224,22 @@ export const getAllLeaveRequests = async (req, res, next) => {
   }
 }; 
 
+// Get leave statuses based on the user role
+export const getLeaveStatuses = (req, res, next) => {
+  try {
+    const user = req.user;
+
+    const statuses = getStatusesByRole(user.role);
+
+    res.status(200).json({
+      status: "Success",
+      data: statuses,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Get a leave request by ID (Every authenticated user)
 export const getLeaveRequestById = async (req, res, next) => {
   try {
@@ -330,7 +347,7 @@ export const updateLeaveRequest = async (req, res, next) => {
       _id: { $ne: id },
       employeeId: user._id,
       status: {
-        $nin: ["Rejected by Supervisor", "Rejected by Admin", "Cancelled"],
+        $nin: ["Rejected by Supervisor", "Rejected by Admin"],
       },
       startDate: { $lte: end },
       endDate: { $gte: start },
@@ -464,8 +481,24 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
       );
 
       if (!leaveRequest) {
-        throw new AppError("Leave request unavailable!", 400);
+        throw new AppError("Leave request unavailable!", 404);
       }
+
+      // Log the action
+      await logAuditAction({
+        adminId: req.user.id,
+        action: "MARK_LEAVE_REQUEST_UNDER_REVIEW",
+        targetType: "LeaveRequest",
+        targetId: leaveRequest._id,
+        targetName: leaveRequest.reason,
+        details: {
+          status: leaveRequest.status,
+          typeId: leaveRequest.typeId,
+          startDate: leaveRequest.startDate,
+          endDate: leaveRequest.endDate,
+        },
+        ipAddress: req.ip,
+      });
     } 
     
     else {
@@ -538,7 +571,7 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       if (!leaveRequest) {
         throw new AppError(
           "Leave request not found!",
-          400,
+          404,
         );
       }
 
@@ -549,6 +582,39 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
           employee.leaveBalance -= leaveRequest.duration;
           await employee.save();
         }
+
+        // Log the action
+        await logAuditAction({
+          adminId: req.user.id,
+          action: "APPROVE_LEAVE_REQUEST",
+          targetType: "LeaveRequest",
+          targetId: leaveRequest._id,
+          targetName: leaveRequest.reason,
+          details: {
+            status: leaveRequest.status,
+            typeId: leaveRequest.typeId,
+            startDate: leaveRequest.startDate,
+            endDate: leaveRequest.endDate,
+          },
+          ipAddress: req.ip,
+        });
+      }
+      else {
+        // Log the reject action
+        await logAuditAction({
+          adminId: req.user.id,
+          action: "REJECT_LEAVE_REQUEST",
+          targetType: "LeaveRequest",
+          targetId: leaveRequest._id,
+          targetName: leaveRequest.reason,
+          details: {  
+            status: leaveRequest.status,
+            typeId: leaveRequest.typeId,
+            startDate: leaveRequest.startDate,
+            endDate: leaveRequest.endDate,
+          },
+          ipAddress: req.ip,
+        });
       }
     } 
     
@@ -560,22 +626,6 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       status: "Success",
       message: `Leave request ${action}d successfully!`,
       result: leaveRequest,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Get leave statuses based on the user role
-export const getLeaveStatuses = (req, res, next) => {
-  try {
-    const user = req.user;
-
-    const statuses = getStatusesByRole(user.role);
-
-    res.status(200).json({
-      status: "Success",
-      data: statuses,
     });
   } catch (err) {
     next(err);

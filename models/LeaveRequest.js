@@ -20,9 +20,6 @@ const leaveRequestSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
-    reviewedAt: {
-      type: Date,
-    },
     typeId: {
       // Represents the type of leave being requested
       type: mongoose.Schema.Types.ObjectId,

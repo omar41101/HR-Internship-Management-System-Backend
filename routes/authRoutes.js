@@ -21,7 +21,7 @@ const router = express.Router();
 // Route to log the user
 /**
  * @swagger
- * /api/users/login:
+ * /api/login:
  *   post:
  *     summary: User Login
  *     tags:
@@ -50,7 +50,7 @@ router.post("/login", login);
 // Route to verify user's OTP code
 /**
  * @swagger
- * /users/verify-user:
+ * /api/users/verify-user:
  *   post:
  *     summary: Verify user's OTP code
  *     tags: 
@@ -87,7 +87,7 @@ router.post("/users/verify-user", verifyUser);
 // Route to resend OTP code
 /**
  * @swagger
- * /users/resend-verification:
+ * /api/users/resend-verification:
  *   post:
  *     summary: Resend OTP verification code
  *     tags: 
@@ -122,7 +122,7 @@ router.post("/users/resend-verification", resendVerificationCode);
 // Route to reset password
 /**
  * @swagger
- * /users/reset-password:
+ * /api/users/reset-password:
  *   post:
  *     summary: Reset password after account verification
  *     tags: 
@@ -159,7 +159,7 @@ router.post("/users/reset-password", resetPassword);
 // Route to forget password request
 /**
  * @swagger
- * /users/request-password-reset:
+ * /api/users/request-password-reset:
  *   post:
  *     summary: Request password reset link
  *     tags: 
@@ -190,7 +190,7 @@ router.post("/users/request-password-reset", requestPasswordReset);
 // Route to forget password reset
 /**
  * @swagger
- * /users/forget-password:
+ * /api/users/forget-password:
  *   post:
  *     summary: Reset password using reset token
  *     tags: 

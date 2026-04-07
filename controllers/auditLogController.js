@@ -57,6 +57,15 @@ const formatAuditLog = (log) => {
     case "RESTORE_LEAVE_TYPE":
       description = `Restored Leave Type ${log.target_name || ""}`;
       break;
+    case "MARK_LEAVE_REQUEST_UNDER_REVIEW":
+      description = `Marked Leave Request ${log.target_name || ""} as Under Review`;
+      break;
+    case "APPROVE_LEAVE_REQUEST":
+      description = `Approved Leave Request of ${log.target_name || ""}`;
+      break;
+    case "REJECT_LEAVE_REQUEST":
+      description = `Rejected Leave Request of ${log.target_name || ""}`;
+      break;
     default:
       description = `Performed ${log.action} on ${log.target_type || "Target"}`;
   }
