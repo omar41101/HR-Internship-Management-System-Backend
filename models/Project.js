@@ -6,26 +6,55 @@ const projectSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    sector: {
+      type: String,
+      enum: [
+        "Finance",
+        "Education",
+        "Healthcare",
+        "Agriculture",
+        "Transportation",
+        "Tourism",
+      ],
+    },
     description: {
       type: String,
     },
     status: {
       type: String,
-      enum: ["pending", "in_progress", "done", "at_risk"],
-      default: "pending",
+      enum: ["Planning", "Active", "Completed", "On Hold", "Archived"],
+      default: "Planning",
     },
-    supervisor_id: {
+    onHoldReason: {
+      type: String,
+      default: null,
+    },
+    startDate: {
+      type: Date,
+      default: Date.now,
+    },
+    dueDate: {
+      type: Date,
+    },
+    productOwnerId: {
+      // The supervisor
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    totalSubTasks: { type: Number, default: 0 },
-    completedSubTasks: { type: Number, default: 0 },
-    dueDate: { type: Date },
+    scrumMasterId: {
+      // Can be only an employee, not an intern
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    team_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Team",
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 export default mongoose.model("Project", projectSchema);

@@ -51,6 +51,9 @@ export const uploadPersonalDocument = async (req, res, next) => {
     // Get the doc's owner's ID
     const targetUserId = req.params.id;
 
+    // Get the uploader's ID from the authenticated user (can be different from the owner in case of Admin uploading on behalf of a user)
+    const uploaderId = req.user.id;
+
     // Get the isConfidential flag
     const isConfidential = req.body.isConfidential === "true";
 
@@ -98,7 +101,9 @@ export const uploadPersonalDocument = async (req, res, next) => {
       fileURL: result.secure_url,
       filePublicId: result.public_id,
       documentType_id: personalType._id,
-      user_id: targetUserId,
+      user_id: targetUserId,  // The document owner 
+      projectId: null,
+      uploadedBy: uploaderId, // The user who uploaded the document
       fileHash,
       isConfidential,
     });
