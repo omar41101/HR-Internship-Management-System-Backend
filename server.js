@@ -26,6 +26,8 @@ import testRoutes from "./routes/testRoutes.js";
 import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import cors from "cors";
+
 
 // Create Express app and HTTP server
 const app = express();
@@ -58,6 +60,10 @@ if (!process.env.FACE_ATTESTATION_SECRET) {
 // Body parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
+app.use(cors({
+  origin: "https://hr-internship-management-system.vercel.app",
+  credentials: true // include this if you're using cookies/auth headers
+}));
 
 // Swagger API Documentation (env-controlled, basic auth in production)
 const enableSwagger =
