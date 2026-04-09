@@ -70,7 +70,7 @@ app.use(
 );
 
 // Ensure preflight requests always get CORS headers
-app.options("*", cors({ origin: true }));
+app.options("/*", cors({ origin: true }));
 
 // Swagger API Documentation (env-controlled, basic auth in production)
 const enableSwagger =
