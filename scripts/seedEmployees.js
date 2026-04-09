@@ -18,14 +18,14 @@ const DEFAULT_PASSWORD = "Employee123!";
 
 const EMPLOYEE_USERS = [
   {
-    name: "Omar",
-    lastName: "Employee",
-    email: "omar.employee@dotjcom.com",
+    name: " ",
+    lastName: " ",
+    email: "omar@dotjcom.com",
     position: "Software Engineer",
     departmentName: "IT",
   },
   {
-    name: "Sara",
+    name: "Ya",
     lastName: "Employee",
     email: "sara.employee@dotjcom.com",
     position: "HR Specialist",

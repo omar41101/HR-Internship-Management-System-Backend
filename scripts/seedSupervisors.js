@@ -17,20 +17,7 @@ dotenv.config();
 const DEFAULT_PASSWORD = "Supervisor123!";
 
 const SUPERVISOR_USERS = [
-  {
-    name: "Samir",
-    lastName: "Supervisor",
-    email: "samir.supervisor@dotjcom.com",
-    position: "Team Supervisor",
-    departmentName: "IT",
-  },
-  {
-    name: "Leila",
-    lastName: "Manager",
-    email: "leila.supervisor@dotjcom.com",
-    position: "HR Supervisor",
-    departmentName: "HR",
-  },
+  
 ];
 
 async function seedSupervisors() {
