@@ -26,16 +26,6 @@ import authorize from "../middleware/authorize.js";
  
 const router = express.Router();
 
-/**
- * @swagger
-  * /api/v0/users:
- *   post:
- *     summary: Add a new user
- *     description: Create a new user account
- *     tags:
- *       - Users
- */
-
 // -------------------------------------------------------------------------------------- //
 // ------------------------------- USER MANAGEMENT ROUTES ------------------------------- //
 // -------------------------------------------------------------------------------------- //
@@ -78,23 +68,22 @@ router.post("/users", addUser);
  * /api/v0/login:
  *   post:
  *     summary: User login
- *     description: Authenticate user and return JWT token
+ *     description: Authenticate user and return a JWT token
  *     tags:
  *       - Users
-  *             $ref: '#/components/schemas/CreateUserRequest'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
  *     responses:
- *       201:
- *         description: User created successfully
+ *       200:
+ *         description: Login successful
  *       400:
- *         description: Failed Input validation
+ *         description: Failed input validation
  *       401:
- *         description: Unauthorized (User existing, Invalid Role, Invalid Department or Invalid/missing token)
- *       403:
- *         description: Forbidden (Insufficient permissions)
- *       404:
- *         description: Supervisor not found
- *       409:
- *         description: User already exists in the DB
+ *         description: Invalid credentials
  *       500:
  *         description: Server error
  */
@@ -117,23 +106,19 @@ router.post("/users", authenticate, authorize(["Admin"]), addUser);
  *         description: User ID
  *         schema:
  *           type: string
-  *     requestBody:
+ *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
-  *             $ref: '#/components/schemas/LoginRequest'
- *     responses:
- *       200:
- *         description: Login successful
-  *             $ref: '#/components/schemas/UpdateUserRequest'
+ *             $ref: '#/components/schemas/UpdateUserRequest'
  *     responses:
  *       200:
  *         description: User updated successfully
  *       400:
- *         description: Input Validation failed, Invalid Role, Invalid Department, Invalid Supervisor or Invalid/missing token
+ *         description: Input validation failed, invalid role/department/supervisor, or invalid/missing token
  *       403:
- *         description: Forbidden (Insufficient permissions)
+ *         description: Forbidden (insufficient permissions)
  *       404:
  *         description: User not found
  *       500:

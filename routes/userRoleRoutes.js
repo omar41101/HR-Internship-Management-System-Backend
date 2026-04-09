@@ -15,21 +15,6 @@ import authorize from "../middleware/authorize.js";
 
 const router = express.Router();
 
-/**
- * @swagger
- 
- * /api/roles:
- *   post:
- *     summary: Add a new user role
- *     description: Create a new role (Admin only)
- *     tags:
- *       - Roles
-
- * tags:
- *   - name: UserRoles
- *     description: Endpoints for the user roles CRUDs
- */
-
 // Add new role
 /**
  * @swagger
@@ -138,12 +123,6 @@ router.get("/roles/:id", getUserRoleById);
  *     description: Delete a role by ID (Admin only)
  *     tags:
  *       - Roles
-
- *     summary: Get a user role by ID (Admin only)
- *     tags:
- *       - UserRoles
- *     description: Allows an Admin to get the details of a user role.
-
  *     security:
  *       - bearerAuth: []
  *     parameters:
