@@ -9,7 +9,10 @@
     "test": "cross-env NODE_ENV=test jest",
     "seed": "node seed/seed.js",
     "seed:admin": "node scripts/seedAdmin.js",
-    "seed:interns": "node scripts/seedInterns.js"
+    "seed:interns": "node scripts/seedInterns.js",
+    "seed:supervisors": "node scripts/seedSupervisors.js",
+    "seed:employees": "node scripts/seedEmployees.js",
+    "seed:all": "npm run seed && npm run seed:admin && npm run seed:interns && npm run seed:supervisors && npm run seed:employees"
    },
   "keywords": [],
   "author": "",

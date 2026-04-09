@@ -3,10 +3,10 @@
 // -------------------------------------------------------------------------------------------- //
 
 import mongoose from "mongoose";
-import UserRole from "./models/UserRole.js";
-import Department from "./models/Department.js";
-import LeaveType from "./models/LeaveType.js";
-import DocumentType from "./models/DocumentType.js";
+import UserRole from "../models/UserRole.js";
+import Department from "../models/Department.js";
+import LeaveType from "../models/LeaveType.js";
+import DocumentType from "../models/DocumentType.js";
 
 const MONGO_URI = process.env.MONGO_URI;
 
