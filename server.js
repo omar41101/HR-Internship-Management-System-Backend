@@ -41,6 +41,8 @@ import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
 import leaveRequestRoutes from "./routes/leaveRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import projectRoutes from "./routes/projectRoutes.js";
+import teamMemberRoutes from "./routes/teamMemberRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -86,6 +88,8 @@ app.use('/api', specialShiftRoutes);
 app.use('/api', leaveTypeRoutes);
 app.use('/api', leaveRequestRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api', projectRoutes);
+app.use('/api', teamMemberRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
