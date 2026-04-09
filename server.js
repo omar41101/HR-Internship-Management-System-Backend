@@ -69,6 +69,14 @@ app.use(
   }),
 );
 
+// Handle CORS preflight (OPTIONS) requests for all routes
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 // Swagger API Documentation (env-controlled, basic auth in production)
 const enableSwagger =
   process.env.ENABLE_SWAGGER === "true" || process.env.NODE_ENV !== "production";
