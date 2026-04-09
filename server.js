@@ -60,10 +60,22 @@ if (!process.env.FACE_ATTESTATION_SECRET) {
 // Body parsing
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
-app.use(cors({
-  origin: "https://hr-internship-management-system.vercel.app",
-  credentials: true // include this if you're using cookies/auth headers
-}));
+
+// CORS configuration for browser clients (Vercel + local dev)
+const allowedOrigins = [
+  process.env.CLIENT_URL || "http://localhost:5173",
+  "https://hr-internship-management-system.vercel.app",
+];
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  }),
+);
+
+// Ensure preflight requests always get CORS headers
+app.options("*", cors({ origin: allowedOrigins, credentials: true }));
 
 // Swagger API Documentation (env-controlled, basic auth in production)
 const enableSwagger =
