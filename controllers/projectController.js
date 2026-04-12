@@ -7,7 +7,11 @@ import TeamMember from "../models/TeamMember.js";
 import User from "../models/User.js";
 import Document from "../models/Document.js";
 import AppError from "../utils/AppError.js";
-import { uploadDocToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
+import { deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
+
+// ----------------------------------------------------------------------- //
+// --------- HELPER FUNCTIONS FOR THE FILTERS IN THE FRONTEND ------------ //
+// ----------------------------------------------------------------------- //
 
 // Get all the sectors in a project
 export const getAllSectors = async (req, res, next) => {
@@ -23,7 +27,7 @@ export const getAllSectors = async (req, res, next) => {
   }
 };
 
-// Get all the statuses in a project (except "Archived")
+// Get all the statuses in a project (except "Archived" because it's in a different section in the frontend)
 export const getAllStatuses = async (req, res, next) => {
   try {
     const statuses = Project.schema
@@ -39,21 +43,25 @@ export const getAllStatuses = async (req, res, next) => {
   }
 };
 
-// Get all projects with pagination (12 per page) + optional : Search by project name + Filters
+// ----------------------------------------------------------------------- //
+// -------------------------- PROJECT MANAGEMENT ------------------------- //
+// ----------------------------------------------------------------------- //
+
+// Get all projects with pagination (12 per page) + optional Search by project name + Filters
 export const getAllProjects = async (req, res, next) => {
   try {
     const {
       page = 1,
       name,
       sector,
-      status,
-      supervisor,
+      status, // Project status filter except "Archived"
+      supervisor, // Supervisor name filter (e.g. "Omar Ajimi")
       startDate,
       endDate,
-      archived = false,
+      archived = "false",
     } = req.query;
 
-    const limit = 12;
+    const limit = 12; // 12 projects per page
     const parsedPage = Math.max(parseInt(page), 1);
     const skip = (parsedPage - 1) * limit;
 
@@ -64,7 +72,8 @@ export const getAllProjects = async (req, res, next) => {
     // Build our filter object
     const match = {};
 
-    // The Admin can see all the projects, but the Supervisor/Employee/Intern can only see the projects they are involved in
+    // Authorization Access
+    // The Admin can see all the projects
     if (role !== "Admin") {
       if (role === "Supervisor") {
         // Supervisor can view the projects where they are the product owner
@@ -97,22 +106,23 @@ export const getAllProjects = async (req, res, next) => {
 
     // Optional filter by startDate / endDate
     if (startDate || endDate) match.startDate = {};
-
     if (startDate) match.startDate.$gte = new Date(startDate);
     if (endDate) match.startDate.$lte = new Date(endDate);
 
     // Optional filter by supervisor name
     if (supervisor) {
-      const [firstName, ...rest] = supervisor.split(" ");
-      const lastName = rest.join(" ");
-
       const user = await User.findOne({
-        name: { $regex: `^${firstName}$`, $options: "i" },
-        lastName: { $regex: `^${lastName}$`, $options: "i" },
+        $or: [
+          { name: { $regex: supervisor, $options: "i" } },
+          { lastName: { $regex: supervisor, $options: "i" } },
+        ],
       }).select("_id");
 
       if (user) {
         match.productOwnerId = { $in: [new mongoose.Types.ObjectId(user._id)] };
+      }
+      else {
+        match.productOwnerId = null;
       }
     }
 
@@ -120,22 +130,22 @@ export const getAllProjects = async (req, res, next) => {
     const projects = await Project.aggregate([
       { $match: match },
 
-      // Populate the team
+      // Get the Product owner info
       {
         $lookup: {
-          from: "teams",
-          localField: "team_id",
+          from: "users",
+          localField: "productOwnerId",
           foreignField: "_id",
-          as: "team",
+          as: "productOwner",
         },
       },
-      { $unwind: { path: "$team", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$productOwner", preserveNullAndEmptyArrays: true } },
 
-      // Populate team members
+      // Get the profile pictures of the team members (up to 4 pictures for each project)
       {
         $lookup: {
           from: "teammembers",
-          localField: "team._id",
+          localField: "team_id",
           foreignField: "teamId",
           as: "teamMembers",
         },
@@ -145,11 +155,22 @@ export const getAllProjects = async (req, res, next) => {
           from: "users",
           localField: "teamMembers.userId",
           foreignField: "_id",
-          as: "teamMembersInfo",
+          as: "teamUsers",
+        },
+      },
+      {
+        $addFields: {
+          teamImages: {
+            $map: {
+              input: "$teamUsers",
+              as: "user",
+              in: "$$user.profileImageURL",
+            },
+          },
         },
       },
 
-      // Lookup for the current sprint
+      // Get the current sprint
       {
         $lookup: {
           from: "sprints",
@@ -171,23 +192,95 @@ export const getAllProjects = async (req, res, next) => {
       },
       { $unwind: { path: "$currentSprint", preserveNullAndEmptyArrays: true } },
 
-      // Count the total tasks for the current sprint
+      // Get the total number of tasks in the current sprint and how many of them are completed (to calculate the progress bar in the frontend)
       {
         $lookup: {
           from: "tasks",
           let: { sprintId: "$currentSprint._id" },
           pipeline: [
-            { $match: { $expr: { $eq: ["$sprintId", "$$sprintId"] } } },
-            { $count: "totalTasks" },
+            {
+              $match: {
+                $expr: { $eq: ["$sprintId", "$$sprintId"] },
+              },
+            },
+            {
+              $group: {
+                _id: null,
+                total: { $sum: 1 },
+                completed: {
+                  $sum: {
+                    $cond: [{ $eq: ["$status", "Done"] }, 1, 0],
+                  },
+                },
+              },
+            },
           ],
-          as: "tasksCount",
+          as: "taskStats",
+        },
+      },
+
+      // Add computed fields
+      {
+        $addFields: {
+          totalTasks: {
+            $ifNull: [{ $arrayElemAt: ["$taskStats.total", 0] }, 0],
+          },
+          completedTasks: {
+            $ifNull: [{ $arrayElemAt: ["$taskStats.completed", 0] }, 0],
+          },
         },
       },
       {
         $addFields: {
-          totalTasks: {
-            $ifNull: [{ $arrayElemAt: ["$tasksCount.totalTasks", 0] }, 0],
+          progress: {
+            $cond: [
+              { $eq: ["$totalTasks", 0] },
+              0,
+              {
+                $round: [
+                  {
+                    $multiply: [
+                      { $divide: ["$completedTasks", "$totalTasks"] },
+                      100,
+                    ],
+                  },
+                  0,
+                ],
+              },
+            ],
           },
+        },
+      },
+
+      // Get only the required fields for the projects list in the frontend
+      {
+        $project: {
+          name: 1,
+          description: 1,
+          sector: 1,
+          status: 1,
+          startDate: 1,
+          endDate: 1,
+
+          productOwner: {
+            _id: "$productOwner._id",
+            name: "$productOwner.name",
+            lastName: "$productOwner.lastName",
+            profileImageURL: "$productOwner.profileImageURL",
+          },
+
+          teamImages: 1,
+
+          currentSprint: {
+            _id: "$currentSprint._id",
+            name: "$currentSprint.name",
+            number: "$currentSprint.number",
+            status: "$currentSprint.status",
+          },
+
+          totalTasks: 1,
+          completedTasks: 1,
+          progress: 1,
         },
       },
 
@@ -213,7 +306,7 @@ export const getAllProjects = async (req, res, next) => {
   }
 };
 
-// Get project details by ID
+// Get a project details by ID
 export const getProjectById = async (req, res, next) => {
   try {
     const { id } = req.params; // Get the project ID
