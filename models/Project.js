@@ -16,6 +16,7 @@ const projectSchema = mongoose.Schema(
         "Transportation",
         "Tourism",
       ],
+      default: "Finance",
     },
     description: {
       type: String,
