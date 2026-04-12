@@ -520,12 +520,14 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
       }
 
       // Log the action
+      const employee = await User.findById(leaveRequest.employeeId);
+
       await logAuditAction({
         adminId: req.user.id,
         action: "MARK_LEAVE_REQUEST_UNDER_REVIEW",
         targetType: "LeaveRequest",
         targetId: leaveRequest._id,
-        targetName: leaveRequest.reason,
+        targetName: employee? `${employee.name} ${employee.lastName}` : "Employee",
         details: {
           status: leaveRequest.status,
           typeId: leaveRequest.typeId,
@@ -611,8 +613,9 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       }
 
       // Update the user's leave balance if approved
+      const employee = await User.findById(leaveRequest.employeeId);
+
       if (action === "approve") {
-        const employee = await User.findById(leaveRequest.employeeId);
         if (employee) {
           employee.leaveBalance -= leaveRequest.duration;
           await employee.save();
@@ -624,7 +627,7 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
           action: "APPROVE_LEAVE_REQUEST",
           targetType: "LeaveRequest",
           targetId: leaveRequest._id,
-          targetName: leaveRequest.reason,
+          targetName: employee? `${employee.name} ${employee.lastName}` : "Employee",
           details: {
             status: leaveRequest.status,
             typeId: leaveRequest.typeId,
@@ -641,7 +644,7 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
           action: "REJECT_LEAVE_REQUEST",
           targetType: "LeaveRequest",
           targetId: leaveRequest._id,
-          targetName: leaveRequest.reason,
+          targetName: employee? `${employee.name} ${employee.lastName}` : "Employee",
           details: {  
             status: leaveRequest.status,
             typeId: leaveRequest.typeId,
