@@ -44,6 +44,16 @@ export const getAllStatuses = async (req, res, next) => {
 };
 
 // ----------------------------------------------------------------------- //
+// ----------------- HELPER FUNCTIONS FOR THE BACKEND -------------------- //
+// ----------------------------------------------------------------------- //
+
+// Check if a project is completed or on hold 
+export const isProjectCompletedOrOnHold = async (projectId) => {
+  const project = await Project.findById(projectId);
+  return ["Completed", "On Hold"].includes(project.status);
+};
+
+// ----------------------------------------------------------------------- //
 // -------------------------- PROJECT MANAGEMENT ------------------------- //
 // ----------------------------------------------------------------------- //
 
@@ -434,7 +444,6 @@ export const createProject = async (req, res, next) => {
       name,
       sector,
       description,
-      status = "Planning",
       startDate,
       dueDate,
       scrumMasterId,
@@ -455,6 +464,12 @@ export const createProject = async (req, res, next) => {
       throw new AppError("Project with this name already exists!", 400);
     }
 
+    // Check the sector validity
+    const allowedSectors = Project.schema.path("sector").enumValues;
+    if (!allowedSectors.includes(sector)) {
+      throw new AppError("Invalid Sector!", 400);
+    }
+
     // Check the validity of the dates
     if (new Date(dueDate) < new Date(startDate)) {
       throw new AppError("Due date must be after start date!", 400);
@@ -462,8 +477,8 @@ export const createProject = async (req, res, next) => {
 
     // Validate the Scrum Master
     if (scrumMasterId) {
-      const scrumMaster =
-        await User.findById(scrumMasterId).populate("role_id");
+      // Check the user existence
+      const scrumMaster = await User.findById(scrumMasterId).populate("role_id");
       if (!scrumMaster) {
         throw new AppError("User not found!", 404);
       }
@@ -486,7 +501,7 @@ export const createProject = async (req, res, next) => {
     project = await Project.create({
       name,
       sector,
-      status: status,
+      status: "Planning",
       description,
       startDate,
       dueDate,
@@ -502,7 +517,7 @@ export const createProject = async (req, res, next) => {
 
     let createdMembers = [];
 
-    // Combine Scrum Master + team members
+    // Prepare for the creation of the team members (Combine Scrum Master + team members)
     const membersToInsert = [
       ...(scrumMasterId
         ? [{ teamId: team._id, userId: scrumMasterId, role: "Scrum Master" }]
@@ -519,9 +534,15 @@ export const createProject = async (req, res, next) => {
       // Extract all userIds
       const userIds = membersToInsert.map((m) => m.userId.toString());
 
+      // Remove the user duplicates
+      const uniqueUserIds = [...new Set(userIds)];
+      if (uniqueUserIds.length !== userIds.length) {
+        throw new AppError("Duplicate users are not allowed in the team!", 400);
+      }
+
       // Validate the users existance
-      const users = await User.find({ _id: { $in: userIds } });
-      if (users.length !== userIds.length) {
+      const users = await User.find({ _id: { $in: uniqueUserIds } });
+      if (users.length !== uniqueUserIds.length) {
         throw new AppError("User(s) not found!", 404);
       }
 
@@ -537,12 +558,6 @@ export const createProject = async (req, res, next) => {
         );
       }
 
-      // Prevent the user duplicates in a team
-      const uniqueUserIds = new Set(userIds);
-      if (uniqueUserIds.size !== userIds.length) {
-        throw new AppError("Cannot add the same user twice in a team!", 400);
-      }
-
       // Check that the scrum master is only included once in the team members list
       const scrumMastersInTeam = teamMembers.filter(
         (m) => m.role === "Scrum Master",
@@ -550,16 +565,16 @@ export const createProject = async (req, res, next) => {
 
       if (scrumMastersInTeam.length > 0) {
         throw new AppError(
-          "Scrum Master should not be inside teamMembers list!",
+          "Scrum Master should not be included in the team members section!",
           400,
-        );
+        ); 
       }
 
       // Create the team members
       createdMembers = await TeamMember.insertMany(membersToInsert);
     }
 
-    // Link the team to the project
+    // Link the team to the project + save the changes
     project.team_id = team._id;
     await project.save();
 
@@ -571,7 +586,7 @@ export const createProject = async (req, res, next) => {
       teamMembers: createdMembers,
     });
   } catch (err) {
-    // Do the manual rollback
+    // Do the manual rollback (Deletion of Project + Team + Team members)
     try {
       if (team?._id) {
         await TeamMember.deleteMany({ teamId: team._id });
@@ -589,11 +604,11 @@ export const createProject = async (req, res, next) => {
   }
 };
 
-// Update a project (Supervisor only)
+// Update a project (Supervisor only): No team management here, just project details update
 export const updateProject = async (req, res, next) => {
   try {
     const { id } = req.params; // Get the project ID from the URL
-    const { role, id: userId } = req.user; // Get the user info from the token
+    const userId = req.user.id; // Get the user id from the token
 
     const {
       name,
@@ -611,6 +626,14 @@ export const updateProject = async (req, res, next) => {
       throw new AppError("Project not found!", 404);
     }
 
+    // Check is the project is archived, If yes, No update allowed
+    if (project.status === "Archived") {
+      throw new AppError("Cannot update an archived project! Please restore it first.", 400);
+    }
+
+    // Check if the project is completed or on hold (Cannot update anything except the status)
+    const isCompletedOrOnHold = await isProjectCompletedOrOnHold(project._id);
+
     // Control that only the supervisor of the project can update it (Not any supervisor)
     if (project.productOwnerId.toString() !== userId.toString()) {
       throw new AppError("Unauthorized to update this project!", 403);
@@ -620,6 +643,14 @@ export const updateProject = async (req, res, next) => {
 
     // Check the name uniqueness (if updated)
     if (name && name !== project.name) {
+      if (isCompletedOrOnHold) {
+        throw new AppError(
+          "Cannot update the project name when the project is Completed or On Hold!",
+          400,
+        );
+      }
+
+      // Check if the name already exists for another project
       const existing = await Project.findOne({ name });
       if (existing) {
         throw new AppError("Project with this name already exists!", 400);
@@ -629,23 +660,44 @@ export const updateProject = async (req, res, next) => {
 
     // Check the sector value (if updated)
     if (sector) {
+      if (isCompletedOrOnHold) {
+        throw new AppError(
+          "Cannot update the project sector when the project is Completed or On Hold!",
+          400,
+        );
+      }
+
       const allowedSectors = await getAllSectors().sectors;
       if (!allowedSectors.includes(sector)) {
-        throw new AppError("Invalid sector value!", 400);
+        throw new AppError("Invalid Sector!", 400);
       }
       project.sector = sector;
     }
 
     // Check the description (if updated)
-    if (description !== undefined) {
+    if (description !== project.description) {
+      if (isCompletedOrOnHold) {
+        throw new AppError(
+          "Cannot update the project description when the project is Completed or On Hold!",
+          400,
+        );
+      }
+
       project.description = description;
     }
 
     // Dates validation
+    if ((startDate || dueDate) && isCompletedOrOnHold) {
+      throw new AppError(
+        "Cannot update the project dates when the project is Completed or On Hold!",
+        400,
+      );
+    }
+
     const newStartDate = startDate ? new Date(startDate) : project.startDate;
     const newDueDate = dueDate ? new Date(dueDate) : project.dueDate;
 
-    if (newDueDate && newStartDate && newDueDate < newStartDate) {
+    if (newDueDate && newStartDate && (newDueDate < newStartDate)) {
       throw new AppError("Due date must be after start date!", 400);
     }
 
@@ -657,7 +709,7 @@ export const updateProject = async (req, res, next) => {
       const allowedStatuses = Project.schema.path("status").enumValues;
 
       if (!allowedStatuses.includes(status)) {
-        throw new AppError("Invalid status value!", 400);
+        throw new AppError("Invalid Status!", 400);
       }
 
       project.status = status;
@@ -718,7 +770,7 @@ export const updateProject = async (req, res, next) => {
 export const archiveProject = async (req, res, next) => {
   try {
     const { id } = req.params; // Get the project ID from the URL
-    const { role, id: userId } = req.user; // Get the user info from the token
+    const userId = req.user.id; // Get the user ID from the token
 
     // Check the project existence
     const project = await Project.findById(id);
@@ -756,7 +808,7 @@ export const archiveProject = async (req, res, next) => {
 export const restoreProject = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { role, id: userId } = req.user;
+    const userId = req.user.id; // Get the user ID from the token
 
     // Check project existence
     const project = await Project.findById(id);
@@ -764,7 +816,7 @@ export const restoreProject = async (req, res, next) => {
       throw new AppError("Project not found!", 404);
     }
 
-    // 🔐 Access control
+    // Access control
     if (project.productOwnerId.toString() !== userId.toString()) {
       throw new AppError("Unauthorized to restore this project!", 403);
     }
@@ -790,6 +842,9 @@ export const restoreProject = async (req, res, next) => {
 
 // Delete a project (Admin only)
 export const deleteProject = async (req, res, next) => {
+  // Get the work backup in case we need to do a rollback (Giving that for now, we're using manual rollback, not transactions)
+  let backup = {};
+
   try {
     const { id } = req.params;
 
@@ -799,46 +854,67 @@ export const deleteProject = async (req, res, next) => {
       throw new AppError("Project not found!", 404);
     }
 
-    // Make sure that the project is archived
-    if (project.status !== "Archived") {
-      throw new AppError(
-        "Project must be archived before deletion!",
-        400
-      );
-    }
+    // Backup all the data in case we need to do a rollback
+    backup.project = project.toObject();
+    
+    backup.team = await Team.findById(project.team_id);
+    backup.teamMembers = await TeamMember.find({ teamId: project.team_id });
+    backup.tasks = await Task.find({ projectId: project._id });
+    backup.sprints = await Sprint.find({ projectId: project._id });
+    backup.documents = await Document.find({ projectId: project._id });
 
-    // DELETE EVERYTHING RELATED TO THE PROJECT (Team, Team Members, Tasks, Sprints, Documents)
-
-    // Delete team members
+    // Delete everything related to the project from the database
     await TeamMember.deleteMany({ teamId: project.team_id });
-
-    // Delete team
     await Team.findByIdAndDelete(project.team_id);
 
-    // Delete tasks
     await Task.deleteMany({ projectId: project._id });
-
-    // Delete sprints
     await Sprint.deleteMany({ projectId: project._id });
-
-    // Delete documents related to the project
-    const docs = await Document.find({ projectId: project._id });
-
-    // Delete the documents from Cloudinary
-    for (const doc of docs) {
-      await deleteFromCloudinary(doc.filePublicId, "raw");
-    }
     await Document.deleteMany({ projectId: project._id });
 
-    // Delete the project
     await Project.findByIdAndDelete(project._id);
+
+    // Delete the documents from Cloudinary
+    for (const doc of backup.documents) {
+      try {
+        await deleteFromCloudinary(doc.filePublicId, "raw");
+      } catch (cloudErr) {
+        console.log("Cloudinary Deletion failed:", cloudErr.message);
+      }
+    }
 
     res.status(200).json({
       status: "Success",
       message: "Project deleted successfully!",
     });
+
   } catch (err) {
+    // Do the manual rollback (Re-create from the backup)
+    try {
+      console.log("[DELETE-PROJECT] An error occurred, starting manual rollback...", err.message);
+
+      if (backup.project) {
+        await Project.create(backup.project);
+      }
+      if (backup.team) {
+        await Team.create(backup.team);
+      }
+      if (backup.teamMembers?.length) {
+        await TeamMember.insertMany(backup.teamMembers);
+      }
+      if (backup.tasks?.length) {
+        await Task.insertMany(backup.tasks);
+      }
+      if (backup.sprints?.length) {
+        await Sprint.insertMany(backup.sprints);
+      }
+      if (backup.documents?.length) {
+        await Document.insertMany(backup.documents);
+      }
+
+      console.log("[DELETE-PROJECT] Manual rollback completed successfully.");
+    } catch (rollbackErr) {
+      console.error("Rollback failed:", rollbackErr);
+    }
     next(err);
   }
 };
-
