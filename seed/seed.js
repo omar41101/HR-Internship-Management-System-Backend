@@ -3,10 +3,14 @@
 // -------------------------------------------------------------------------------------------- //
 
 import mongoose from "mongoose";
+import dotenv from "dotenv";
 import UserRole from "../models/UserRole.js";
 import Department from "../models/Department.js";
 import LeaveType from "../models/LeaveType.js";
 import DocumentType from "../models/DocumentType.js";
+
+// Load environment variables from .env so MONGO_URI is defined
+dotenv.config();
 
 const MONGO_URI = process.env.MONGO_URI;
 

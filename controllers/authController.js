@@ -38,8 +38,8 @@ const consumeFaceEnrollmentPrompt = (user) => {
 // Login Functionality
 export const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
-    const trimmedEmail = (email || "").trim().toLowerCase();
+    const { email, password, identifier } = req.body;
+    const trimmedEmail = (email || identifier || "").trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
 
     console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
