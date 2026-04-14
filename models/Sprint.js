@@ -3,11 +3,18 @@ import mongoose from "mongoose";
 const sprintSchema = mongoose.Schema(
   {
     number: {
-      type: Number, // Sprint number within the project
+      // Sprint number within the project (For example: Sprint 1, Sprint 2, etc.)
+      type: Number, 
+      required: true,
+    },
+    name: {
+      // The name of the sprint. (For example: "Core User Management", "Authentification", etc.)
+      type: String,
       required: true,
     },
     goal: {
-      type: String, // Sprint goal
+      // The goal of the sprint
+      type: String,
     },
     projectId: {
       type: mongoose.Schema.Types.ObjectId,

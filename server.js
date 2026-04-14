@@ -8,7 +8,6 @@ import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 
-
 // Creation of an express app
 const app = express();
 
@@ -43,6 +42,7 @@ import leaveRequestRoutes from "./routes/leaveRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
 import teamMemberRoutes from "./routes/teamMemberRoutes.js";
+import taskRoutes from "./routes/taskRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -90,6 +90,7 @@ app.use('/api', leaveRequestRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', projectRoutes);
 app.use('/api', teamMemberRoutes);
+app.use('/api', taskRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
