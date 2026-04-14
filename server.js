@@ -1,7 +1,7 @@
 // Main server setup for HRcoM API
 import express from "express";
 import { createServer } from "http";
-import { Server } from "socket.io";
+// Socket.io is now handled in a separate file
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
@@ -36,16 +36,8 @@ import cors from "cors";
 const app = express();
 const httpServer = createServer(app);
 
-// Attach Socket.io
-export const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
-
-// Make io accessible from controllers via req.app.get("io")
-app.set("io", io);
+// Import and start Socket.io server (separate process)
+import "./socketServer.js";
 
 // Load the right .env file based on NODE_ENV
 if (process.env.NODE_ENV === "test") {
