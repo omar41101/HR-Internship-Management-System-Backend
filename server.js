@@ -25,7 +25,10 @@ import documentRoutes from "./routes/documentRoutes.js";
 import testRoutes from "./routes/testRoutes.js";
 import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
+import leaveRequestRoutes from "./routes/leaveRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import projectRoutes from "./routes/projectRoutes.js";
+import taskRoutes from "./routes/taskRoutes.js";
 import cors from "cors";
 
 
@@ -99,7 +102,7 @@ if (enableSwagger) {
 // Connect to MongoDB
 connectMongo();
 
-// Routes (v0 versioned + legacy /api for backward compatibility)
+ // Routes (v0 versioned + legacy /api for backward compatibility)
 // Versioned base path
 app.use("/api/v0", authRoutes);
 app.use("/api/v0", userRoutes);
@@ -114,21 +117,29 @@ app.use("/api/v0", testRoutes);
 app.use("/api/v0", specialShiftRoutes);
 app.use("/api/v0", leaveTypeRoutes);
 app.use("/api/v0/dashboard", dashboardRoutes);
-
+app.use("/api/v0", projectRoutes);
+app.use("/api/v0", taskRoutes);
+ 
+// Activate routes
+app.use('/api', authRoutes);
+app.use('/api', userRoutes);
+app.use('/api', UserRoleRoutes);
+app.use('/api', departmentRoutes);
+app.use('/api', auditLogRoutes);
+app.use('/api', timetableRoutes);
+app.use('/api', attendanceRoutes);
+app.use('/api', documentTypeRoutes);
+app.use('/api', documentRoutes);
+app.use('/api', testRoutes);
+app.use('/api', specialShiftRoutes);
+app.use('/api', leaveTypeRoutes);
+app.use('/api', leaveRequestRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api', projectRoutes);
+app.use('/api', taskRoutes);
+ 
 // Legacy non-versioned base path (kept so existing clients keep working)
-app.use("/api", authRoutes);
-app.use("/api", userRoutes);
-app.use("/api", UserRoleRoutes);
-app.use("/api", departmentRoutes);
-app.use("/api", auditLogRoutes);
-app.use("/api", timetableRoutes);
-app.use("/api", attendanceRoutes);
-app.use("/api", documentTypeRoutes);
-app.use("/api", documentRoutes);
-app.use("/api", testRoutes);
-app.use("/api", specialShiftRoutes);
-app.use("/api", leaveTypeRoutes);
-app.use("/api/dashboard", dashboardRoutes);
+ 
 
 // Global error handler
 app.use(errorHandler);

@@ -21,8 +21,10 @@ const router = express.Router();
 // Route to log the user
 /**
  * @swagger
- * /api/v0/users/login:
- *   post:
+  * /api/v0/users/login:
+=======
+ * /api/login:
+  *   post:
  *     summary: User Login
  *     tags:
  *       - Auth
@@ -50,8 +52,10 @@ router.post("/users/login", login);
 // Route to verify user's OTP code
 /**
  * @swagger
- * /api/v0/users/verify-user:
- *   post:
+  * /api/v0/users/verify-user:
+=======
+ * /api/users/verify-user:
+  *   post:
  *     summary: Verify user's OTP code
  *     tags: 
  *       - Auth
@@ -87,8 +91,10 @@ router.post("/users/verify-user", verifyUser);
 // Route to resend OTP code
 /**
  * @swagger
- * /api/v0/users/resend-verification:
- *   post:
+  * /api/v0/users/resend-verification:
+=======
+ * /api/users/resend-verification:
+  *   post:
  *     summary: Resend OTP verification code
  *     tags: 
  *      - Auth
@@ -122,8 +128,10 @@ router.post("/users/resend-verification", resendVerificationCode);
 // Route to reset password
 /**
  * @swagger
- * /api/v0/users/reset-password:
- *   post:
+  * /api/v0/users/reset-password:
+=======
+ * /api/users/reset-password:
+  *   post:
  *     summary: Reset password after account verification
  *     tags: 
  *      - Auth
@@ -159,8 +167,10 @@ router.post("/users/reset-password", resetPassword);
 // Route to forget password request
 /**
  * @swagger
- * /api/v0/users/request-password-reset:
- *   post:
+  * /api/v0/users/request-password-reset:
+=======
+ * /api/users/request-password-reset:
+  *   post:
  *     summary: Request password reset link
  *     tags: 
  *        - Auth
@@ -190,8 +200,10 @@ router.post("/users/request-password-reset", requestPasswordReset);
 // Route to forget password reset
 /**
  * @swagger
- * /api/v0/users/forget-password:
- *   post:
+  * /api/v0/users/forget-password:
+=======
+ * /api/users/forget-password:
+  *   post:
  *     summary: Reset password using reset token
  *     tags: 
  *      - Auth

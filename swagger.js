@@ -698,6 +698,79 @@ const options = {
             },
           },
         },
+
+        // ================== Leave Request Schemas ==================
+        LeaveRequest: {
+          type: "object",
+          properties: {
+            _id: {
+              type: "string",
+              description: "Unique Identifier for each leave request.",
+            },
+            employeeId: {
+              type: "string",
+              description: "ID of the employee (Employee, Intern, Supervisor) who made the leave request.",
+            },
+            supervisorId: {
+              type: "string",
+              description: "ID of the supervisor who will approve/reject the leave request (for employees/Interns).",
+            },
+            reviewedBy: { 
+              type: "string",
+              nullable: true,
+              description: "ID of the admin who marked the leave request under review.",
+            },
+            typeId: {
+              type: "string",
+              description: "ID of the leave type being requested.",
+            },
+            startDate: {
+              type: "string",
+              format: "date-time",
+              description: "Start date of the requested leave.",
+            },
+            endDate: {
+              type: "string",
+              format: "date-time",
+              description: "End date of the requested leave.",
+            },
+            reason: {
+              type: "string",
+              description: "Reason provided by the user for the leave request.",
+            },
+            status: {
+              type: "string",
+              enum: [
+                "Pending Supervisor Approval",
+                "Under Supervisor Review",
+                "Rejected by Supervisor",
+                "Pending Admin Approval",
+                "Under Admin Review",
+                "Rejected by Admin",
+                "Approved",
+              ],
+              description: "Status of the leave request.",
+            },
+            comments: {
+              type: "string",
+              description: "Comments from the approver regarding the leave request.",
+            },
+            attachmentURL: {
+              type: "string",
+              description: "Cloudinary URL of the attachment for the leave request.",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the leave request was created.",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Timestamp of when the leave request was last updated.",
+            },
+          },
+        },
       },
 
       securitySchemes: {

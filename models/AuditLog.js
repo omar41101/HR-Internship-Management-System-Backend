@@ -27,12 +27,15 @@ const auditLogSchema = mongoose.Schema(
         "UPDATE_LEAVE_TYPE",
         "ARCHIVE_LEAVE_TYPE",
         "RESTORE_LEAVE_TYPE",
+        "MARK_LEAVE_REQUEST_UNDER_REVIEW",
+        "APPROVE_LEAVE_REQUEST",
+        "REJECT_LEAVE_REQUEST",
       ],
     },
     target_type: {
       type: String,
       required: true,
-      enum: ["User", "Department", "UserRole", "LeaveType"],
+      enum: ["User", "Department", "UserRole", "LeaveType", "LeaveRequest"],
     },
     target_id: {
       type: mongoose.Schema.Types.ObjectId,

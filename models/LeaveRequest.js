@@ -8,11 +8,17 @@ const leaveRequestSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    approverId: {
-      // Represents the supervisor or admin who will approve/reject the leave request
+    supervisorId: {
+      // Represents the supervisor who will approve/reject the leave request (for employees/Interns)
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User",
+      default: null,
+    },
+    reviewedBy: {
+      // Represents the admin who will review the leave request
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      default: null,
     },
     typeId: {
       // Represents the type of leave being requested
@@ -36,8 +42,10 @@ const leaveRequestSchema = new mongoose.Schema(
       type: String,
       enum: [
         "Pending Supervisor Approval",
+        "Under Supervisor Review",
         "Rejected by Supervisor",
         "Pending Admin Approval",
+        "Under Admin Review",
         "Rejected by Admin",
         "Approved",
       ],
@@ -49,7 +57,13 @@ const leaveRequestSchema = new mongoose.Schema(
     },
     attachmentURL: {
       type: String,
+      default: "",
     },
+    attachmentPublicId: {
+      // To store the Cloudinary public ID for deletion
+      type: String,
+      default: "",
+    }, 
     duration: {
       // Represents the total number of days for the leave request (automatically calculated)
       type: Number,
@@ -59,5 +73,8 @@ const leaveRequestSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// Create a compound index to optimize queries filtering by status and reviewedBy
+leaveRequestSchema.index({ status: 1, reviewedBy: 1 });
 
 export default mongoose.model("LeaveRequest", leaveRequestSchema);
