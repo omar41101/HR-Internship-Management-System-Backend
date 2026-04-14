@@ -11,7 +11,9 @@ const errorHandler = (err, req, res, next) => {
 
     let errorResponse = {
         status: err.status,
+        code: err.statusCode,
         message: err.message,
+        errorCode: err.errorCode || "UNKNOWN_ERROR",
         suggestion: err.suggestion || "Please try again later or contact support.",
     };
 
