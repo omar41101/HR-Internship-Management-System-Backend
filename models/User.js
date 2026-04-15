@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { countries } from "../middleware/countries.js";
+import { countries } from "../constants/countries.js";
 
 const userSchema = mongoose.Schema(
   {

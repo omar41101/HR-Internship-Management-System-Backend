@@ -1,43 +1,6 @@
 import AppError from "../utils/AppError.js";
-import { errors } from "../utils/errors.js";
-
-// A helper function to help build the query for filtering, sorting, searching and pagination
-const buildQuery = (Model, queryParams) => {
-  // Get all documents 
-  let query = Model.find();
-
-  // -------- Filtering -------- //
-  /* 
-    Take a copy of the query parameters (for ex: ?status=active) and 
-    remove the fields that are meant for pagination, sorting and searching 
-  */
-  const queryObj = { ...queryParams };
-  const excludedFields = ["page", "limit", "sort", "keyword"];
-  excludedFields.forEach((el) => delete queryObj[el]);
-
-  // Filter
-  query = query.find(queryObj);
-
-  // -------- Search -------- //
-  if (queryParams.keyword) {
-    query = query.find({
-      $or: [
-        { name: { $regex: queryParams.keyword, $options: "i" } },
-        { title: { $regex: queryParams.keyword, $options: "i" } }
-      ]
-    });
-  }
-
-  // -------- Sorting: Support multiple sorting parameters -------- //
-  if (queryParams.sort) {
-    const sortBy = queryParams.sort.split(",").join(" "); // Example: "sort=createdAt,-name" => "createdAt -name"
-    query = query.sort(sortBy);
-  } else {
-    query = query.sort("-createdAt");
-  }
-
-  return query;
-};
+import { errors } from "../errors/userErrors.js";
+import { buildQuery } from "../utils/queryBuilder.js";
 
 // Creation of a new document
 export const createOne = (Model) => async (data) => {
@@ -77,8 +40,16 @@ export const getOne = (Model, populateOptions = null) => async (id) => {
 
 
 // Get all documents with optional filtering, sorting, searching and pagination
-export const getAll = (Model) => async (queryParams) => {
-  let query = buildQuery(Model, queryParams);
+export const getAll = (Model, populateOptions = null, selectFields = null, searchFields = []) => async (queryParams) => {
+  let query = buildQuery(Model, queryParams, searchFields);
+
+  if (selectFields) {
+    query = query.select(selectFields);
+  }
+
+  if (populateOptions) {
+    query = query.populate(populateOptions);
+  }
 
   // Pagination
   const page = parseInt(queryParams.page) || 1;

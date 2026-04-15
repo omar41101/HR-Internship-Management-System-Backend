@@ -1,14 +1,787 @@
 import User from "../models/User.js";
+import UserRole from "../models/UserRole.js";
+import Document from "../models/Document.js";
+import { errors } from "../errors/userErrors.js";
+import AppError from "../utils/AppError.js";
+import bcrypt from "bcrypt";
+import { Parser } from "json2csv";
+import ExcelJS from "exceljs";
+import { getOne, getAll } from "./handlersFactory.js";
 import {
-  getOne,
-  getAll,
-  createOne,
-  updateOne,
-  deleteOne
-} from "./handlersFactory.js";
+  isValidEmail,
+  validateUserData,
+  fullPhoneNumberValidation,
+  fullCINPassportValidation,
+} from "../validators/userValidators.js";
+import { generateRandomCode } from "../utils/generateCode.js";
+import { uploadImageToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
+import {
+  resolveRoleId,
+  resolveDepartmentId,
+  resolveSupervisorIdByEmail,
+} from "../utils/userResolvers.js";
+import { sendEmail } from "../utils/sendEmail.js";
+import { logAuditAction } from "../utils/logger.js";
+import { buildQuery } from "../utils/queryBuilder.js";
 
-export const getUser = getOne(User);
-export const getUsers = getAll(User);
-export const createUser = createOne(User);
-export const updateUser = updateOne(User);
-export const deleteUser = deleteOne(User);
+// Get a single user by Id
+export const getUser = getOne(User, [
+  { path: "role_id", select: "name" },
+  { path: "department_id", select: "name" },
+  { path: "supervisor_id", select: "name lastName email" },
+]);
+
+// Get all users
+export const getUsers = getAll(
+  User,
+  [
+    { path: "role_id", select: "name" },
+    { path: "department_id", select: "name" },
+    { path: "supervisor_id", select: "name lastName email" },
+  ],
+  "-faceDescriptors",
+  ["name", "lastName", "email"]
+);
+
+// Create a new user
+export const addUserService = async (data, currentUser, ip) => {
+  const {
+    name,
+    lastName,
+    email,
+    idType, // Passport or CIN
+    idCountryCode, // Passport or CIN country code
+    idNumber, // Passport or CIN number
+    address,
+    joinDate,
+    countryCode, // Country code for the phone number
+    phoneNumber,
+    position,
+    bonus,
+    bio,
+    leaveBalance,
+    socialStatus,
+    hasChildren,
+    nbOfChildren,
+    status, // Select List (Pending, Active, Inactive, Blocked)
+    isAvailable,
+    role,
+    department,
+    supervisor_email, // Pass the supervisor email instead of the full name for avoiding duplicate issues
+    profileImageURL,
+  } = data;
+
+  const trimmedEmail = (email || "").trim().toLowerCase();
+  const trimmedSupervisorEmail = (supervisor_email || "").trim().toLowerCase();
+  const trimmedIdNumber = (idNumber || "").trim();
+
+  // Check the user existence
+  const existingUser = await User.findOne({
+    $or: [{ email: trimmedEmail }, { "idNumber.number": trimmedIdNumber }],
+  });
+  if (existingUser) {
+    throw new AppError(
+      errors.USER_ALREADY_EXISTS.message,
+      errors.USER_ALREADY_EXISTS.code,
+      errors.USER_ALREADY_EXISTS.errorCode,
+      errors.USER_ALREADY_EXISTS.suggestion,
+    );
+  }
+
+  // Input Validations
+  validateUserData({
+    name,
+    lastName,
+    trimmedEmail,
+    trimmedSupervisorEmail,
+    address,
+    position,
+    bonus,
+    bio,
+    hasChildren,
+    nbOfChildren,
+  });
+
+  // Check the phone number validity
+  const validatedPhoneNumber = fullPhoneNumberValidation(
+    countryCode,
+    phoneNumber,
+  );
+
+  // Check the uniqueness of the phone number
+  const existingPhoneUser = await User.findOne({
+    phoneNumber: validatedPhoneNumber,
+  });
+  if (existingPhoneUser) {
+    throw new AppError(
+      errors.PHONE_NUMBER_UNAVAILABLE.message,
+      errors.PHONE_NUMBER_UNAVAILABLE.code,
+      errors.PHONE_NUMBER_UNAVAILABLE.errorCode,
+      errors.PHONE_NUMBER_UNAVAILABLE.suggestion,
+    );
+  }
+
+  // Check the CIN/Passport validity
+  fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
+
+  // Resolve role, department and supervisor
+  const roleId = await resolveRoleId(role);
+  const supervisorId = await resolveSupervisorIdByEmail(trimmedSupervisorEmail);
+  const departmentId = await resolveDepartmentId(department);
+
+  // Password + OTP Code generation
+  const password = generateRandomCode();
+  const otpCode = generateRandomCode(6);
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedOTP = await bcrypt.hash(otpCode, 10);
+
+  const finalProfileImageURL =
+    typeof profileImageURL === "string" ? profileImageURL : "";
+
+  // Creation of the user
+  const user = await User.create({
+    name,
+    lastName,
+    email: trimmedEmail,
+    idType,
+    idNumber: {
+      number: trimmedIdNumber,
+      countryCode: idCountryCode,
+    },
+    password: hashedPassword,
+    verificationCode: hashedOTP,
+    verificationCodeExpires: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    address,
+    joinDate,
+    phoneNumber: validatedPhoneNumber,
+    position,
+    bonus,
+    bio,
+    leaveBalance,
+    socialStatus,
+    hasChildren,
+    nbOfChildren,
+    status: status || "Pending",
+    isAvailable,
+    role_id: roleId,
+    department_id: departmentId,
+    supervisor_id: supervisorId,
+    profileImageURL: finalProfileImageURL,
+  });
+
+  // Sending the welcome email to the user (Password + OTP Code + Platform link)
+  try {
+    await sendEmail({
+      to: user.email,
+      subject: "Welcome to HRcoM!",
+      type: "addUser",
+      name: user.name,
+      password,
+      code: otpCode,
+    });
+  } catch (e) {
+    console.log("Email failed:", e.message);
+  }
+
+  // Log the creation action in the audit logs
+  try {
+    await logAuditAction({
+      adminId: currentUser._id,
+      action: "CREATE_USER",
+      targetType: "User",
+      targetId: user._id,
+      targetName: `${user.name} ${user.lastName}`,
+      ipAddress: ip,
+    });
+  } catch (e) {
+    console.log("Audit failed:", e.message);
+  }
+
+  return user;
+};
+
+// Update an existing user
+export const updateUserService = async (id, updateData, currentUser, ip) => {
+  // Check the user existence
+  const existingUser = await User.findById(id);
+  if (!existingUser)
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion,
+    );
+
+  // Check the email validity and the user existence
+  if (updateData.email) {
+    const trimmedEmail = updateData.email.trim().toLowerCase();
+
+    if (!isValidEmail(trimmedEmail)) {
+      throw new AppError(
+        errors.INVALID_EMAIL_FORMAT.message,
+        errors.INVALID_EMAIL_FORMAT.code,
+        errors.INVALID_EMAIL_FORMAT.errorCode,
+        errors.INVALID_EMAIL_FORMAT.suggestion,
+      );
+    }
+
+    // Check if another user with the same email already exists
+    const existingEmailUser = await User.findOne({ email: trimmedEmail });
+    if (existingEmailUser && existingEmailUser._id.toString() !== id) {
+      throw new AppError(
+        errors.EMAIL_UNAVAILABLE.message,
+        errors.EMAIL_UNAVAILABLE.code,
+        errors.EMAIL_UNAVAILABLE.errorCode,
+        errors.EMAIL_UNAVAILABLE.suggestion,
+      );
+    }
+
+    updateData.email = trimmedEmail;
+  }
+
+  // Input validation for common fields (those that don't require DB checks)
+  validateUserData({
+    name: updateData.name,
+    lastName: updateData.lastName,
+    trimmedEmail: updateData.email,
+    trimmedSupervisorEmail: updateData.supervisor_email,
+    address: updateData.address,
+    position: updateData.position,
+    bonus: updateData.bonus,
+    bio: updateData.bio,
+    hasChildren: updateData.hasChildren,
+    nbOfChildren: updateData.nbOfChildren,
+  });
+
+  // Check the phone number validity + uniqueness in case of an update
+  if (updateData.phoneNumber) {
+    // Check the new phone number validity
+    const validatedPhoneNumber = fullPhoneNumberValidation(
+      updateData.countryCode,
+      updateData.phoneNumber,
+    );
+
+    // Check the uniqueness of the phone number
+    const existingPhoneUser = await User.findOne({
+      phoneNumber: validatedPhoneNumber,
+    });
+    if (existingPhoneUser && existingPhoneUser._id.toString() !== id) {
+      throw new AppError(
+        errors.PHONE_NUMBER_UNAVAILABLE.message,
+        errors.PHONE_NUMBER_UNAVAILABLE.code,
+        errors.PHONE_NUMBER_UNAVAILABLE.errorCode,
+        errors.PHONE_NUMBER_UNAVAILABLE.suggestion,
+      );
+    }
+
+    updateData.phoneNumber = validatedPhoneNumber;
+  }
+
+  // Check the CIN/Passport validity
+  if (updateData.idType || updateData.idNumber) {
+    const trimmedIdNumber = updateData.idNumber?.number?.trim();
+    const idCountryCode = updateData.idNumber?.countryCode;
+
+    fullCINPassportValidation(
+      updateData.idType,
+      idCountryCode,
+      trimmedIdNumber,
+    );
+
+    // Check if the ID number exists for another user
+    const existingIdUser = await User.findOne({
+      "idNumber.number": trimmedIdNumber,
+      _id: { $ne: id },
+    });
+    if (existingIdUser) {
+      throw new AppError(
+        errors.USER_ALREADY_EXISTS.message,
+        errors.USER_ALREADY_EXISTS.code,
+        errors.USER_ALREADY_EXISTS.errorCode,
+        errors.USER_ALREADY_EXISTS.suggestion,
+      );
+    }
+
+    updateData.idNumber.number = trimmedIdNumber;
+    updateData.idNumber.countryCode = idCountryCode;
+
+    if (updateData.idType === "CIN" && updateData.idNumber) {
+      updateData.idNumber.countryCode = "TN";
+    }
+  }
+
+  // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)
+  let roleChanged = false;
+  let newRoleId = null;
+  let newRoleName = "";
+
+  // Get the id of the old role
+  const oldRoleId = existingUser.role_id;
+
+  if (updateData.role) {
+    // Validate the new role and get its ID
+    newRoleId = await resolveRoleId(updateData.role);
+
+    // Check if the role is changed
+    if (!oldRoleId.equals(newRoleId)) {
+      roleChanged = true;
+
+      const roleDoc = await UserRole.findById(newRoleId).select("name");
+      newRoleName = roleDoc?.name || "";
+      updateData.role_id = newRoleId;
+    }
+
+    delete updateData.role;
+  }
+
+  // Check the department validity
+  if (updateData.department) {
+    updateData.department_id = await resolveDepartmentId(updateData.department);
+    delete updateData.department;
+  }
+
+  // Check the supervisor validity
+  if ("supervisor_email" in updateData) {
+    if (!updateData.supervisor_email) {
+      updateData.supervisor_id = null;
+    } else {
+      const supervisor = await resolveSupervisorIdByEmail(
+        updateData.supervisor_email,
+      );
+      if (!supervisor) {
+        throw new AppError(
+          errors.SUPERVISOR_NOT_FOUND.message,
+          errors.SUPERVISOR_NOT_FOUND.code,
+          errors.SUPERVISOR_NOT_FOUND.errorCode,
+          errors.SUPERVISOR_NOT_FOUND.suggestion,
+        );
+      }
+
+      updateData.supervisor_id = supervisor._id;
+    }
+
+    delete updateData.supervisor_email;
+  }
+
+  // Update the Status of the user
+  if (updateData.isActive !== undefined) {
+    updateData.status = updateData.isActive ? "Active" : "Inactive";
+    delete updateData.isActive;
+  }
+
+  // Update the user
+  const user = await User.findByIdAndUpdate(id, updateData, {
+    returnDocument: "after",
+  })
+    .select("-faceDescriptors")
+    .populate("role_id")
+    .populate("department_id")
+    .populate("supervisor_id", "name lastName email");
+
+  // Send the update user email ONLY if role changed
+  if (roleChanged) {
+    try {
+      console.log(
+        `[UPDATE-USER-DEBUG] Sending Update user email to: ${user.email}`,
+      );
+
+      await sendEmail({
+        to: user.email,
+        subject: "HRcoM! - Congratulations! Your Role Has Been Updated",
+        type: "updateUser",
+        name: user.name,
+        newRole: newRoleName,
+      });
+
+      console.log(`[UPDATE-USER-DEBUG] Email sent successfully.`);
+    } catch (emailErr) {
+      console.log(`[UPDATE-USER-DEBUG] EMAIL FAILED:`, emailErr.message);
+    }
+  }
+
+  // Create the audit log for this action
+  await logAuditAction({
+    adminId: currentUser.id,
+    action: "UPDATE_USER",
+    targetType: "User",
+    targetId: user._id,
+    targetName: `${user.name} ${user.lastName}`,
+    details: updateData,
+    ipAddress: ip,
+  });
+
+  return user;
+};
+
+// Delete a user
+export const deleteUserService = async (userId, currentUser, ip) => {
+  // Check user existence
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  // Get the user's personal documents
+  const documents = await Document.find({ user_id: userId });
+
+  // Delete files from Cloudinary
+  for (const doc of documents) {
+    if (doc.filePublicId) {
+      await deleteFromCloudinary(doc.filePublicId);
+    }
+  }
+
+  // Delete documents from DB
+  await Document.deleteMany({ user_id: userId });
+
+  // Delete the user
+  await User.findByIdAndDelete(userId);
+
+  // Audit log the deletion of the user + associated personal documents
+  await logAuditAction({
+    adminId: currentUser.id,
+    action: "DELETE_USER",
+    targetType: "User",
+    targetId: user._id,
+    targetName: `${user.name} ${user.lastName}`,
+    ipAddress: ip,
+  });
+
+  return {
+    status: "Success",
+    message: "User and all associated personal documents deleted successfully!",
+  };
+};
+
+// Toggle the user status (Active/Inactive)
+export const toggleUserStatusService = async (id, currentUser, ip) => {
+  const user = await User.findById(id);
+
+  if (!user) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  user.status = user.status === "Active" ? "Inactive" : "Active";
+
+  await user.save();
+
+  await logAuditAction({
+    adminId: currentUser.id,
+    action: "TOGGLE_STATUS",
+    targetType: "User",
+    targetId: user._id,
+    targetName: `${user.name} ${user.lastName}`,
+    details: { status: user.status },
+    ipAddress: ip,
+  });
+  return user;
+};
+
+// Export users to csv
+export const exportUsersToCSVService = async (queryParams) => {
+  let query = buildQuery(User, queryParams);
+
+  const users = await query
+    .populate("role_id", "name")
+    .populate("department_id", "name")
+    .populate("supervisor_id", "name lastName email")
+    .lean();
+
+  const formattedUsers = users.map((user) => ({
+    name: user.name,
+    lastName: user.lastName,
+    email: user.email,
+    phoneNumber: user.phoneNumber,
+    position: user.position,
+    role: user.role_id?.name,
+    department: user.department_id?.name,
+    status: user.status,
+    joinDate: user.joinDate
+      ? new Date(user.joinDate).toLocaleDateString("en-GB")
+      : "",
+  }));
+
+  const fields = [
+    "name",
+    "lastName",
+    "email",
+    "phoneNumber",
+    "position",
+    "role",
+    "department",
+    "status",
+    "joinDate",
+  ];
+
+  const parser = new Parser({ fields });
+  const csv = parser.parse(formattedUsers);
+
+  return csv;
+};
+
+// export users to excel
+export const exportUsersToExcelService = async (queryParams, res) => {
+  const users = await buildQuery(User, queryParams)
+    .populate("role_id", "name")
+    .populate("department_id", "name")
+    .populate("supervisor_id", "name lastName email")
+    .lean(); // We use .lean() to get plain JS objects which are easier to work with when generating Excel
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Users");
+
+  sheet.columns = [
+    { header: "Name", key: "name", width: 20 },
+    { header: "Last Name", key: "lastName", width: 20 },
+    { header: "Email", key: "email", width: 30 },
+    { header: "Address", key: "address", width: 35 },
+    { header: "Phone", key: "phoneNumber", width: 22 },
+    { header: "Position", key: "position", width: 30 },
+    { header: "Role", key: "role", width: 15 },
+    { header: "Department", key: "department", width: 20 },
+    { header: "Status", key: "status", width: 10 },
+    { header: "Join Date", key: "joinDate", width: 15 },
+  ];
+
+  users.forEach((user) => {
+    sheet.addRow({
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      address: user.address,
+      phoneNumber: user.phoneNumber,
+      position: user.position,
+      role: user.role_id?.name,
+      department: user.department_id?.name,
+      status: user.status,
+      joinDate: user.joinDate
+        ? new Date(user.joinDate).toLocaleDateString("en-GB")
+        : "",
+    });
+  });
+
+  // Header style
+  sheet.getRow(1).eachCell((cell) => {
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "89D2DC" },
+    };
+    cell.font = { bold: true };
+    cell.alignment = { vertical: "middle", horizontal: "center" };
+    cell.border = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+  });
+
+  // Data borders
+  sheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return;
+    row.eachCell((cell) => {
+      cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" },
+      };
+    });
+  });
+
+  // HTTP response (res) handled in service (streaming requirement)
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+  res.setHeader("Content-Disposition", "attachment; filename=users.xlsx");
+
+  await workbook.xlsx.write(res);
+  res.end();
+};
+
+// Upload a profile image
+export const uploadProfileImageService = async (userId, file, currentUser, ip) => {
+  // Check user existence
+  const existingUser = await User.findById(userId);
+  if (!existingUser) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  // Check if a file is uploaded
+  if (!file) {
+    throw new AppError(
+      errors.NO_FILE_UPLOADED.message,
+      errors.NO_FILE_UPLOADED.code,
+      errors.NO_FILE_UPLOADED.errorCode,
+      errors.NO_FILE_UPLOADED.suggestion
+    );
+  }
+
+  // Delete old image if exists (To replace it with the new one)
+  if (existingUser.profileImagePublicId) {
+    await deleteFromCloudinary(existingUser.profileImagePublicId, "image");
+  }
+
+  // Upload the new image
+  const result = await uploadImageToCloudinary(
+    file.buffer,
+    "hrcom/profile_images"
+  );
+
+  // Update the user
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      profileImageURL: result.secure_url,
+      profileImagePublicId: result.public_id,
+    },
+    { returnDocument: "after" }
+  );
+
+  // Audit log
+  await logAuditAction({
+    adminId: currentUser.id,
+    action: "UPLOAD_IMAGE",
+    targetType: "User",
+    targetId: user._id,
+    targetName: `${user.name} ${user.lastName}`,
+    details: {
+      profileImageURL: result.secure_url,
+      profileImagePublicId: result.public_id,
+    },
+    ipAddress: ip,
+  });
+
+  return {
+    status: "Success",
+    code: 200,
+    data: {
+      user, 
+    },
+  };
+};
+
+// Remove a profile image
+export const removeProfileImageService = async (userId, currentUser, ip) => {
+  // Check user existence
+  const existingUser = await User.findById(userId);
+  if (!existingUser) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  // Delete image from Cloudinary if exists
+  if (existingUser.profileImagePublicId) {
+    await deleteFromCloudinary(existingUser.profileImagePublicId);
+  }
+
+  // Update the user
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      profileImageURL: "",
+      profileImagePublicId: "",
+    },
+    { returnDocument: "after" }
+  );
+
+  // Audit log
+  await logAuditAction({
+    adminId: currentUser.id,
+    action: "REMOVE_IMAGE",
+    targetType: "User",
+    targetId: user._id,
+    targetName: `${user.name} ${user.lastName}`,
+    ipAddress: ip,
+  });
+
+  return {
+    status: "Success",
+    code: 200,
+    data: user,
+  };
+};
+
+// Enroll the face descriptors for face recognition (Custom not generic) 
+export const enrollFaceService = async (userId, descriptors) => {
+  if (!descriptors || !Array.isArray(descriptors) || descriptors.length === 0) {
+    throw new AppError(
+      errors.MISSING_FACE_DESCRIPTORS.message,
+      errors.MISSING_FACE_DESCRIPTORS.code,
+      errors.MISSING_FACE_DESCRIPTORS.errorCode,
+      errors.MISSING_FACE_DESCRIPTORS.suggestion
+    );
+  }
+
+  const result = await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        faceDescriptors: descriptors,
+        faceEnrolled: true,
+        faceEnrollmentPromptRequired: false,
+      },
+    }
+  );
+
+  if (result.matchedCount === 0) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+  };
+};
+
+// Reset the face descriptors (Custom not generic)
+export const resetFaceService = async (userId) => {
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new AppError(
+      errors.USER_NOT_FOUND.message,
+      errors.USER_NOT_FOUND.code,
+      errors.USER_NOT_FOUND.errorCode,
+      errors.USER_NOT_FOUND.suggestion
+    );
+  }
+
+  user.faceDescriptors = [];
+  user.faceEnrolled = false;
+  user.faceEnrollmentPromptRequired = true;
+
+  await user.save();
+
+  return {
+    status: "Success",
+    code: 200,
+  };
+}; 

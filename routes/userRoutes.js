@@ -4,11 +4,9 @@ import {
   updateUser,
   deleteUser,
   getAllUsers,
-  getActiveSupervisors,
-  getRecentSupervisors,
+  getActiveSupervisorsController,
+  getRecentSupervisorsController,
   getUserById,
-  searchUser,
-  filterUsers,
   toggleUserStatus,
   exportUsersToCSV,
   exportUsersToExcel,
@@ -17,7 +15,6 @@ import {
   enrollFace,
   resetFace,
   getPublicInterns,
-  getTeamMembers,
 } from "../controllers/userController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -31,10 +28,6 @@ const router = express.Router();
  *   - name: Users
  *     description: Endpoints for the users CRUDs
  */
-
-// -------------------------------------------------------------------------------------- //
-// ------------------------------- USER MANAGEMENT ROUTES ------------------------------- //
-// -------------------------------------------------------------------------------------- //
 
 // Public interns listing for marketing site
 router.get("/public/interns", getPublicInterns);
@@ -153,7 +146,7 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *       500:
  *         description: Server error
  */
-router.get("/users", authenticate, authorize(["Admin", "Supervisor", "Employee", "Intern"]), getAllUsers);
+router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
 
 // Route to get active supervisors (Admin Only)
 /**
@@ -172,10 +165,10 @@ router.get("/users", authenticate, authorize(["Admin", "Supervisor", "Employee",
  *   500:
  *    description: Server error
  * */
-router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisors);
+router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisorsController);
 
 // Route to get the 3 recent supervisors (Admin Only)
-router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getRecentSupervisors);
+router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getRecentSupervisorsController);
 
 // Route to get user by ID (Admin, the user himself and his supervisor)
 /**
@@ -207,65 +200,6 @@ router.get(
   authenticate,
   getUserById
 );
-
-// Route to search users
-/**
- * @swagger
- * /api/users/search:
- *   get:
- *     tags:
- *       - Users
- *     summary: Search users by name or email (Admin only)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: q
- *         in: query
- *         required: true
- *         description: Query string
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Returns matching users
- *       500:
- *         description: Server error
- */
-router.get("/search", authenticate, authorize(["Admin"]), searchUser);
-
-// Route to filter users
-/**
- * @swagger
- * /api/users/filter:
- *   get:
- *     tags:
- *       - Users
- *     summary: Filter users by role, department, or status (Admin only)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: role
- *         in: query
- *         schema:
- *           type: string
- *       - name: department
- *         in: query
- *         schema:
- *           type: string
- *       - name: status
- *         in: query
- *         schema:
- *           type: string
- *           enum: [Active, Inactive, Pending, Blocked]
- *     responses:
- *       200:
- *         description: Returns filtered users
- *       400:
- *         description: Invalid Role or Department
- *       500:
- *         description: Server error
- */
-router.get("/filter", authenticate, authorize(["Admin"]), filterUsers);
 
 // Route to toggle user status
 /**
@@ -513,18 +447,6 @@ router.post(
   authenticate,
   authorize(["Admin"], { allowSelf: true }),
   resetFace
-);
-
-// -------------------------------------------------------------------------------------- //
-// ----------------------------- TEAM MANAGEMENT ROUTES --------------------------------- //
-// -------------------------------------------------------------------------------------- //
-
-// Route to get team members (Supervisor/admin only)
-router.get(
-  "/users/team/:id",  
-  authenticate,
-  authorize(["Admin", "Supervisor"], { allowSelf: true }),
-  getTeamMembers
 );
 
 export default router;

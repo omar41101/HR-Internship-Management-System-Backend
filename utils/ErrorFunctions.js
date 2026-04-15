@@ -1,4 +1,5 @@
 // Helper functions to handle errors in a consistent way across the application
+// TO BE DELETED AFTER AUTH CONTROLLER
 
 // Error responses (4xx)
 export const sendError = (res, message, code = 400) => {

@@ -1,6 +1,6 @@
 import DocumentType from "../models/DocumentType.js";
 import AppError from "../utils/AppError.js";
-import { isEmpty } from "../middleware/UserValidation.js";
+import { isEmpty } from "../validators/userValidators.js";
 
 // Add new Document Type Functionnality
 export const addDocumentType = async (req, res, next) => {

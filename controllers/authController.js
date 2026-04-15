@@ -8,7 +8,8 @@ import dotenv from "dotenv";
 import { sendEmail } from "../utils/sendEmail.js";
 import AppError from "../utils/AppError.js";
 import { sendError } from "../utils/ErrorFunctions.js";
-import { isEmpty, generateRandomCode } from "../middleware/UserValidation.js";
+import { generateRandomCode } from "../utils/generateCode.js";
+import { isEmpty } from "../validators/userValidators.js";
 
 dotenv.config();
 
