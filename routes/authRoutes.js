@@ -7,6 +7,7 @@ import {
   requestPasswordReset,
   forgetPassword,
 } from "../controllers/authController.js";
+import { authLimiter } from "../middleware/rateLimiter.js";
 
 const router = express.Router();
 
@@ -47,7 +48,7 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post("/users/login", login);
+router.post("/users/login", authLimiter, login);
 
 // Route to verify user's OTP code
 /**
@@ -162,80 +163,8 @@ router.post("/users/resend-verification", resendVerificationCode);
  *       500:
  *         description: Server Error
  */
-router.post("/users/reset-password", resetPassword);
-
-// Route to forget password request
-/**
- * @swagger
-  * /api/v0/users/request-password-reset:
-=======
- * /api/users/request-password-reset:
-  *   post:
- *     summary: Request password reset link
- *     tags: 
- *        - Auth
- *     description: Sends a password reset link to the user's email.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email address
- *     responses:
- *       200:
- *         description: Password reset link sent successfully
- *       404:
- *         description: User not found
- *       500:
- *         description: Server Error
- */
-router.post("/users/request-password-reset", requestPasswordReset);
-
-// Route to forget password reset
-/**
- * @swagger
-  * /api/v0/users/forget-password:
-=======
- * /api/users/forget-password:
-  *   post:
- *     summary: Reset password using reset token
- *     tags: 
- *      - Auth
- *     description: Allows a user to reset their password using the reset token received via email.
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - token
- *               - newPassword
- *             properties:
- *               email:
- *                 type: string
- *                 description: User email
- *               token:
- *                 type: string
- *                 description: Password reset token received via email
- *               newPassword:
- *                 type: string
- *                 description: New password for the account
- *     responses:
- *       200:
- *         description: Password reset successfully
- *       400:
- *         description: Invalid or expired token | Invalid password format
- *       404:
- *         description: User not found
- */
-router.post("/users/forget-password", forgetPassword);
+router.post("/users/reset-password", authLimiter, resetPassword);
+router.post("/users/request-password-reset", authLimiter, requestPasswordReset);
+router.post("/users/forget-password", authLimiter, forgetPassword);
 
 export default router;

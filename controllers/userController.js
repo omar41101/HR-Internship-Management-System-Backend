@@ -829,14 +829,16 @@ export const getUserById = async (req, res, next) => {
   try {
     let { id } = req.params;
     if (id === "current") {
-      id = req.user?._id || req.user?.id;
+      id = String(req.user?._id || req.user?.id);
     }
 
-    const requesterId = req.user?._id || req.user?.id;
-    const isSelf = requesterId && String(requesterId) === String(id);
+    const requesterId = String(req.user?._id || req.user?.id);
+    const isSelf = requesterId && requesterId === String(id);
 
     const query = User.findById(id);
-    if (!isSelf) query.select("-faceDescriptors");
+    if (!isSelf) {
+      query.select("-faceDescriptors");
+    }
 
     const user = await query
       .populate("role_id")
@@ -845,9 +847,11 @@ export const getUserById = async (req, res, next) => {
 
     if (!user) throw new AppError("User not found!", 404);
 
+    const userObj = user.toObject();
+
     res.status(200).json({
       status: "Success",
-      data: user,
+      data: userObj,
     });
   } catch (err) {
     next(err);

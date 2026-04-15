@@ -94,44 +94,23 @@ if (enableSwagger) {
 // Connect to MongoDB
 connectMongo();
 
- // Routes (v0 versioned + legacy /api for backward compatibility)
-// Versioned base path
-app.use("/api/v0", authRoutes);
-app.use("/api/v0", userRoutes);
-app.use("/api/v0", UserRoleRoutes);
-app.use("/api/v0", departmentRoutes);
-app.use("/api/v0", auditLogRoutes);
-app.use("/api/v0", timetableRoutes);
-app.use("/api/v0", attendanceRoutes);
-app.use("/api/v0", documentTypeRoutes);
-app.use("/api/v0", documentRoutes);
-app.use("/api/v0", testRoutes);
-app.use("/api/v0", specialShiftRoutes);
-app.use("/api/v0", leaveTypeRoutes);
-app.use("/api/v0/dashboard", dashboardRoutes);
-app.use("/api/v0", projectRoutes);
-app.use("/api/v0", taskRoutes);
- 
-// Activate routes
-app.use('/api', authRoutes);
-app.use('/api', userRoutes);
-app.use('/api', UserRoleRoutes);
-app.use('/api', departmentRoutes);
-app.use('/api', auditLogRoutes);
-app.use('/api', timetableRoutes);
-app.use('/api', attendanceRoutes);
-app.use('/api', documentTypeRoutes);
-app.use('/api', documentRoutes);
-app.use('/api', testRoutes);
-app.use('/api', specialShiftRoutes);
-app.use('/api', leaveTypeRoutes);
-app.use('/api', leaveRequestRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-app.use('/api', projectRoutes);
-app.use('/api', taskRoutes);
- 
-// Legacy non-versioned base path (kept so existing clients keep working)
- 
+// Routes (single /api base path - remove v0 duplication)
+app.use("/api", authRoutes);
+app.use("/api", userRoutes);
+app.use("/api", UserRoleRoutes);
+app.use("/api", departmentRoutes);
+app.use("/api", auditLogRoutes);
+app.use("/api", timetableRoutes);
+app.use("/api", attendanceRoutes);
+app.use("/api", documentTypeRoutes);
+app.use("/api", documentRoutes);
+app.use("/api", testRoutes);
+app.use("/api", specialShiftRoutes);
+app.use("/api", leaveTypeRoutes);
+app.use("/api", leaveRequestRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api", projectRoutes);
+app.use("/api", taskRoutes);
 
 // Global error handler
 app.use(errorHandler);

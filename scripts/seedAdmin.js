@@ -44,7 +44,7 @@ const ADMIN_USERS = [
   {
     name: "Siwar",
     lastName: "Bouhalwen",
-    email: "siwar.admin@dotjcom.com",
+    email: "siwar.it@dotjcom.com",
     position: "IT Administrator",
     idNumber: "00000002",
     phoneNumber: "+1234567892",
@@ -52,7 +52,7 @@ const ADMIN_USERS = [
   {
     name: "Siwar",
     lastName: "Bensalem",
-    email: "siwar.admin@dotjcom.com",
+    email: "siwar.finance@dotjcom.com",
     position: "Finance Administrator",
     idNumber: "00000003",
     phoneNumber: "+1234567893",
@@ -81,6 +81,13 @@ async function seedAdmin() {
     // 2. Create or update each admin user
     const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, 10);
 
+    // Check for duplicate emails in ADMIN_USERS
+    const emails = ADMIN_USERS.map(a => a.email.toLowerCase().trim());
+    const duplicates = emails.filter((email, idx) => emails.indexOf(email) !== idx);
+    if (duplicates.length > 0) {
+      throw new Error(`Duplicate emails found in ADMIN_USERS: ${[...new Set(duplicates)].join(', ')}`);
+    }
+
     for (const admin of ADMIN_USERS) {
       const email = admin.email.toLowerCase().trim();
 
@@ -100,7 +107,6 @@ async function seedAdmin() {
                 },
               },
             );
-
             console.log(`Admin user already exists, password reset: ${email}`);
           } else {
             console.log(`Admin user already exists: ${email}`);

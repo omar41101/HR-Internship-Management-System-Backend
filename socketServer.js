@@ -23,8 +23,20 @@ if (process.env.NODE_ENV !== "test") {
   });
 }
 
-// You can add your Socket.io event handlers here, or import them from another file
-// Example:
- io.on("connection", (socket) => {
-   console.log("A user connected: " + socket.id);
- });
+// Log all incoming connections and errors for debugging
+io.on("connection", (socket) => {
+  console.log(`[Socket.io] Connection from ${socket.handshake.address} (id: ${socket.id})`);
+
+  socket.on("error", (err) => {
+    console.error(`[Socket.io] Error on socket ${socket.id}:`, err);
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log(`[Socket.io] Disconnected: ${socket.id}, reason: ${reason}`);
+  });
+
+  // Log all events received for debugging
+  socket.onAny((event, ...args) => {
+    console.log(`[Socket.io] Event received: ${event}`, args);
+  });
+});
