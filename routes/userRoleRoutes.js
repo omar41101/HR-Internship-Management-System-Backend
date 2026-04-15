@@ -77,7 +77,7 @@ router.post("/roles", authenticate, authorize(["Admin"]), addUserRole);
  *       500:
  *         description: Server Error
  */
-router.get("/roles", authenticate, authorize(["Admin", "Supervisor"]), getAllUserRoles);
+router.get("/roles", authenticate, authorize(["Admin"]), getAllUserRoles);
 
 // Get a role by ID
 /**

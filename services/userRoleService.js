@@ -1,0 +1,126 @@
+import UserRole from "../models/UserRole.js";
+import User from "../models/User.js";
+import AppError from "../utils/AppError.js";
+import { errors } from "../errors/userRoleErrors.js";
+import { getOne, getAll, createOne, updateOne, deleteOne } from "./handlersFactory.js";
+
+// Get all user roles
+export const getUserRoles = async (queryParams) => {
+  const finalQuery = {
+    ...queryParams,
+    limit: 4,
+    sort: "-createdAt",
+  };
+  return await getAll(UserRole)(finalQuery);
+};
+
+// Get a user role by ID
+export const getUserRoleById = getOne(UserRole, errors.USER_ROLE_NOT_FOUND);
+
+// Add a new user role 
+export const createUserRoleService = async ({ name, description }) => {
+  // Validate the name field
+  const trimmedName = (name || "").trim();
+  if (!trimmedName) {
+    throw new AppError(
+      errors.NAME_REQUIRED.message,
+      errors.NAME_REQUIRED.code,
+      errors.NAME_REQUIRED.errorCode,
+      errors.NAME_REQUIRED.suggestion
+    );
+  }
+
+  // Check for existing role with the same name
+  const existing = await UserRole.findOne({ name: trimmedName });
+  if (existing) {
+    throw new AppError(
+      errors.USER_ROLE_ALREADY_EXISTS.message,
+      errors.USER_ROLE_ALREADY_EXISTS.code,
+      errors.USER_ROLE_ALREADY_EXISTS.errorCode,
+      errors.USER_ROLE_ALREADY_EXISTS.suggestion
+    );
+  }
+
+  const role = await createOne(UserRole)({
+    name: trimmedName,
+    description,
+  });
+  return role;
+};
+
+// Update a user role
+export const updateUserRoleService = async (id, { name, description }) => {
+  // Validate the name field
+  const trimmedName = (name || "").trim();
+  if (!trimmedName) {
+    throw new AppError(
+      errors.NAME_REQUIRED.message,
+      errors.NAME_REQUIRED.code,
+      errors.NAME_REQUIRED.errorCode,
+      errors.NAME_REQUIRED.suggestion
+    );
+  }
+
+  // Check for role existence 
+  const role = await UserRole.findById(id);
+  if (!role) {
+    throw new AppError(
+      errors.USER_ROLE_NOT_FOUND.message,
+      errors.USER_ROLE_NOT_FOUND.code,
+      errors.USER_ROLE_NOT_FOUND.errorCode,
+      errors.USER_ROLE_NOT_FOUND.suggestion
+    );
+  }
+
+  // Check the user role's name uniqueness
+  const existing = await UserRole.findOne({ name: trimmedName });
+  if (existing && existing._id.toString() !== id) {
+    throw new AppError(
+      errors.USER_ROLE_ALREADY_EXISTS.message,
+      errors.USER_ROLE_ALREADY_EXISTS.code,
+      errors.USER_ROLE_ALREADY_EXISTS.errorCode,
+      errors.USER_ROLE_ALREADY_EXISTS.suggestion
+    );
+  }
+
+  // Update the role
+  const updatedRole = await updateOne(UserRole)(id, {
+    name: trimmedName,
+    description,
+  });
+
+  return updatedRole;
+};
+
+// Delete a user role
+export const deleteUserRoleService = async (id) => {
+  // Check for role existence
+  const role = await UserRole.findById(id);
+  if (!role) {
+    throw new AppError(
+      errors.USER_ROLE_NOT_FOUND.message,
+      errors.USER_ROLE_NOT_FOUND.code,
+      errors.USER_ROLE_NOT_FOUND.errorCode,
+      errors.USER_ROLE_NOT_FOUND.suggestion
+    );
+  }
+
+  // Ensure fallback role exists
+  let fallbackRole = await UserRole.findOne({ name: "Not assigned" });
+  if (!fallbackRole) {
+    fallbackRole = await UserRole.create({
+      name: "Not assigned",
+      description: "Default role for unassigned users",
+    });
+  }
+
+  // Reassign users
+  await User.updateMany(
+    { role_id: role._id },
+    { $set: { role_id: fallbackRole._id } }
+  );
+
+  const deletedRole = await deleteOne(UserRole)(id);
+
+  return deletedRole; // Return the deleted role for audit logging
+};

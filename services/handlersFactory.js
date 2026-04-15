@@ -14,7 +14,7 @@ export const createOne = (Model) => async (data) => {
 };
 
 // Get a single document by Id
-export const getOne = (Model, populateOptions = null) => async (id) => {
+export const getOne = (Model, errorMessage = errors.NOT_FOUND, populateOptions = null) => async (id) => {
   let query = Model.findById(id);
 
   if (populateOptions) {
@@ -22,12 +22,12 @@ export const getOne = (Model, populateOptions = null) => async (id) => {
   }
 
   const doc = await query;
-
   if (!doc) {
     throw new AppError(
-        errors.NOT_FOUND.message,
-        errors.NOT_FOUND.code,
-        errors.NOT_FOUND.errorCode
+      errorMessage.message,
+      errorMessage.code,
+      errorMessage.errorCode,
+      errorMessage.suggestion
     );
   }
 
@@ -37,7 +37,6 @@ export const getOne = (Model, populateOptions = null) => async (id) => {
     data: doc
   };
 };
-
 
 // Get all documents with optional filtering, sorting, searching and pagination
 export const getAll = (Model, populateOptions = null, selectFields = null, searchFields = []) => async (queryParams) => {
@@ -86,7 +85,8 @@ export const updateOne = (Model) => async (id, data) => {
     throw new AppError(
       errors.NOT_FOUND.message,
       errors.NOT_FOUND.code,
-      errors.NOT_FOUND.errorCode
+      errors.NOT_FOUND.errorCode,
+      errors.NOT_FOUND.suggestion
     );
   }
 
@@ -105,13 +105,14 @@ export const deleteOne = (Model) => async (id) => {
     throw new AppError(
       errors.NOT_FOUND.message,
       errors.NOT_FOUND.code,
-      errors.NOT_FOUND.errorCode
+      errors.NOT_FOUND.errorCode,
+      errors.NOT_FOUND.suggestion
     );
   }
 
   return {
     status: "Success",
     code: 200,
-    data: null
+    data: doc
   };
 };

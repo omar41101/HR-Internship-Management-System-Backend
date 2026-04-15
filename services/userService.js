@@ -34,6 +34,7 @@ export const getUser = getOne(User, [
 // Get all users
 export const getUsers = getAll(
   User,
+  errors.USER_NOT_FOUND,
   [
     { path: "role_id", select: "name" },
     { path: "department_id", select: "name" },
