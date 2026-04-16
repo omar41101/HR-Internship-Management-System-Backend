@@ -1,0 +1,375 @@
+import User from "../models/User.js";
+import UserRole from "../models/UserRole.js";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
+import jwt from "jsonwebtoken";
+import { sendEmail } from "../utils/sendEmail.js";
+import { errors } from "../errors/authErrors.js";
+import { errors as userErrors } from "../errors/userErrors.js";
+import AppError from "../utils/AppError.js";
+import { generateRandomCode } from "../utils/generateCode.js";
+import { isEmpty } from "../validators/userValidators.js";
+import {
+  generateToken,
+  getUserRoleName,
+  consumeFaceEnrollmentPrompt,
+} from "../utils/authHelpers.js";
+import { validateUserStatus } from "../validators/authValidators.js";
+
+// The login service
+export const loginService = async ({ email, password }) => {
+  const trimmedEmail = (email || "").trim().toLowerCase();
+  const trimmedPassword = (password || "").trim();
+
+  // Check the user existence
+  const user = await User.findOne({
+    email: trimmedEmail,
+  });
+  if (!user)
+    throw new AppError(
+      errors.INVALID_CREDENTIALS.message,
+      errors.INVALID_CREDENTIALS.code,
+      errors.INVALID_CREDENTIALS.errorCode,
+      errors.INVALID_CREDENTIALS.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  // If the user typed the wrong password 3 times, block the account
+  const isMatch = await bcrypt.compare(trimmedPassword, user.password);
+  if (!isMatch) {
+    user.loginAttempts += 1;
+
+    if (user.loginAttempts >= 3) {
+      user.status = "Blocked";
+      await user.save();
+      throw new AppError(
+        errors.ACCOUNT_BLOCKED.message,
+        errors.ACCOUNT_BLOCKED.code,
+        errors.ACCOUNT_BLOCKED.errorCode,
+        errors.ACCOUNT_BLOCKED.suggestion,
+      );
+    }
+
+    await user.save();
+    throw new AppError(
+      errors.INVALID_CREDENTIALS.message,
+      errors.INVALID_CREDENTIALS.code,
+      errors.INVALID_CREDENTIALS.errorCode,
+      errors.INVALID_CREDENTIALS.suggestion,
+    );
+  }
+
+  if (user.status !== "Active") {
+    return { type: "OTP_REQUIRED" };
+  }
+
+  if (user.mustResetPassword) {
+    return { type: "RESET_PASSWORD_REQUIRED" };
+  }
+
+  const roleName = await getUserRoleName(user.role_id);
+  const token = generateToken(user._id, roleName);
+  const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
+  user.loginAttempts = 0;
+  await user.save();
+
+  return {
+    status: "Success",
+    code: 200,
+    data: {
+      token,
+      userId: user._id,
+      role: roleName,
+      requiresFaceEnrollment,
+    },
+  };
+};
+
+// Activate the user account with OTP code
+export const verifyUserService = async ({ email, code }) => {
+  const user = await User.findOne({ email });
+  if (!user)
+    throw new AppError(
+      userErrors.USER_NOT_FOUND.message,
+      userErrors.USER_NOT_FOUND.code,
+      userErrors.USER_NOT_FOUND.errorCode,
+      userErrors.USER_NOT_FOUND.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  if (user.status === "Active") {
+    throw new AppError(
+      errors.ACCOUNT_ALREADY_VERIFIED.message,
+      errors.ACCOUNT_ALREADY_VERIFIED.code,
+      errors.ACCOUNT_ALREADY_VERIFIED.errorCode,
+      errors.ACCOUNT_ALREADY_VERIFIED.suggestion,
+    );
+  }
+
+  const isValid = await bcrypt.compare(code, user.verificationCode);
+  if (!isValid)
+    throw new AppError(
+      errors.INVALID_OTP.message,
+      errors.INVALID_OTP.code,
+      errors.INVALID_OTP.errorCode,
+      errors.INVALID_OTP.suggestion,
+    );
+
+  if (user.verificationCodeExpires < Date.now()) {
+    throw new AppError(
+      errors.OTP_EXPIRED.message,
+      errors.OTP_EXPIRED.code,
+      errors.OTP_EXPIRED.errorCode,
+      errors.OTP_EXPIRED.suggestion,
+    );
+  }
+
+  user.status = "Active";
+  user.verificationCode = null;
+  user.verificationCodeExpires = null;
+  user.mustResetPassword = true;
+
+  const roleName = await getUserRoleName(user.role_id);
+  const token = generateToken(user._id, roleName);
+  const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
+  await user.save();
+
+  return {
+    status: "Success",
+    code: 200,
+    data: {
+      token,
+      userId: user._id,
+      role: roleName,
+      requiresPasswordChange: user.mustResetPassword,
+      requiresFaceEnrollment,
+    },
+  };
+};
+
+// Resend the OTP code (3 attempts per day max)
+export const resendOTPService = async ({ email }) => {
+  const trimmedEmail = (email || "").trim().toLowerCase();
+
+  const user = await User.findOne({ email: trimmedEmail });
+  if (!user)
+    throw new AppError(
+      userErrors.USER_NOT_FOUND.message,
+      userErrors.USER_NOT_FOUND.code,
+      userErrors.USER_NOT_FOUND.errorCode,
+      userErrors.USER_NOT_FOUND.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  if (user.status === "Active") {
+    throw new AppError(
+      errors.ACCOUNT_ALREADY_VERIFIED.message,
+      errors.ACCOUNT_ALREADY_VERIFIED.code,
+      errors.ACCOUNT_ALREADY_VERIFIED.errorCode,
+      errors.ACCOUNT_ALREADY_VERIFIED.suggestion,
+    );
+  }
+
+  const today = new Date();
+  const lastResend = user.resendDate ? new Date(user.resendDate) : null;
+
+  if (!lastResend || today.toDateString() !== lastResend.toDateString()) {
+    user.resendCount = 0;
+    user.resendDate = today;
+  }
+
+  if (user.resendCount >= 3) {
+    throw new AppError(
+      errors.MAX_RESEND_REACHED.message,
+      errors.MAX_RESEND_REACHED.code,
+      errors.MAX_RESEND_REACHED.errorCode,
+      errors.MAX_RESEND_REACHED.suggestion,
+    );
+  }
+
+  const otp = generateRandomCode(6);
+  user.verificationCode = await bcrypt.hash(otp, 10);
+  user.verificationCodeExpires = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  user.resendCount += 1;
+
+  await user.save();
+
+  await sendEmail({
+    to: user.email,
+    subject: "New Verification Code",
+    type: "resendOTP",
+    name: user.name,
+    code: otp,
+  });
+
+  return {
+    status: "Success",
+    code: 200,
+  };
+};
+
+// Reset the password for users who are required to reset
+export const resetPasswordService = async ({ email, newPassword }) => {
+  const user = await User.findOne({ email: email.trim().toLowerCase() });
+  if (!user)
+    throw new AppError(
+      userErrors.USER_NOT_FOUND.message,
+      userErrors.USER_NOT_FOUND.code,
+      userErrors.USER_NOT_FOUND.errorCode,
+      userErrors.USER_NOT_FOUND.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  if (!user.mustResetPassword) {
+    throw new AppError(
+      errors.RESET_NOT_REQUIRED.message,
+      errors.RESET_NOT_REQUIRED.code,
+      errors.RESET_NOT_REQUIRED.errorCode,
+      errors.RESET_NOT_REQUIRED.suggestion,
+    );
+  }
+
+  if (isEmpty(newPassword))
+    throw new AppError(
+      errors.MISSING_PASSWORD.message,
+      errors.MISSING_PASSWORD.code,
+      errors.MISSING_PASSWORD.errorCode,
+      errors.MISSING_PASSWORD.suggestion,
+    );
+
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+    throw new AppError(
+      errors.WEAK_PASSWORD.message,
+      errors.WEAK_PASSWORD.code,
+      errors.WEAK_PASSWORD.errorCode,
+      errors.WEAK_PASSWORD.suggestion,
+    );
+  }
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  user.mustResetPassword = false;
+
+  const roleName = await getUserRoleName(user.role_id);
+  const token = generateToken(user._id, roleName);
+  const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
+  await user.save();
+
+  return {
+    status: "Success",
+    code: 200,
+    data: {
+      token,
+      userId: user._id,
+      role: roleName,
+      requiresFaceEnrollment,
+    },
+  };
+};
+
+// Request the password reset link with OTP code (For the forget password)
+export const requestPasswordResetService = async ({ email }) => {
+  const user = await User.findOne({ email: email.trim().toLowerCase() });
+  if (!user)
+    throw new AppError(
+      userErrors.USER_NOT_FOUND.message,
+      userErrors.USER_NOT_FOUND.code,
+      userErrors.USER_NOT_FOUND.errorCode,
+      userErrors.USER_NOT_FOUND.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  // REPLACE BY JWT
+  const rawToken = crypto.randomBytes(32).toString("hex");
+  user.resetPasswordToken = crypto
+    .createHash("sha256")
+    .update(rawToken)
+    .digest("hex");
+
+  user.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+
+  await user.save();
+
+  const resetURL = `${process.env.PLATFORM_URL}/reset-password?token=${rawToken}&email=${user.email}`;
+
+  await sendEmail({
+    to: user.email,
+    subject: "Password Reset",
+    type: "forgetPasswordRequest",
+    name: user.name,
+    resetLink: resetURL,
+  });
+
+  return {
+    status: "Success",
+    code: 200,
+  }
+};
+
+// Forget the password service
+export const forgetPasswordService = async ({ email, token, newPassword }) => {
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+  const user = await User.findOne({
+    email: email.trim().toLowerCase(),
+    resetPasswordToken: hashedToken,
+    resetPasswordExpires: { $gt: Date.now() },
+  });
+
+  if (!user)
+    throw new AppError(
+      errors.INVALID_OR_EXPIRED_TOKEN.message,
+      errors.INVALID_OR_EXPIRED_TOKEN.code,
+      errors.INVALID_OR_EXPIRED_TOKEN.errorCode,
+      errors.INVALID_OR_EXPIRED_TOKEN.suggestion,
+    );
+
+  validateUserStatus(user);
+
+  if (isEmpty(newPassword))
+    throw new AppError(
+      errors.MISSING_PASSWORD.message,
+      errors.MISSING_PASSWORD.code,
+      errors.MISSING_PASSWORD.errorCode,
+      errors.MISSING_PASSWORD.suggestion,
+    );
+
+  if (newPassword.length < 8 || !/[A-Z]/.test(newPassword)) {
+    throw new AppError(
+      errors.WEAK_PASSWORD.message,
+      errors.WEAK_PASSWORD.code,
+      errors.WEAK_PASSWORD.errorCode,
+      errors.WEAK_PASSWORD.suggestion,
+    );
+  }
+
+  user.password = await bcrypt.hash(newPassword, 10);
+  user.resetPasswordToken = null;
+  user.resetPasswordExpires = null;
+  user.status = "Active";
+  user.mustResetPassword = false;
+
+  const roleName = await getUserRoleName(user.role_id);
+  const tokenGen = generateToken(user._id, roleName);
+  const requiresFaceEnrollment = consumeFaceEnrollmentPrompt(user);
+
+  await user.save();
+
+  return {
+    status: "Success",
+    code: 200,
+    data: {
+      token: tokenGen,
+      userId: user._id,
+      role: roleName,
+      requiresFaceEnrollment,
+    },
+  };
+};

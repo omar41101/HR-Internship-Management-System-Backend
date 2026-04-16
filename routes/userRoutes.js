@@ -32,104 +32,6 @@ const router = express.Router();
 // Public interns listing for marketing site
 router.get("/public/interns", getPublicInterns);
 
-// Route to Add user (Admin Only)
-/**
- * @swagger
- * /api/users:
- *   post:
- *     tags:
- *       - Users
- *     summary: Add a new user (Admin only)
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/CreateUserRequest'
- *     responses:
- *       201:
- *         description: User created successfully
- *       400:
- *         description: Failed Input validation
- *       401:
- *         description: Unauthorized (User existing, Invalid Role, Invalid Department or Invalid/missing token)
- *       403:
- *         description: Forbidden (Insufficient permissions)
- *       404:
- *         description: Supervisor not found
- *       409:
- *         description: User already exists in the DB
- *       500:
- *         description: Server error
- */
-router.post("/users", authenticate, authorize(["Admin"]), addUser);
-
-// Route to Update user (Edit Profile) (Admin Only and the user himself)
-/**
- * @swagger
- * /api/users/{id}:
- *   put:
- *     tags:
- *       - Users
- *     summary: Update an existing user (Admin only)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: User ID
- *         schema:
- *           type: string
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             $ref: '#/components/schemas/UpdateUserRequest'
- *     responses:
- *       200:
- *         description: User updated successfully
- *       400:
- *         description: Input Validation failed, Invalid Role, Invalid Department, Invalid Supervisor or Invalid/missing token
- *       403:
- *         description: Forbidden (Insufficient permissions)
- *       404:
- *         description: User not found
- *       500:
- *         description: Server error
- */
-router.put("/users/:id", authenticate, authorize(["Admin"], { allowSelf: true }), updateUser);
-
-// Route to Delete user (Admin Only)
-/**
- * @swagger
- * /api/users/{id}:
- *   delete:
- *     tags:
- *       - Users
- *     summary: Delete a user (Admin only)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: User ID
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: User deleted successfully
- *       404:
- *         description: User not found
- *       500:
- *         description: Server error
- */
-router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
-
 // Route to get all users (Admin Only)
 /**
  * @swagger
@@ -138,6 +40,7 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *     tags:
  *       - Users
  *     summary: Get all users (Admin only)
+ *     description: Allows an admin to retrieve the list of all the users in the platform.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -146,29 +49,12 @@ router.delete("/users/:id", authenticate, authorize(["Admin"]), deleteUser);
  *       500:
  *         description: Server error
  */
-router.get("/users", authenticate, authorize(["Admin"]), getAllUsers);
-
-// Route to get active supervisors (Admin Only)
-/**
- * @swagger
- * /api/users/active-supervisors:
- *  get:
- *    summary: Get all active supervisors (Admin only)
- *    tags:
- *     - Users
- *    description: Returns a list of all active supervisors in the system.
- *  security:
- *    - bearerAuth: []
- *  responses:
- *   200:
- *    description: Returns list of available and active supervisors
- *   500:
- *    description: Server error
- * */
-router.get("/users/active-supervisors", authenticate, authorize(["Admin"]), getActiveSupervisorsController);
-
-// Route to get the 3 recent supervisors (Admin Only)
-router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getRecentSupervisorsController);
+router.get(
+  "/users", 
+  authenticate, 
+  authorize(["Admin"]), 
+  getAllUsers
+);
 
 // Route to get user by ID (Admin, the user himself and his supervisor)
 /**
@@ -177,7 +63,8 @@ router.get("/users/recent-supervisors", authenticate, authorize(["Admin"]), getR
  *   get:
  *     tags:
  *       - Users
- *     summary: Get a user by ID (Admin and the user himself)
+ *     summary: Get a user by ID (Admin, the user himself, his supervisor and all his collegues in the same project)
+ *     description: Allows the requester to retrieve the details of user by Id.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -199,6 +86,166 @@ router.get(
   "/users/:id",
   authenticate,
   getUserById
+);
+
+
+// Route to Add user (Admin Only)
+/**
+ * @swagger
+ * /api/users:
+ *   post:
+ *     tags:
+ *       - Users
+ *     summary: Add a new user (Admin only)
+ *     description: Allows an admin to create a new user in the system.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreateUserRequest'
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       400:
+ *         description: Failed Input validation
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Role not found | Department not found | Supervisor not found
+ *       409:
+ *         description: User already exists in the DB
+ *       500:
+ *         description: Server error
+ */
+router.post(
+  "/users", 
+  authenticate, 
+  authorize(["Admin"]), 
+  addUser
+);
+
+// Route to Update user (Edit Profile) (Admin Only and the user himself)
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   put:
+ *     tags:
+ *       - Users
+ *     summary: Update an existing user (Admin only)
+ *     description: Allows an admin to update the details of an existing user or the user himself to update his profile.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: User ID
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/UpdateUserRequest'
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       400:
+ *         description: Input Validation failed
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized (Insufficient permissions)
+ *       404:
+ *         description: User not found | Role not found | Department not found | Supervisor not found
+ *       409:
+ *         description: User already exists in the DB
+ *       500:
+ *         description: Server error
+ */
+router.put(
+  "/users/:id",
+  authenticate,
+  authorize(["Admin"], { allowSelf: true }),
+  updateUser
+);
+
+// Route to Delete user (Admin Only)
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   delete:
+ *     tags:
+ *       - Users
+ *     summary: Delete a user (Admin only)
+ *     description: Allows an admin to delete a user from the platform.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: User ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.delete(
+  "/users/:id",
+  authenticate,
+  authorize(["Admin"]),
+  deleteUser
+);
+
+// Route to get active supervisors (Admin Only)
+/**
+ * @swagger
+ * /api/users/active-supervisors:
+ *  get:
+ *    summary: Get all active supervisors (Admin only)
+ *    description: Allows an admin to retrieve the list of all active supervisors in the system.
+ *    tags:
+ *     - Users 
+ *  security:
+ *    - bearerAuth: []
+ *  responses:
+ *   200:
+ *    description: Returns list of available and active supervisors
+ *   401:
+ *    description: Invalid/missing token
+ *   403:
+ *    description: Unauthorized (Insufficient permissions)
+ *   404:
+ *    description: Supervisor role not found | Department not found (if department filter applied)
+ *   500:
+ *    description: Server error
+ * */
+router.get(
+  "/users/active-supervisors", 
+  authenticate, 
+  authorize(["Admin"]), 
+  getActiveSupervisorsController
+);
+
+// ----------------------------------------- REVISE THEIR SWAGGER DOCS MORE ----------------------------------- //
+// Route to get the 3 recent supervisors (Admin Only)
+router.get(
+  "/users/recent-supervisors", 
+  authenticate, 
+  authorize(["Admin"]), 
+  getRecentSupervisorsController
 );
 
 // Route to toggle user status
@@ -225,7 +272,12 @@ router.get(
  *       500:
  *         description: Server error
  */
-router.put("/users/:id/toggle-status", authenticate, authorize(["Admin"]), toggleUserStatus);
+router.put(
+  "/users/:id/toggle-status",
+  authenticate,
+  authorize(["Admin"]),
+  toggleUserStatus
+);
 
 // Route to export users to CSV
 /**
@@ -243,7 +295,12 @@ router.put("/users/:id/toggle-status", authenticate, authorize(["Admin"]), toggl
  *       500:
  *         description: Server error
  */
-router.get("/users/export/csv", authenticate, authorize(["Admin"]), exportUsersToCSV);
+router.get(
+  "/users/export/csv",
+  authenticate,
+  authorize(["Admin"]),
+  exportUsersToCSV
+);
 
 // Route to export users to Excel
 /**
@@ -261,7 +318,12 @@ router.get("/users/export/csv", authenticate, authorize(["Admin"]), exportUsersT
  *       500:
  *         description: Server error
  */
-router.get("/users/export/excel", authenticate, authorize(["Admin"]), exportUsersToExcel);
+router.get(
+  "/users/export/excel",
+  authenticate,
+  authorize(["Admin"]),
+  exportUsersToExcel
+);
 
 // Route to upload profile image
 /**

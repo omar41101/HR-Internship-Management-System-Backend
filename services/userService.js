@@ -25,16 +25,18 @@ import { logAuditAction } from "../utils/logger.js";
 import { buildQuery } from "../utils/queryBuilder.js";
 
 // Get a single user by Id
-export const getUser = getOne(User, [
-  { path: "role_id", select: "name" },
-  { path: "department_id", select: "name" },
-  { path: "supervisor_id", select: "name lastName email" },
-]);
+export const getUser = getOne(User, 
+  errors.USER_NOT_FOUND,
+  [
+    { path: "role_id", select: "name" },
+    { path: "department_id", select: "name" },
+    { path: "supervisor_id", select: "name lastName email" },
+  ]
+);
 
 // Get all users
 export const getUsers = getAll(
   User,
-  errors.USER_NOT_FOUND,
   [
     { path: "role_id", select: "name" },
     { path: "department_id", select: "name" },
