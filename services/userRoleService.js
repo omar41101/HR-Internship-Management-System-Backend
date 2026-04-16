@@ -23,10 +23,10 @@ export const createUserRoleService = async ({ name, description }) => {
   const trimmedName = (name || "").trim();
   if (!trimmedName) {
     throw new AppError(
-      errors.NAME_REQUIRED.message,
-      errors.NAME_REQUIRED.code,
-      errors.NAME_REQUIRED.errorCode,
-      errors.NAME_REQUIRED.suggestion
+      errors.USER_ROLE_NAME_REQUIRED.message,
+      errors.USER_ROLE_NAME_REQUIRED.code,
+      errors.USER_ROLE_NAME_REQUIRED.errorCode,
+      errors.USER_ROLE_NAME_REQUIRED.suggestion
     );
   }
 
@@ -54,10 +54,10 @@ export const updateUserRoleService = async (id, { name, description }) => {
   const trimmedName = (name || "").trim();
   if (!trimmedName) {
     throw new AppError(
-      errors.NAME_REQUIRED.message,
-      errors.NAME_REQUIRED.code,
-      errors.NAME_REQUIRED.errorCode,
-      errors.NAME_REQUIRED.suggestion
+      errors.USER_ROLE_NAME_REQUIRED.message,
+      errors.USER_ROLE_NAME_REQUIRED.code,
+      errors.USER_ROLE_NAME_REQUIRED.errorCode,
+      errors.USER_ROLE_NAME_REQUIRED.suggestion
     );
   }
 

@@ -487,8 +487,8 @@ export const deleteUserService = async (userId, currentUser, ip) => {
 
 // Toggle the user status (Active/Inactive)
 export const toggleUserStatusService = async (id, currentUser, ip) => {
+  // Check the user existence
   const user = await User.findById(id);
-
   if (!user) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,

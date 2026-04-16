@@ -26,7 +26,7 @@ const router = express.Router();
  *     summary: Create a new user role (Admin Only)
  *     tags:
  *       - UserRoles
- *     description: Allows the Admin to add new user role.
+ *     description: Allows the Admin to add a new user role.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -44,13 +44,15 @@ const router = express.Router();
  *                 type: string
  *     responses:
  *       201:
- *         description: Role created successfully
+ *         description: User Role created successfully
  *       400:
- *         description: Role Name must be filled | Role already exists
+ *         description: Role Name must be filled
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403:
  *         description: Unauthorized
+ *       409:
+ *         description: User Role already exists
  *       500:
  *         description: Server Error
  */
@@ -101,11 +103,11 @@ router.get("/roles", authenticate, authorize(["Admin"]), getAllUserRoles);
  *       200:
  *         description: Returns the user role details
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403:
  *         description: Unauthorized
  *       404:
- *         description: Role not found
+ *         description: User Role not found
  *       500:
  *         description: Server Error
  */
@@ -144,13 +146,15 @@ router.get("/roles/:id", authenticate, authorize(["Admin"]), getUserRoleById);
  *       200:
  *         description: Role updated successfully
  *       400:
- *         description: Invalid input | User Role already exists
+ *         description: Invalid input
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403:
  *         description: Unauthorized
  *       404:
  *         description: User Role not found
+ *       409:
+ *         description: User Role already exists
  *       500:
  *         description: Server Error
  */
@@ -178,7 +182,7 @@ router.put("/roles/:id", authenticate, authorize(["Admin"]), updateUserRole);
  *       200:
  *         description: User Role deleted successfully
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403:
  *         description: Unauthorized
  *       404:

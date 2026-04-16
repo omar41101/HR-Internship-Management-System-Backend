@@ -226,7 +226,7 @@ router.delete(
  *   401:
  *    description: Invalid/missing token
  *   403:
- *    description: Unauthorized (Insufficient permissions)
+ *    description: Unauthorized
  *   404:
  *    description: Supervisor role not found | Department not found (if department filter applied)
  *   500:
@@ -239,8 +239,29 @@ router.get(
   getActiveSupervisorsController
 );
 
-// ----------------------------------------- REVISE THEIR SWAGGER DOCS MORE ----------------------------------- //
 // Route to get the 3 recent supervisors (Admin Only)
+/**
+ * @swagger
+ * /api/users/recent-supervisors:
+ *   get:
+ *     summary: Get recent supervisors (Admin only)
+ *     description: Allows to retrieve the 3 most recently created supervisors in the system.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved recent supervisors
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Supervisor role not found
+ *       500:
+ *         description: Server Error
+ */
 router.get(
   "/users/recent-supervisors", 
   authenticate, 
@@ -256,6 +277,7 @@ router.get(
  *     tags:
  *       - Users
  *     summary: Toggle user Active/Inactive status (Admin only)
+ *     description: Allows an admin to toggle the user status between active and inactive.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -287,11 +309,12 @@ router.put(
  *     tags:
  *       - Users
  *     summary: Export all users to CSV (Admin only)
+ *     description: Allows an admin to export the list of all users in the CSV format.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: CSV file
+ *         description: CSV file that contains the list of users in the platform
  *       500:
  *         description: Server error
  */
@@ -310,11 +333,12 @@ router.get(
  *     tags:
  *       - Users
  *     summary: Export all users to Excel (Admin only)
+ *     description: Allows an admin to export the list of all users in the Excel format.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Excel file
+ *         description: Excel file that contains the list of users in the platform
  *       500:
  *         description: Server error
  */
@@ -333,6 +357,7 @@ router.get(
  *     tags:
  *       - Users
  *     summary: Upload a profile image for a user
+ *     description: Allows an admin or the user himself to upload a profile image for the user (Uploaded to cloudinary).
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -357,6 +382,10 @@ router.get(
  *         description: Profile Image uploaded successfully
  *       400:
  *         description: No file uploaded
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized
  *       404:
  *         description: User not found
  *       500:
@@ -376,7 +405,7 @@ router.post(
  * /api/users/{id}/profile-image:
  *   delete:
  *     summary: Remove a user's profile image (Admin Only and the user himself)
- *     description: Deletes the user's profile image from Cloudinary and removes it from the user's profile.
+ *     description: Allows the admin or the user himself to delete the user's profile image from Cloudinary and removes it from the user's profile.
  *     tags:
  *       - Users
  *     security:
@@ -389,11 +418,11 @@ router.post(
  *         schema:
  *           type: string
  *           example: 6652b9b7c87f2a8a4f5d1a2c
-  *     responses:
+ *     responses:
  *       401:
  *         description: Invalid/missing token
  *       403:
- *         description: Unauthorized (Insufficient permissions)
+ *         description: Unauthorized
  *       404:
  *         description: User not found
  *       500:
@@ -412,7 +441,7 @@ router.delete(
  * /api/users/{id}/face-enrollment:
  *   post:
  *     summary: Enroll face descriptors for a user (Admin Only and the user himself)
- *     description: Saves the face descriptors captured during enrollment to the user's profile.
+ *     description: Allows a user to enroll the face descriptors for identification purposes.
  *     tags:
  *       - Users
  *     security:
@@ -448,7 +477,7 @@ router.delete(
  *       401:
  *         description: Invalid/missing token
  *       403:
- *         description: Unauthorized (Insufficient permissions)
+ *         description: Unauthorized
  *       404:
  *         description: User not found
  *       500:
@@ -465,10 +494,12 @@ router.post(
 // Route to reset face descriptors
 /**
  * @swagger
- * /users/{id}/reset-face:
+ * /api/users/{id}/reset-face:
  *   post:
  *     summary: Reset a user's Face ID
- *     tags: [Users]
+ *     description: Allows an admin to reset the Face ID of any user. Users can reset their own Face ID.
+ *     tags: 
+ *       - Users
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -478,13 +509,10 @@ router.post(
  *         schema:
  *           type: string
  *         description: The ID of the user whose Face ID will be reset
- *     description: |
- *       Admins can reset the Face ID of any user. Users can reset their own Face ID if `allowSelf` is enabled.
- *       This clears the `faceDescriptors` array and sets `faceEnrolled` to `false`.
  *     responses:
  *       200:
  *         description: Face ID reset successfully
- *         content:
+ *         content: 
  *           application/json:
  *             schema:
  *               type: object

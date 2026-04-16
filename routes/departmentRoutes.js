@@ -23,7 +23,7 @@ const router = express.Router();
  * @swagger
  * /api/departments:
  *   post:
- *     summary: Create a new department (Admin Only)
+ *     summary: Add a new department (Admin Only)
  *     tags:
  *       - Departments
  *     description: Allows an Admin to create a new department.
@@ -44,11 +44,13 @@ const router = express.Router();
  *       201:
  *         description: Department created successfully
  *       400:
- *         description: Invalid Input | Department already exists
+ *         description: Invalid Input
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403: 
  *         description: Unauthorized
+ *       409:
+ *         description: Department already exists
  *       500:
  *         description: Server Error
  */
@@ -69,18 +71,11 @@ router.post("/departments", authenticate, authorize(["Admin"]), addDepartment);
  *       200:
  *         description: List of departments
  *       401:
- *         description: Missing Token
- *       403: 
- *         description: Unauthorized
+ *         description: Invalid/missing token
  *       500:
  *         description: Server Error
  */
-/*
- * WHAT: Added "Supervisor" to authorize list for GET /departments.
- * WHY: Supervisors need department data to populate the filter dropdown in the Attendance modal.
- *      Write operations remain Admin-only.
- */
-router.get("/departments", authenticate, authorize(["Admin", "Supervisor", "Employee", "Intern"]), getAllDepartments);
+router.get("/departments", authenticate, getAllDepartments);
 
 // Route to get a department by Id
 /**
@@ -101,9 +96,9 @@ router.get("/departments", authenticate, authorize(["Admin", "Supervisor", "Empl
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Department details
+ *         description: Retrieve the department details
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403: 
  *         description: Unauthorized
  *       404:
@@ -132,9 +127,9 @@ router.get("/departments/:id", authenticate, authorize(["Admin"]), getDepartment
  *           type: string
  *     responses:
  *       200:
- *         description: Department deleted
+ *         description: Department deleted successfully
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403: 
  *         description: Unauthorized
  *       404:
@@ -174,15 +169,17 @@ router.delete("/departments/:id", authenticate, authorize(["Admin"]), deleteDepa
  *                 type: string
  *     responses:
  *       200:
- *         description: Department updated
+ *         description: Department updated successfully
  *       400:
- *         description: Invalid Input | Department already exists
+ *         description: Invalid Input
  *       401:
- *         description: Missing Token
+ *         description: Invalid/missing token
  *       403: 
  *         description: Unauthorized
  *       404:
  *         description: Department not found
+ *       409:
+ *         description: Department already exists
  *       500:
  *         description: Server Error
  */

@@ -2,10 +2,10 @@ import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
-import jwt from "jsonwebtoken";
 import { sendEmail } from "../utils/sendEmail.js";
 import { errors } from "../errors/authErrors.js";
 import { errors as userErrors } from "../errors/userErrors.js";
+import { errors as commonErrors } from "../errors/commonErrors.js";
 import AppError from "../utils/AppError.js";
 import { generateRandomCode } from "../utils/generateCode.js";
 import { isEmpty } from "../validators/userValidators.js";
@@ -78,6 +78,7 @@ export const loginService = async ({ email, password }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Logged in successfully!",
     data: {
       token,
       userId: user._id,
@@ -92,10 +93,10 @@ export const verifyUserService = async ({ email, code }) => {
   const user = await User.findOne({ email });
   if (!user)
     throw new AppError(
-      userErrors.USER_NOT_FOUND.message,
-      userErrors.USER_NOT_FOUND.code,
-      userErrors.USER_NOT_FOUND.errorCode,
-      userErrors.USER_NOT_FOUND.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   validateUserStatus(user);
@@ -141,6 +142,7 @@ export const verifyUserService = async ({ email, code }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Account verified successfully!",
     data: {
       token,
       userId: user._id,
@@ -158,10 +160,10 @@ export const resendOTPService = async ({ email }) => {
   const user = await User.findOne({ email: trimmedEmail });
   if (!user)
     throw new AppError(
-      userErrors.USER_NOT_FOUND.message,
-      userErrors.USER_NOT_FOUND.code,
-      userErrors.USER_NOT_FOUND.errorCode,
-      userErrors.USER_NOT_FOUND.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   validateUserStatus(user);
@@ -210,18 +212,20 @@ export const resendOTPService = async ({ email }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Verification code re-sent successfully!",
   };
 };
 
 // Reset the password for users who are required to reset
 export const resetPasswordService = async ({ email, newPassword }) => {
+  // Check the user existence
   const user = await User.findOne({ email: email.trim().toLowerCase() });
   if (!user)
     throw new AppError(
-      userErrors.USER_NOT_FOUND.message,
-      userErrors.USER_NOT_FOUND.code,
-      userErrors.USER_NOT_FOUND.errorCode,
-      userErrors.USER_NOT_FOUND.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   validateUserStatus(user);
@@ -264,6 +268,7 @@ export const resetPasswordService = async ({ email, newPassword }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Password reset successfully!",
     data: {
       token,
       userId: user._id,
@@ -275,18 +280,18 @@ export const resetPasswordService = async ({ email, newPassword }) => {
 
 // Request the password reset link with OTP code (For the forget password)
 export const requestPasswordResetService = async ({ email }) => {
+  // Check the user existence
   const user = await User.findOne({ email: email.trim().toLowerCase() });
   if (!user)
     throw new AppError(
-      userErrors.USER_NOT_FOUND.message,
-      userErrors.USER_NOT_FOUND.code,
-      userErrors.USER_NOT_FOUND.errorCode,
-      userErrors.USER_NOT_FOUND.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   validateUserStatus(user);
 
-  // REPLACE BY JWT
   const rawToken = crypto.randomBytes(32).toString("hex");
   user.resetPasswordToken = crypto
     .createHash("sha256")
@@ -310,6 +315,7 @@ export const requestPasswordResetService = async ({ email }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Password reset link sent successfully!",
   }
 };
 
@@ -317,18 +323,18 @@ export const requestPasswordResetService = async ({ email }) => {
 export const forgetPasswordService = async ({ email, token, newPassword }) => {
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
+  // Check the user existence with the token and its expiration
   const user = await User.findOne({
     email: email.trim().toLowerCase(),
     resetPasswordToken: hashedToken,
     resetPasswordExpires: { $gt: Date.now() },
   });
-
   if (!user)
     throw new AppError(
-      errors.INVALID_OR_EXPIRED_TOKEN.message,
-      errors.INVALID_OR_EXPIRED_TOKEN.code,
-      errors.INVALID_OR_EXPIRED_TOKEN.errorCode,
-      errors.INVALID_OR_EXPIRED_TOKEN.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   validateUserStatus(user);
@@ -365,6 +371,7 @@ export const forgetPasswordService = async ({ email, token, newPassword }) => {
   return {
     status: "Success",
     code: 200,
+    message: "Password reset successfully!",
     data: {
       token: tokenGen,
       userId: user._id,

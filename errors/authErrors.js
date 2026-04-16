@@ -11,17 +11,17 @@ export const errors = {
     errorCode: "ACCOUNT_BLOCKED",
     suggestion: "Contact administration to unblock your account.",
   },
-  INVALID_CREDENTIALS: {
-    message: "Invalid Email or password!",
-    code: 401,
-    errorCode: "INVALID_CREDENTIALS",
-    suggestion: "Check your email and password and try again.",
-  },
   ACCOUNT_ALREADY_VERIFIED: {
     message: "Account is already verified!",
     code: 400,
     errorCode: "ACCOUNT_ALREADY_VERIFIED",
     suggestion: "You can log in with your credentials.",
+  },
+  INVALID_CREDENTIALS: {
+    message: "Invalid Email or password!",
+    code: 401,
+    errorCode: "INVALID_CREDENTIALS",
+    suggestion: "Check your email and password and try again.",
   },
   INVALID_OTP: {
     message: "Invalid OTP code!",
@@ -60,6 +60,7 @@ export const errors = {
     suggestion: "Please choose a stronger password.",
   },
   INVALID_OR_EXPIRED_TOKEN: {
+    // This error is for the expired token in the forget password process, not the middleware authentication message
     message: "Invalid or expired password reset token.",
     code: 401,
     errorCode: "INVALID_OR_EXPIRED_TOKEN",

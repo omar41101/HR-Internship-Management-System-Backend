@@ -116,18 +116,6 @@ export const errors = {
     errorCode: "SUPERVISOR_NOT_FOUND",
     suggestion: "Please check the validity of the supervisor.",
   },
-  ROLE_NOT_FOUND: {
-    message: "Role not found",
-    code: 404,
-    errorCode: "ROLE_NOT_FOUND",
-    suggestion: "Please check the validity of the role.",
-  },
-  DEPARTMENT_NOT_FOUND: {
-    message: "Department not found",
-    code: 404,
-    errorCode: "DEPARTMENT_NOT_FOUND",
-    suggestion: "Please check the validity of the department.",
-  },
   MISSING_FACE_DESCRIPTORS: {
     message: "Missing face descriptors",
     code: 400,

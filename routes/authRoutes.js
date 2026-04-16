@@ -17,7 +17,6 @@ const router = express.Router();
  *     description: Endpoints for the full authentification system
  */
 
-// ----------------------------------- AUTH ROUTES ----------------------------------- //
 // Route to log the user
 /**
  * @swagger
@@ -26,7 +25,7 @@ const router = express.Router();
  *     summary: User Login
  *     tags:
  *       - Auth
- *     description: Allows a user to enter his dashboard based on his credentials
+ *     description: Allows a user to login with their email and password to the platform.
  *     requestBody:
  *       required: true
  *       content:
@@ -37,11 +36,11 @@ const router = express.Router();
  *       200:
  *         description: Successful login (Could include OTP verification and/or Reset Password after login)
  *       401:
- *         description: Invalid Credentials
+ *         description: Invalid Credentials (Invalid email or password)
  *       403:
  *         description: Account Blocked 
  *       404:
- *         description: User not found | User Role not found
+ *         description: User Role not found
  *       500:
  *         description: Server error
  */
@@ -74,11 +73,11 @@ router.post("/login", login);
  *                 description: OTP verification code sent to the email
  *     responses:
  *       200:
- *         description: Account verified successfully
+ *         description: Account verified successfully with the OTP code
  *       400:
- *         description: Invalid OTP code | OTP Code expired
+ *         description: Account already verified | Invalid OTP code | OTP Code expired
  *       404:
- *         description: User not found
+ *         description: User role not found
  *       500:
  *         description: Server Error
  */
@@ -148,7 +147,7 @@ router.post("/users/resend-verification", resendVerificationCode);
  *       200:
  *         description: Password Reset successfully
  *       400:
- *         description: Invalid password format
+ *         description: Password reset not required | Invalid password format
  *       404:
  *         description: User not found
  *       500:
@@ -223,6 +222,8 @@ router.post("/users/request-password-reset", requestPasswordReset);
  *         description: Invalid or expired token | Invalid password format
  *       404:
  *         description: User not found
+ *       500:
+ *         description: Server Error
  */
 router.post("/users/forget-password", forgetPassword);
 
