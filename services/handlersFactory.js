@@ -1,24 +1,17 @@
 import AppError from "../utils/AppError.js";
-import { errors } from "../errors/userErrors.js";
+import { errors } from "../errors/commonErrors.js";
 import { buildQuery } from "../utils/queryBuilder.js";
 
-// Creation of a new document
-export const createOne = (Model) => async (data) => {
-  const doc = await Model.create(data);
-
-  return {
-    status: "Success",
-    code: 201,
-    data: doc
-  };
-};
-
 // Get a single document by Id
-export const getOne = (Model, errorMessage = errors.NOT_FOUND, populateOptions = null) => async (id) => {
+export const getOne = (Model, errorMessage = errors.RESOURCE_NOT_FOUND, populateOptions = null, selectFields = null) => async (id) => {
   let query = Model.findById(id);
 
   if (populateOptions) {
     query = query.populate(populateOptions);
+  }
+
+  if (selectFields) {
+    query = query.select(selectFields);
   }
 
   const doc = await query;
@@ -34,6 +27,7 @@ export const getOne = (Model, errorMessage = errors.NOT_FOUND, populateOptions =
   return {
     status: "Success",
     code: 200,
+    message: `${Model.modelName} retrieved successfully!`,
     data: doc
   };
 };
@@ -41,6 +35,9 @@ export const getOne = (Model, errorMessage = errors.NOT_FOUND, populateOptions =
 // Get all documents with optional filtering, sorting, searching and pagination
 export const getAll = (Model, populateOptions = null, selectFields = null, searchFields = []) => async (queryParams) => {
   let query = buildQuery(Model, queryParams, searchFields);
+
+  // Extract the filter conditions from the query builder before the pagination
+  const filter = query.getQuery();
 
   if (selectFields) {
     query = query.select(selectFields);
@@ -55,7 +52,8 @@ export const getAll = (Model, populateOptions = null, selectFields = null, searc
   const limit = parseInt(queryParams.limit) || 10;
   const skip = (page - 1) * limit;
 
-  const totalCount = await Model.countDocuments();
+  // Get total count of documents matching the filter (Dynamic count based on the filter conditions)
+  const totalCount = await Model.countDocuments(filter);
 
   query = query.skip(skip).limit(limit);
 
@@ -64,18 +62,31 @@ export const getAll = (Model, populateOptions = null, selectFields = null, searc
   return {
     status: "Success",
     code: 200,
+    message: `List of ${Model.modelName.toLowerCase()}s retrieved successfully!`,
     data: docs,
     pagination: {
       currentPage: page,
       totalPages: Math.ceil(totalCount / limit),
       limitPerPage: limit,
-      totalCount
+      totalCount,
     }
   };
 };
 
+// Creation of a new document
+export const createOne = (Model) => async (data) => {
+  const doc = await Model.create(data);
+
+  return {
+    status: "Success",
+    code: 201,
+    message: `${Model.modelName} created successfully!`,
+    data: doc
+  };
+};
+
 // Update a document
-export const updateOne = (Model) => async (id, data) => {
+export const updateOne = (Model, errorMessage = errors.RESOURCE_NOT_FOUND) => async (id, data) => {
   const doc = await Model.findByIdAndUpdate(id, data, {
     returnDocument: 'after',
     runValidators: true
@@ -83,36 +94,38 @@ export const updateOne = (Model) => async (id, data) => {
 
   if (!doc) {
     throw new AppError(
-      errors.NOT_FOUND.message,
-      errors.NOT_FOUND.code,
-      errors.NOT_FOUND.errorCode,
-      errors.NOT_FOUND.suggestion
+      errorMessage.message,
+      errorMessage.code,
+      errorMessage.errorCode,
+      errorMessage.suggestion
     );
   }
 
   return {
     status: "Success",
     code: 200,
+    message: `${Model.modelName} updated successfully!`,
     data: doc
   };
 };
 
 // Delete a document
-export const deleteOne = (Model) => async (id) => {
+export const deleteOne = (Model, errorMessage = errors.RESOURCE_NOT_FOUND) => async (id) => {
   const doc = await Model.findByIdAndDelete(id);
 
   if (!doc) {
     throw new AppError(
-      errors.NOT_FOUND.message,
-      errors.NOT_FOUND.code,
-      errors.NOT_FOUND.errorCode,
-      errors.NOT_FOUND.suggestion
+      errorMessage.message,
+      errorMessage.code,
+      errorMessage.errorCode,
+      errorMessage.suggestion
     );
   }
 
   return {
     status: "Success",
     code: 200,
+    message: `${Model.modelName} deleted successfully!`,
     data: doc
   };
 };

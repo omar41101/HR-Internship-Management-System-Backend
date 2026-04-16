@@ -12,10 +12,10 @@ export const errors = {
     errorCode: "DEPARTMENT_ALREADY_EXISTS",
     suggestion: "Please use a different department name.",
   },
-  NAME_REQUIRED: {
-    message: "The name field must be filled!",
+  DEPARTMENT_NAME_REQUIRED: {
+    message: "The department name field must be filled!",
     code: 400,
-    errorCode: "NAME_REQUIRED",
+    errorCode: "DEPARTMENT_NAME_REQUIRED",
     suggestion: "Please provide a name for the department.",
   },
 };

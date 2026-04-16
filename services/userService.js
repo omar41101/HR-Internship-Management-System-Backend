@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Document from "../models/Document.js";
+import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors } from "../errors/userErrors.js";
 import AppError from "../utils/AppError.js";
 import bcrypt from "bcrypt";
@@ -26,7 +27,7 @@ import { buildQuery } from "../utils/queryBuilder.js";
 
 // Get a single user by Id
 export const getUser = getOne(User, 
-  errors.USER_NOT_FOUND,
+  commonErrors.USER_NOT_FOUND,
   [
     { path: "role_id", select: "name" },
     { path: "department_id", select: "name" },
@@ -201,7 +202,12 @@ export const addUserService = async (data, currentUser, ip) => {
     console.log("Audit failed:", e.message);
   }
 
-  return user;
+  return {
+    status: "Success",
+    code: 201,
+    message: "User created successfully!",
+    data: user,
+  }
 };
 
 // Update an existing user
@@ -210,10 +216,10 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   const existingUser = await User.findById(id);
   if (!existingUser)
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion,
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
 
   // Check the email validity and the user existence
@@ -283,14 +289,25 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
 
   // Check the CIN/Passport validity
   if (updateData.idType || updateData.idNumber) {
-    const trimmedIdNumber = updateData.idNumber?.number?.trim();
-    const idCountryCode = updateData.idNumber?.countryCode;
+    let trimmedIdNumber = updateData.idNumber?.number?.trim();
+    let idCountryCode = updateData.idNumber?.countryCode;
 
     fullCINPassportValidation(
       updateData.idType,
       idCountryCode,
       trimmedIdNumber,
     );
+
+    // Force TN for CIN
+    if (updateData.idType === "CIN") {
+      idCountryCode = "TN";
+    }
+
+    // Override the idNumber field
+    updateData.idNumber = {
+      number: trimmedIdNumber,
+      countryCode: idCountryCode,
+    };
 
     // Check if the ID number exists for another user
     const existingIdUser = await User.findOne({
@@ -306,12 +323,12 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
       );
     }
 
-    updateData.idNumber.number = trimmedIdNumber;
-    updateData.idNumber.countryCode = idCountryCode;
-
     if (updateData.idType === "CIN" && updateData.idNumber) {
       updateData.idNumber.countryCode = "TN";
     }
+
+    updateData.idNumber.number = trimmedIdNumber;
+    updateData.idNumber.countryCode = idCountryCode;
   }
 
   // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)
@@ -414,7 +431,12 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
     ipAddress: ip,
   });
 
-  return user;
+  return {
+    status: "Success",
+    code: 200,
+    message: "User updated successfully!",
+    data: user,
+  };
 };
 
 // Delete a user
@@ -423,10 +445,10 @@ export const deleteUserService = async (userId, currentUser, ip) => {
   const user = await User.findById(userId);
   if (!user) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
@@ -458,6 +480,7 @@ export const deleteUserService = async (userId, currentUser, ip) => {
 
   return {
     status: "Success",
+    code: 200,
     message: "User and all associated personal documents deleted successfully!",
   };
 };
@@ -468,10 +491,10 @@ export const toggleUserStatusService = async (id, currentUser, ip) => {
 
   if (!user) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
@@ -488,7 +511,13 @@ export const toggleUserStatusService = async (id, currentUser, ip) => {
     details: { status: user.status },
     ipAddress: ip,
   });
-  return user;
+
+  return {
+    status: "Success",
+    code: 200,
+    message: `User status changed to ${user.status} successfully!`,
+    data: user,
+  }
 };
 
 // Export users to csv
@@ -621,20 +650,20 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
   const existingUser = await User.findById(userId);
   if (!existingUser) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
   // Check if a file is uploaded
   if (!file) {
     throw new AppError(
-      errors.NO_FILE_UPLOADED.message,
-      errors.NO_FILE_UPLOADED.code,
-      errors.NO_FILE_UPLOADED.errorCode,
-      errors.NO_FILE_UPLOADED.suggestion
+      commonErrors.NO_FILE_UPLOADED.message,
+      commonErrors.NO_FILE_UPLOADED.code,
+      commonErrors.NO_FILE_UPLOADED.errorCode,
+      commonErrors.NO_FILE_UPLOADED.suggestion
     );
   }
 
@@ -676,9 +705,8 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
   return {
     status: "Success",
     code: 200,
-    data: {
-      user, 
-    },
+    message: "Profile Image uploaded successfully!",
+    data: user,
   };
 };
 
@@ -688,10 +716,10 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
   const existingUser = await User.findById(userId);
   if (!existingUser) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
@@ -723,6 +751,7 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
   return {
     status: "Success",
     code: 200,
+    message: "Profile Image removed successfully!",
     data: user,
   };
 };
@@ -751,16 +780,17 @@ export const enrollFaceService = async (userId, descriptors) => {
 
   if (result.matchedCount === 0) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
   return {
     status: "Success",
     code: 200,
+    message: "Face Id enrolled successfully!",
   };
 };
 
@@ -770,10 +800,10 @@ export const resetFaceService = async (userId) => {
 
   if (!user) {
     throw new AppError(
-      errors.USER_NOT_FOUND.message,
-      errors.USER_NOT_FOUND.code,
-      errors.USER_NOT_FOUND.errorCode,
-      errors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion
     );
   }
 
@@ -786,5 +816,6 @@ export const resetFaceService = async (userId) => {
   return {
     status: "Success",
     code: 200,
+    message: "Face Id reset successfully!",
   };
 }; 

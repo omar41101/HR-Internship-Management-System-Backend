@@ -12,10 +12,10 @@ export const errors = {
     errorCode: "USER_ROLE_ALREADY_EXISTS",
     suggestion: "Please use a different user role name.",
   },
-  NAME_REQUIRED: {
+  USER_ROLE_NAME_REQUIRED: {
     message: "The name field must be filled!",
     code: 400,
-    errorCode: "NAME_REQUIRED",
+    errorCode: "USER_ROLE_NAME_REQUIRED",
     suggestion: "Please provide a name for the user role.",
   },
 };

@@ -1,17 +1,6 @@
 // User expected errors
 export const errors = {
-  NOT_FOUND: {
-    message: "Document not found",
-    code: 404,
-    errorCode: "NOT_FOUND",
-    suggestion: "Please check the validity of the document.",
-  },
-  USER_NOT_FOUND: {
-    message: "User not found",
-    code: 404,
-    errorCode: "USER_NOT_FOUND",
-    suggestion: "Please check the validity of the user.",
-  },
+  // USER_NOT_FOUND is in commonErrors.js (Reason: Used in multiple services)
   USER_ALREADY_EXISTS: {
     message: "User already exists",
     code: 409,
@@ -138,12 +127,6 @@ export const errors = {
     code: 404,
     errorCode: "DEPARTMENT_NOT_FOUND",
     suggestion: "Please check the validity of the department.",
-  },
-  NO_FILE_UPLOADED: {
-    message: "No file uploaded",
-    code: 400,
-    errorCode: "NO_FILE_UPLOADED",
-    suggestion: "Please upload a file.",
   },
   MISSING_FACE_DESCRIPTORS: {
     message: "Missing face descriptors",

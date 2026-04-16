@@ -1,0 +1,21 @@
+// Common errors accross the app
+export const errors = {
+  RESOURCE_NOT_FOUND: {
+    message: "Resource not found",
+    code: 404,
+    errorCode: "RESOURCE_NOT_FOUND",
+    suggestion: "Please check the existence of the resource.",
+  },
+  USER_NOT_FOUND: {
+    message: "User not found",
+    code: 404,
+    errorCode: "USER_NOT_FOUND",
+    suggestion: "Please check the existence of the user.",
+  },
+  NO_FILE_UPLOADED: {
+    message: "No file uploaded",
+    code: 400,
+    errorCode: "NO_FILE_UPLOADED",
+    suggestion: "Please upload a file.",
+  },
+};

@@ -201,7 +201,7 @@ export const getPassportHint = (countryCode) => {
 };
 
 // Full CIN/Passport validation helper function (format + uniqueness)
-export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber, userId = null) => {
+export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber) => {
   // Check ID type validity
   if (!["CIN", "Passport"].includes(idType)) {
     throw new AppError(

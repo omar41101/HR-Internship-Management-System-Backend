@@ -13,5 +13,9 @@ export const getPublic = async () => {
     status: "Active",
   }).select("name lastName email position bio profileImageURL");
 
-  return interns;
+  return {
+    status: "Success",
+    code: 200,
+    data: interns
+  };
 };

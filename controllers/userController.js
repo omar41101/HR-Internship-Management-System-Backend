@@ -68,8 +68,8 @@ export const getRecentSupervisorsController = async (req, res, next) => {
 // Public: Get active interns for marketing site (no auth)
 export const getPublicInterns = async (req, res, next) => {
   try {
-    const interns = await internService.getPublic();
-    res.status(200).json(interns);
+    const result = await internService.getPublic();
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -78,13 +78,9 @@ export const getPublicInterns = async (req, res, next) => {
 // Add a new user (Admin only)
 export const addUser = async (req, res, next) => {
   try {
-    const user = await userService.addUserService(req.body, req.user, req.ip);
+    const result = await userService.addUserService(req.body, req.user, req.ip);
 
-    res.status(201).json({
-      status: "Success",
-      code: 201,
-      data: user,
-    });
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -98,11 +94,7 @@ export const updateUser = async (req, res, next) => {
 
     const result = await userService.updateUserService(id, req.body, req.user, req.ip);
 
-    res.status(200).json({
-      status: "Success",
-      code: 200,
-      data: result,
-    });
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -115,7 +107,7 @@ export const deleteUser = async (req, res, next) => {
 
     const result = await userService.deleteUserService(id, req.user, req.ip);
 
-    res.status(200).json({...result, code: 200});
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -124,13 +116,9 @@ export const deleteUser = async (req, res, next) => {
 // Toggle User Status(Active/Inactive) (Only for Admins)
 export const toggleUserStatus = async (req, res, next) => {
   try {
-    const user = await userService.toggleUserStatusService(req.params.id, req.user, req.ip);
+    const result = await userService.toggleUserStatusService(req.params.id, req.user, req.ip);
 
-    res.status(200).json({
-      status: "Success",
-      code: 200,
-      data: user
-    });
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -168,7 +156,7 @@ export const uploadProfileImage = async (req, res, next) => {
       req.ip
     );
 
-    res.status(200).json(result);
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -183,7 +171,7 @@ export const removeProfileImage = async (req, res, next) => {
       req.ip
     );
 
-    res.status(200).json(result);
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -197,7 +185,7 @@ export const enrollFace = async (req, res, next) => {
       req.body.descriptors
     );
 
-    res.status(200).json(result);
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
@@ -208,7 +196,7 @@ export const resetFace = async (req, res, next) => {
   try {
     const result = await userService.resetFaceService(req.params.id);
 
-    res.status(200).json(result);
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
