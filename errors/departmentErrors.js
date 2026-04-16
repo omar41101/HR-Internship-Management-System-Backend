@@ -8,7 +8,7 @@ export const errors = {
   },
   DEPARTMENT_ALREADY_EXISTS: {
     message: "Department already exists",
-    code: 400,
+    code: 409,
     errorCode: "DEPARTMENT_ALREADY_EXISTS",
     suggestion: "Please use a different department name.",
   },

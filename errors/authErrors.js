@@ -13,7 +13,7 @@ export const errors = {
   },
   INVALID_CREDENTIALS: {
     message: "Invalid Email or password!",
-    code: 400,
+    code: 401,
     errorCode: "INVALID_CREDENTIALS",
     suggestion: "Check your email and password and try again.",
   },

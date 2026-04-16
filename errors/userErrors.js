@@ -50,7 +50,7 @@ export const errors = {
   },
   EMAIL_UNAVAILABLE: {
     message: "Email is not available",
-    code: 400,
+    code: 409,
     errorCode: "EMAIL_UNAVAILABLE",
     suggestion: "Please use a different email address.",
   },
@@ -86,7 +86,7 @@ export const errors = {
   },
   PHONE_NUMBER_UNAVAILABLE: {
     message: "Phone number is not available",
-    code: 400,
+    code: 409,
     errorCode: "PHONE_NUMBER_UNAVAILABLE",
     suggestion: "Please use a different phone number.",
   },
@@ -117,7 +117,7 @@ export const errors = {
   },
   UNAVAILABLE_ID_NUMBER: {
     message: "ID number is not available",
-    code: 400,
+    code: 409,
     errorCode: "UNAVAILABLE_ID_NUMBER",
     suggestion: "Please use a different ID number.",
   },

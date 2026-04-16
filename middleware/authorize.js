@@ -1,4 +1,6 @@
 import User from "../models/User.js";
+import { errors } from "../errors/middlewareTokenErrors.js";
+import AppError from "../utils/AppError.js";
 
 // Middleware to authorize users based on role, self-access, or supervisor access
 const authorize = (roles = [], options = {}) => {
@@ -42,15 +44,23 @@ const authorize = (roles = [], options = {}) => {
         }
       }
 
-      return res.status(403).json({
-        status: "Error",
-        message: "Unauthorized!",
-      });
+      return next(
+        new AppError(
+          errors.UNAUTHORIZED.message,
+          errors.UNAUTHORIZED.code,
+          errors.UNAUTHORIZED.errorCode,
+          errors.UNAUTHORIZED.suggestion
+        )
+      );
     } catch (err) {
-      return res.status(500).json({
-        status: "Error",
-        message: err.message,
-      });
+      return next(
+        new AppError(
+          errors.SERVER_ERROR.message,
+          errors.SERVER_ERROR.code,
+          errors.SERVER_ERROR.errorCode,
+          errors.SERVER_ERROR.suggestion
+        )
+      );
     }
   };
 };

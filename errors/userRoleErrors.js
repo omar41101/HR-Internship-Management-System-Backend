@@ -8,7 +8,7 @@ export const errors = {
   },
   USER_ROLE_ALREADY_EXISTS: {
     message: "User Role already exists",
-    code: 400,
+    code: 409,
     errorCode: "USER_ROLE_ALREADY_EXISTS",
     suggestion: "Please use a different user role name.",
   },
