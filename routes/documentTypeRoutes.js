@@ -27,7 +27,7 @@ const router = express.Router();
  *        - Document Types
  *     security:
  *       - bearerAuth: []
- *     description: Admin can create a new document type.
+ *     description: Allows an Admin to create a new document type.
  *     requestBody:
  *         required: true
  *         content:
@@ -47,11 +47,13 @@ const router = express.Router();
  *       201:
  *         description: Document type added successfully
  *       400:
- *         description: Name field empty or document type already exists
+ *         description: Name field empty
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (Admin only)
+ *         description: Unauthorized
+ *       409:
+ *         description: Document type already exists
  *       500:
  *         description: Server Error
  */
@@ -72,10 +74,10 @@ router.post(
  *        - Document Types
  *     security:
  *       - bearerAuth: []
- *     description: Retrieve all document types (Admin only).
+ *     description: Allows an admin to retrieve all document types.
  *     responses:
  *       200:
- *         description: List of document types
+ *         description: Retrieved the list of document types
  *         content:
  *           application/json:
  *             schema:
@@ -94,7 +96,7 @@ router.post(
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (Admin only)
+ *         description: Unauthorized
  *       500:  
  *         description: Server Error
  */
@@ -115,7 +117,7 @@ router.get(
  *        - Document Types
  *     security:
  *       - bearerAuth: []
- *     description: Retrieve a specific document type by its ID (Admin only).
+ *     description: Allows an admin to retrieve a specific document type by its ID.
  *     parameters:
  *       - in: path
  *         name: id
@@ -144,7 +146,7 @@ router.get(
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (Admin only)
+ *         description: Unauthorized
  *       500:  
  *         description: Server Error
  */
@@ -165,7 +167,7 @@ router.get(
  *        - Document Types
  *     security:
  *       - bearerAuth: []
- *     description: Update a document type by ID (Admin only).
+ *     description: Allows an admin to update a document type by ID.
  *     parameters:
  *       - in: path
  *         name: id
@@ -206,13 +208,15 @@ router.get(
  *                     documentType:
  *                       $ref: '#/components/schemas/DocumentType'
  *       400:
- *         description: Invalid input or name already exists
+ *         description: Invalid input
  *       404:
  *         description: Document type not found
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Unauthorized (Admin only)
+ *         description: Unauthorized
+ *       409:
+ *         description: Document type already exists
  *       500:
  *         description: Server Error
  */

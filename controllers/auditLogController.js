@@ -66,6 +66,12 @@ const formatAuditLog = (log) => {
     case "REJECT_LEAVE_REQUEST":
       description = `Rejected the Leave Request of ${log.target_name || ""}`;
       break;
+    case "CREATE_DOCUMENT_TYPE":
+      description = `Created Document Type ${log.target_name || ""}`;
+      break;
+    case "UPDATE_DOCUMENT_TYPE":
+      description = `Updated Document Type ${log.target_name || ""}`;
+      break;
     default:
       description = `Performed ${log.action} on ${log.target_type || "Target"}`;
   }
