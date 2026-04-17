@@ -18,4 +18,10 @@ export const errors = {
     errorCode: "NO_FILE_UPLOADED",
     suggestion: "Please upload a file.",
   },
+  DOCUMENT_NOT_FOUND: {
+    message: "Document not found",
+    code: 404,
+    errorCode: "DOCUMENT_NOT_FOUND",
+    suggestion: "Please check the validity of the document.",
+  },
 };
