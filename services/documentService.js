@@ -195,28 +195,35 @@ export const toggleConfidentialityService = async ({ documentId }) => {
 export const getAdminDocumentsService = async ({ queryParams }) => {
   const parsedQuery = { ...queryParams };
 
-  // Exclude the personal documents automatically
+  // Get the personal document type object to exclude it later
   const personalType = await getPersonalType();
 
-  // If the documentType_id is provided, we filter by it
-  if (parsedQuery.documentType_id) {
-    return getDocumentsCore(parsedQuery);
+  // Support type=DocumentTypeName for filtering instead of documentType_id
+  if (parsedQuery.type) {
+    // Look for the corresponding document type ID based on the provided type name
+    const type = await DocumentType.findOne({ name: parsedQuery.type });
+    if (!type) {
+      throw new AppError(
+        documentTypeErrors.DOCUMENT_TYPE_NOT_FOUND.message,
+        documentTypeErrors.DOCUMENT_TYPE_NOT_FOUND.code,
+        documentTypeErrors.DOCUMENT_TYPE_NOT_FOUND.errorCode,
+        documentTypeErrors.DOCUMENT_TYPE_NOT_FOUND.suggestion,
+      );
+    }
+
+    // If the type is not Personal, we proceed with the filtering
+    if (type._id.toString() !== personalType._id.toString()) {
+      parsedQuery.documentType_id = type._id;
+      delete parsedQuery.type;
+
+      return getDocumentsCore(parsedQuery);
+    }
   }
 
-/*
-LATER
-if (parsedQuery.type) {
-  const type = await DocumentType.findOne({ name: parsedQuery.type });
-  parsedQuery.documentType_id = type._id;
-  delete parsedQuery.type;
-}
-*/
-
-  // Exclude the personal documents
+  // Otherwise (General case): Exclude the personal documents
   parsedQuery.documentType_id = {
     $ne: personalType._id,
   };
-
   return getDocumentsCore(parsedQuery);
 };
 
