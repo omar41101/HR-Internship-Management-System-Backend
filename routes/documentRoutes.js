@@ -10,6 +10,7 @@ import {
   uploadAdminDocument,
   downloadAdminDocument,
   consultAdminDocument,
+  deleteAdminDocument,
 } from "../controllers/documentController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -41,7 +42,7 @@ const router = express.Router();
  *     summary: Upload a personal document
  *     tags:
  *        - Personal Documents
- *     description: Upload a personal document for a user (Admin or the user himself).
+ *     description: Allows a user to upload a personal document.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -76,7 +77,9 @@ const router = express.Router();
  *       403:
  *         description: Unauthorized (Admin or the user himself only)
  *       404:
- *         description: User or document type not found
+ *         description: User not found | Personal Document type not found
+ *       409:
+ *         description: Duplicate file uploaded
  *       500:
  *         description: Server Error
  */
@@ -97,7 +100,7 @@ router.post(
  *     summary: Delete a personal document
  *     tags:
  *       - Personal Documents
- *     description: Delete a personal document (Admin or the user himself).
+ *     description: Allows a user to delete a personal document.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -110,12 +113,14 @@ router.post(
  *     responses:
  *       200:
  *         description: Personal document deleted successfully
+ *       400:
+ *         description: Not a personal document
  *       401:
  *         description: Missing/Invalid token
- *       404:
- *         description: Document not found
  *       403:
- *         description: Not a personal document | Unauthorized (Admin or the user himself only)
+ *         description: Unauthorized
+ *       404:
+ *         description: Personal document type not found | Document not found
  *       500:
  *         description: Server Error
  */
@@ -134,7 +139,7 @@ router.delete(
  *     summary: Download a personal document
  *     tags:
  *      - Personal Documents
- *     description: Download a personal document (Admin, user himself, or supervisor).
+ *     description: Allows a user to download a personal document.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -147,10 +152,10 @@ router.delete(
  *     responses:
  *       302:
  *         description: Redirect to Cloudinary download URL
+ *       400:
+ *         description: Not a personal document
  *       401:
  *         description: Missing/Invalid token
- *       403:
- *         description: Not a personal document | Unauthorized (Admin, user himself, or supervisor only)
  *       404:
  *         description: Document not found
  *       500:
@@ -170,7 +175,7 @@ router.get(
  *     summary: Consult a personal document
  *     tags:
  *       - Personal Documents
- *     description: Open a personal document in the browser (Admin, user himself, or supervisor).
+ *     description: Open a personal document in the browser.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -183,10 +188,10 @@ router.get(
  *     responses:
  *       302:
  *         description: Redirect to Cloudinary file URL
+ *       400:
+ *         description: Not a personal document
  *       401:
  *         description: Missing/Invalid token
- *       403:
- *         description: Not a personal document | Unauthorized (Admin, user himself, or supervisor only)
  *       404:
  *         description: Document not found
  *       500:
@@ -206,7 +211,7 @@ router.get(
  *     summary: Get all personal documents of a user
  *     tags:
  *      - Personal Documents
- *     description: Retrieve all personal documents of a user including confidential ones (Admin or the user himself).
+ *     description: Retrieve all personal documents of a user including.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -218,7 +223,7 @@ router.get(
  *           type: string
  *     responses:
  *       200:
- *         description: List of personal documents
+ *         description: List of personal documents retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -269,11 +274,13 @@ router.get(
  *           type: string
  *     responses:
  *       200:
- *         description: Status toggled successfully
+ *         description: Document confidentiality toggled successfully
+ *       400:
+ *         description: Not a personal document
  *       401:
  *         description: Missing/Invalid token
  *       403:
- *         description: Not a personal document | Unauthorized (Admin or the user himself only)
+ *         description: Unauthorized
  *       404:
  *         description: Document not found
  *       500:
@@ -291,6 +298,52 @@ router.put(
 // -------------------------------------------------------------- //
 
 // Route to get all administrative documents (Admin only)
+/**
+ * @swagger
+ * /api/documents/administrative-docs:
+ *   get:
+ *     summary: Get all administrative documents (Contracts, Reports, ...)
+ *     tags:
+ *      - Administrative Documents 
+ *     description: Allows the admin to retrieve all administrative documents.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Target user ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of administrative documents retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: Success
+ *                 documents:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       _id:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       format:
+ *                         type: string
+ *                       size:
+ *                         type: number
+ *                       fileURL:
+ *                         type: string
+ *                       isConfidential:
+ *                         type: boolean
+ */
 router.get(
   "/documents/administrative-docs",
   authenticate,
@@ -299,6 +352,54 @@ router.get(
 );
 
 // Route to upload an administrative document (Admin only)
+/**
+ * @swagger
+ * /api/documents/administrative-docs:
+ *   post:
+ *     summary: Upload an administrative document
+ *     tags:
+ *        - Administrative Documents
+ *     description: Allows an admin to upload an administrative document.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Target user ID
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - administrativeDocument
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: Passport
+ *               administrativeDocument:
+ *                 type: string
+ *                 format: binary
+ *     responses:
+ *       201:
+ *         description: Administrative document uploaded successfully
+ *       400:
+ *         description: No file uploaded
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document type not found
+ *       409:
+ *         description: Duplicate file uploaded
+ *       500:
+ *         description: Server Error
+ */
 router.post(
   "/documents/administrative-docs",
   authenticate,
@@ -308,6 +409,37 @@ router.post(
 );
 
 // Route to Download an administrative document (Admin only)
+/**
+ * @swagger
+ * /api/documents/administrative-doc/download/{id}:
+ *   get:
+ *     summary: Download an administrative document
+ *     tags:
+ *      - Administrative Documents
+ *     description: Allows an admin to download an administrative document.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Document ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       302:
+ *         description: Redirect to Cloudinary download URL
+ *       400:
+ *         description: Not an administrative document
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server Error
+ */
 router.get(
   "/documents/administrative-doc/download/:id",
   authenticate,
@@ -316,11 +448,79 @@ router.get(
 );
 
 // Route to consult an administrative document (Admin only)
+/**
+ * @swagger
+ * /api/documents/administrative-doc/consult/{id}:
+ *   get:
+ *     summary: Consult an administrative document
+ *     tags:
+ *       - Administrative Documents
+ *     description: Open an administrative document in the browser.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Document ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       302:
+ *         description: Redirect to Cloudinary file URL
+ *       400:
+ *         description: Not an administrative document
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server Error
+ */
 router.get(
   "/documents/administrative-doc/consult/:id",
   authenticate,
   authorize(["Admin"]),
   consultAdminDocument,
+);
+
+// Route to delete an administrative document (Admin only)
+/**
+ * @swagger
+ * /api/documents/administrative-doc/{id}:
+ *   delete:
+ *     summary: Delete an administrative document
+ *     tags:
+ *       - Administrative Documents
+ *     description: Allows an admin to delete an administrative document.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Document ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Administrative document deleted successfully
+ *       401:
+ *         description: Missing/Invalid token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Document not found
+ *       500:
+ *         description: Server Error
+ */
+router.delete(
+  "/documents/administrative-doc/:id",
+  authenticate,
+  authorize(["Admin"]),
+  deleteAdminDocument,
 );
 
 export default router;

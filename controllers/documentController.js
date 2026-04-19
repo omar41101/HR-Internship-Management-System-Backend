@@ -144,3 +144,17 @@ export const consultAdminDocument = async (req, res, next) => {
     next(err);
   }
 };
+
+// Delete an administrative document controller : STILL NOT TESTED
+export const deleteAdminDocument = async (req, res, next) => {
+  try {
+    const result = await documentService.deleteAdminDocumentService({
+      documentId: req.params.id,
+    });
+
+    res.status(result.code).json(result);
+  }
+  catch (err) {
+    next(err);  
+  }
+};

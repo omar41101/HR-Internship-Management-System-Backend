@@ -119,13 +119,7 @@ export const downloadPersonalDocumentService = async ({ documentId, res }) => {
   // Validate the document existence and type
   const document = await getValidPersonalDocument(documentId);
 
-  await downloadDocumentCore(document, res);
-
-  return {
-    status: "Success",
-    code: 200,
-    message: "Personal document downloaded successfully!",
-  };
+  return await downloadDocumentCore(document, res);
 };
 
 // Consult a personal document service
@@ -227,7 +221,7 @@ export const getAdminDocumentsService = async ({ queryParams }) => {
   return getDocumentsCore(parsedQuery);
 };
 
-// Upload an administrative document service: STILL NOT TESTED
+// Upload an administrative document service
 export const uploadAdminDocumentService = async ({
   file,
   title,
@@ -295,7 +289,7 @@ export const uploadAdminDocumentService = async ({
   };
 };
 
-// Delete an administrative document service: STILL NOT TESTED
+// Delete an administrative document service
 export const deleteAdminDocumentService = async ({ documentId }) => {
   const document = await Document.findById(documentId);
   if (!document) throw new AppError(
@@ -314,7 +308,7 @@ export const deleteAdminDocumentService = async ({ documentId }) => {
   };
 };
 
-// Download a personal document service: STILL NOT TESTED
+// Download a personal document service
 export const downloadAdminDocumentService = async ({ documentId, res }) => {
   // Validate the document existence and type
   const document = await getValidAdminDocument(documentId);
@@ -328,7 +322,7 @@ export const downloadAdminDocumentService = async ({ documentId, res }) => {
   };
 };
 
-// Consult a personal document service: STILL NOT TESTED
+// Consult a personal document service
 export const consultAdminDocumentService = async ({ documentId }) => {
   // Validate the document existence and type
   const document = await getValidAdminDocument(documentId);
