@@ -29,6 +29,14 @@ const sprintSchema = mongoose.Schema(
       type: Date,
       required: true,
     },
+    completedAt: {
+      type: Date,
+    },
+    durationInWeeks: {
+      type: Number,
+      enum: [1, 2, 3, 4],
+      default: 2,
+    },
     status: {
       type: String,
       enum: ["Planned", "Active", "Completed"],

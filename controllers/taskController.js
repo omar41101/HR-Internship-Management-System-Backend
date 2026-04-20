@@ -7,7 +7,7 @@ import {
   uploadDocToCloudinary,
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
-import { isProjectInactive } from "../utils/projectHelpers.js";
+import { isProjectInactive } from "../validators/projectValidators.js";
 
 // ----------------------------------------------------------------------- //
 // --------- HELPER FUNCTIONS FOR THE FILTERS IN THE FRONTEND ------------ //
