@@ -28,6 +28,11 @@ const teamMemberSchema = mongoose.Schema(
       ],
       required: true,
     },
+    isActiveInProject: {
+      // This field indicates whether the team member is currently active in the project or has been inactivated (e.g., due to a long leave request).
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

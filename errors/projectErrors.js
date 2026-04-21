@@ -78,7 +78,7 @@ export const errors = {
     suggestion: "The scrum master cannot be an intern.",
   },
   DUPLICATE_USERS: {
-    message: "Duplicate users in team members",
+    message: "Duplicate users in the team",
     code: 400,
     errorCode: "DUPLICATE_USERS",
     suggestion: "Please remove duplicate users from the team members list.",

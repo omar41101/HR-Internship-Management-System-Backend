@@ -56,7 +56,7 @@ router.get(
   getAllUsers
 );
 
-// Route to get user by ID (Admin, the user himself and his supervisor)
+// Route to get user by ID 
 /**
  * @swagger
  * /api/users/{id}:

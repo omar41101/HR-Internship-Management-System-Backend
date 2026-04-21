@@ -43,6 +43,7 @@ import projectRoutes from "./routes/projectRoutes.js";
 import teamMemberRoutes from "./routes/teamMemberRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
 import sprintRoutes from "./routes/sprintRoutes.js";
+import teamRoutes from "./routes/teamRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -91,6 +92,7 @@ app.use('/api', projectRoutes);
 app.use('/api', teamMemberRoutes);
 app.use('/api', taskRoutes);
 app.use('/api', sprintRoutes);
+app.use('/api', teamRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

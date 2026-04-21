@@ -1,63 +1,114 @@
-import TeamMember from "../models/TeamMember.js";
+import * as teamMemberService from "../services/teamMemberService.js";
 
-// Get the list of all possible team roles (Except "Scrum Master")
+// Get all possible team roles (Except "Scrum Master")
 export const getTeamRoles = async (req, res, next) => {
   try {
-    const roles = TeamMember.schema.path("role").enumValues
-      .filter((role) => role !== "Scrum Master");
-
-    res.status(200).json({
-      status: "Success",
-      roles,
-    });
+    const result = await teamMemberService.getTeamRoles();
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
 };
 
-// WE'LL DEAL WITH THIS LATER
-// Get team members under a supervisor (Supervisor and Admin)
-export const getTeamMembers = async (req, res, next) => {
+// Add a new team member to the team
+export const addTeamMember = async (req, res, next) => {
   try {
-    const { id } = req.params; // Supervisor ID
-    const { page = 1 } = req.query;
+    const { teamId } = req.params;
+    const { userId, role } = req.body;
 
-    const limit = 10; // 10 team members per page
-    const parsedPage = Math.max(parseInt(page), 1);
+    const result = await teamMemberService.addTeamMember(
+      teamId,
+      userId,
+      role,
+      req.user
+    );
 
-    // Check if the user exists
-    const existingUser = await User.findById(id);
-    if (!existingUser) {
-      return sendError(res, "User not found!", 404);
-    }
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
 
-    // Only the supervisor himself and the Admin can access the team members list
-    if (req.user.role !== "Admin" && req.user._id.toString() !== id) {
-      return sendError(res, "Unauthorized access to this team!", 403);
-    }
+// Update Team Member Role
+export const updateTeamMember = async (req, res, next) => {
+  try {
+    const { teamMemberId } = req.params;
+    const { role, isActive } = req.body;
 
-    // Build the query
-    const query = { supervisor_id: id };
+    const result = await teamMemberService.updateTeamMember(
+      teamMemberId,
+      { role, isActive },
+      req.user
+    );
 
-    // Count the total team members
-    const totalMembers = await User.countDocuments(query);
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
 
-    // Find the paginated list of team members of the supervisor (10 per page)
-    const teamMembers = await User.find(query)
-      .populate("role_id", "name")
-      .populate("department_id", "name")
-      .skip((parsedPage - 1) * limit)
-      .limit(limit)
-      .sort({ joinDate: -1 });
+// Remove a team member from the team
+export const removeTeamMember = async (req, res, next) => {
+  try {
+    const { teamMemberId } = req.params;
 
-    res.status(200).json({
-      status: "Success",
-      page: parsedPage,
-      limit: limit,
-      totalPages: Math.ceil(totalMembers / limit),
-      totalMembers,
-      data: teamMembers,
-    });
+    const result = await teamMemberService.removeTeamMember(
+      teamMemberId,
+      req.user
+    );
+
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Replace a team member with another user (In the tasks)
+export const replaceTeamMember = async (req, res, next) => {
+  try {
+    const { teamMemberId } = req.params; // ID of the team member to be replaced
+    const { newUserId } = req.body; // ID of the new user to replace the old team member
+
+    const result = await teamMemberService.replaceTeamMember(
+      teamMemberId,
+      newUserId,
+      req.user
+    );
+
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get all team members of a team
+export const getProjectTeamMembers = async (req, res, next) => {
+  try {
+    const { teamId } = req.params;
+    const result = await teamMemberService.getProjectTeamMembers(
+      req.query, 
+      teamId, 
+      req.user
+    );
+    
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Get the team members under a supervisor
+export const getSupervisorTeamMembers = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const result = await teamMemberService.getSupervisorTeamMembers(
+      id,
+      req.user,
+      req.query
+    );
+
+    res.status(result.code).json(result);
   } catch (err) {
     next(err);
   }
