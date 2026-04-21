@@ -36,6 +36,7 @@ const projectSchema = mongoose.Schema(
     },
     dueDate: {
       type: Date,
+      required: true,
     },
     productOwnerId: {
       // The supervisor

@@ -27,3 +27,28 @@ export const isProjectInactive = (project) => {
     );
   }
 };
+
+// Helper function to check if the project is completed or on hold
+export const isProjectCompletedOrOnHold = async (project) => {
+  return ["Completed", "On Hold"].includes(project.status);
+};
+
+export const ensureCanUpdateProject = (project, userId) => {
+  if (project.status === "Archived") {
+    throw new AppError(
+      errors.ARCHIVED_PROJECT.message,
+      errors.ARCHIVED_PROJECT.code,
+      errors.ARCHIVED_PROJECT.errorCode,
+      errors.ARCHIVED_PROJECT.suggestion
+    );
+  }
+
+  if (project.productOwnerId.toString() !== userId.toString()) {
+    throw new AppError(
+      errors.UNAUTHORIZED_TO_UPDATE_PROJECT.message,
+      errors.UNAUTHORIZED_TO_UPDATE_PROJECT.code,
+      errors.UNAUTHORIZED_TO_UPDATE_PROJECT.errorCode,
+      errors.UNAUTHORIZED_TO_UPDATE_PROJECT.suggestion
+    );
+  }
+};

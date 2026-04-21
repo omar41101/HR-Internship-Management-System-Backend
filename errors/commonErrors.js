@@ -7,10 +7,10 @@ export const errors = {
     suggestion: "Please check the existence of the resource.",
   },
   USER_NOT_FOUND: {
-    message: "User not found",
+    message: "User(s) not found",
     code: 404,
     errorCode: "USER_NOT_FOUND",
-    suggestion: "Please check the existence of the user.",
+    suggestion: "Please check the existence of the user(s).",
   },
   NO_FILE_UPLOADED: {
     message: "No file uploaded",
