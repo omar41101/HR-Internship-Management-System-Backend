@@ -29,4 +29,22 @@ export const errors = {
     errorCode: "FETCH_FAILED",
     suggestion: "Please try again later.",
   },
+  NOT_A_PROJECT_DOCUMENT: {
+    message: "This document is not associated with any project",
+    code: 400,
+    errorCode: "NOT_A_PROJECT_DOCUMENT",
+    suggestion: "Please provide a valid project document.",
+  },
+  UNAUTHORIZED_ACCESS: {
+    message: "You are not authorized to access this document",
+    code: 403,
+    errorCode: "UNAUTHORIZED_ACCESS",
+    suggestion: "You are not allowed to access this document.",
+  },
+  UNAUTHORIZED_TO_DELETE_DOCUMENT: {
+    message: "You are not authorized to delete this document",
+    code: 403,
+    errorCode: "UNAUTHORIZED_TO_DELETE_DOCUMENT",
+    suggestion: "You are not allowed to delete this document.",
+  },
 };

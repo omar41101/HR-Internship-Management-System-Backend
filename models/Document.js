@@ -61,6 +61,12 @@ const documentSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    documentRequestId: {
+      // If it's a document uploaded to fulfill a document request, this field references that document request
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "DocumentRequest",
+      default: null,
+    },
   },
   {
     timestamps: true,
