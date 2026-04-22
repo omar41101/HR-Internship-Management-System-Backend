@@ -10,7 +10,10 @@ import AppError from "../utils/AppError.js";
 import { isProjectInactive } from "../validators/projectValidators.js";
 import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
 import { validateSprintFields } from "../validators/sprintValidators.js";
-import { checkSprintAndProjectExistence } from "../utils/sprintHelpers.js";
+import { 
+  checkSprintAndProjectExistence, 
+  upsertSprintReviewMeeting 
+} from "../utils/sprintHelpers.js";
 import { isEmpty } from "../validators/userValidators.js";
 
 // Get all sprints of a project
@@ -160,6 +163,9 @@ export const createSprint = async (req) => {
     status: "Planned",
   });
 
+  // Plan the sprint review meeting
+  await upsertSprintReviewMeeting(sprint, project);
+
   return {
     status: "Success",
     message: "Sprint created successfully!",
@@ -200,6 +206,9 @@ export const updateSprint = async (sprintId, updates, user) => {
 
   // Validate the input fields
   validateSprintFields(updates, project, { isUpdate: true });
+
+  // Detect if the sprint schedule is being changed to update the sprint review meeting accordingly
+  const isScheduleChanged = updates.startDate !== undefined || updates.durationInWeeks !== undefined;
 
   // Assign the updated fields to the sprint
   if (updates.name !== undefined) sprint.name = updates.name;
@@ -244,6 +253,10 @@ export const updateSprint = async (sprintId, updates, user) => {
 
   // Save the changes
   await sprint.save();
+
+  if (isScheduleChanged) {
+    await upsertSprintReviewMeeting(sprint, project);
+  }
 
   return {
     status: "Success",

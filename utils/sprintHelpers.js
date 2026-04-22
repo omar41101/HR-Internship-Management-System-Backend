@@ -1,5 +1,8 @@
 import Project from "../models/Project.js";
 import Sprint from "../models/Sprint.js";
+import Meeting from "../models/Meeting.js";
+import Team from "../models/Team.js";
+import TeamMember from "../models/TeamMember.js";
 import AppError from "./AppError.js";
 import { errors as projectErrors } from "../errors/projectErrors.js";
 import { errors as sprintErrors } from "../errors/sprintErrors.js";
@@ -29,4 +32,51 @@ export const checkSprintAndProjectExistence = async (sprintId) => {
   }
 
   return { sprint, project };
+};
+
+// Update or create the sprint review meeting based on the sprint schedule changes
+export const upsertSprintReviewMeeting = async (sprint, project) => {
+  // Get the project team
+  const team = await Team.findOne({ projectId: project._id });
+  if (!team) return null;
+
+  // Get all team members
+  const teamMembers = await TeamMember.find({ teamId: team._id });
+
+  // Build attendees list
+  const attendees = teamMembers.map((member) => ({
+    userId: member.userId,
+    status: "Pending",
+  }));
+
+  // Compute meeting date (end of sprint + 1 day)
+  const meetingDate = new Date(sprint.endDate + 1 * 24 * 60 * 60 * 1000);
+
+  // Upsert (create OR update existing meeting)
+  const meeting = await Meeting.findOneAndUpdate(
+    {
+      sprintId: sprint._id, 
+    },
+    {
+      title: `Sprint ${sprint.number} Review`,
+      description: `Sprint review meeting for "${sprint.name}"`,
+      projectId: project._id,
+      sprintId: sprint._id,
+      date: meetingDate,
+      startTime: "10:00",
+      endTime: "11:00",
+      locationType: "Online",
+      meetingLink: "https://discord.gg/m2yau6R4", // The DotJcoM Discord server link
+      address: null,
+      priority: "Medium",
+      reminder: 15,
+      attendees,
+    },
+    {
+      returnDocument: 'after',
+      upsert: true,
+    }
+  );
+
+  return meeting;
 };
