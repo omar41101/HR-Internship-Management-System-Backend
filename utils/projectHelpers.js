@@ -8,6 +8,10 @@ import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors as teamErrors } from "../errors/teamErrors.js";
 import AppError from "./AppError.js";
 import { isUserAvailable } from "../validators/userValidators.js";
+import {
+  incrementUsersProjectCount,
+  decrementUsersProjectCount,
+} from "./projectCountHelper.js";
 
 // Check if the user is a team member, product owner of the project or admins to allow access to the project resources
 export const isTeamMemberOrProductOwnerOrAdmin = async (
@@ -187,7 +191,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
     }
 
     // Check the scrum master is under the same supervisor as the product owner
-    if (scrumMaster.supervisor_id?.toString() !== productOwnerId.toString()) {
+    if (scrumMaster.supervisor_id.toString() !== productOwnerId.toString()) {
       throw new AppError(
         errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.message,
         errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.code,
@@ -404,9 +408,6 @@ export const applyProjectUpdates = async (project, data, isLocked) => {
 
     const newStatus = status;
 
-    const wasCounted = ["Planning", "Active"].includes(oldStatus);
-    const willBeCounted = ["Planning", "Active"].includes(newStatus);
-
     // On hold status case
     if (newStatus === "On Hold") {
       project.onHoldReason = onHoldReason || project.onHoldReason;
@@ -419,8 +420,8 @@ export const applyProjectUpdates = async (project, data, isLocked) => {
       project.completedAt = new Date();
     }
 
-    // Active/Planning status case
-    if (newStatus === "Active" || newStatus === "Planning") {
+    // Active status case
+    if (newStatus === "Active") {
       if (!project.scrumMasterId) {
         throw new AppError(
           errors.SCRUM_MASTER_REQUIRED.message,
@@ -439,23 +440,20 @@ export const applyProjectUpdates = async (project, data, isLocked) => {
         );
       }
     }
-
-    // projectCount update for the team members
-    if (wasCounted && !willBeCounted) {
-      await User.updateMany(
-        { _id: { $in: members.map(m => m.userId) } },
-        { $inc: { projectsCount: -1 } }
-      );
-    }
-
-    if (!wasCounted && willBeCounted) {
-      await User.updateMany(
-        { _id: { $in: members.map(m => m.userId) } },
-        { $inc: { projectsCount: 1 } }
-      );
-    }
-
-    project.countsTowardsWorkload = willBeCounted;
     project.status = newStatus;
+
+    // Get active team members
+    const activeMembers = members
+      .filter((m) => m.isActiveInProject !== false)
+      .map((m) => m.userId);
+
+    // Transition logic
+    if (oldStatus !== "Active" && newStatus === "Active") {
+      await incrementUsersProjectCount(activeMembers);
+    }
+
+    if (oldStatus === "Active" && newStatus !== "Active") {
+      await decrementUsersProjectCount(activeMembers);
+    }
   }
 };

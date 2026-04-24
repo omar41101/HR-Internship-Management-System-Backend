@@ -22,6 +22,7 @@ import {
   isProjectInactive,
   ensureCanUpdateProject,
 } from "../validators/projectValidators.js";
+import { decrementUsersProjectCount } from "../utils/projectCountHelper.js";
 
 // Get the list of the sectors (For the dropdown in the project filters)
 export const getAllSectors = async () => {
@@ -402,7 +403,8 @@ export const createProject = async (data, user) => {
       teamMembers = [],
     } = data;
 
-    const productOwnerId = user.id; // Take the product owner ID from the token
+    // Take the product owner ID from the token
+    const productOwnerId = user.id; 
 
     // Validate the input data
     await validateCreateProject(data, productOwnerId);
@@ -558,19 +560,21 @@ export const archiveProject = async (projectId, userId) => {
     );
   }
 
+  // Get active team members
+  const members = await TeamMember.find({ teamId: project.team_id });
+
+  const activeMembers = members
+    .filter(m => m.isActiveInProject !== false)
+    .map(m => m.userId);
+
+  // If project was Active, decrement the projectsCount of the active members
+  if (project.status === "Active") {
+    await decrementUsersProjectCount(activeMembers);
+  }
+
   // Archive project
   project.status = "Archived";
   project.onHoldReason = null;
-
-  // Look for the project team members + decrement their active projects count
-  const teamMembers = await TeamMember.find({ teamId: project.team_id });
-  await Promise.all(
-    teamMembers.map((m) =>
-      User.findByIdAndUpdate(m.userId, {
-        $inc: { projectsCount: -1 },
-      })
-    )
-  );
 
   await project.save();
 
@@ -619,16 +623,6 @@ export const restoreProject = async (projectId, userId) => {
   project.status = "Planning";
   await project.save();
 
-  // Look for the project team members + increment their active projects count
-  const teamMembers = await TeamMember.find({ teamId: project.team_id });
-  await Promise.all(
-    teamMembers.map((m) =>
-      User.findByIdAndUpdate(m.userId, {
-        $inc: { projectsCount: 1 },
-      })
-    )
-  );
-
   return {
     status: "Success",
     code: 200,
@@ -655,17 +649,17 @@ export const deleteProject = async (projectId) => {
       );
     }
 
-    const projectIdObj = project._id;
+    // Get active team members to update their projectsCount if the project is active
+    const members = await TeamMember.find({ teamId: project.team_id });
+    const activeMembers = members
+      .filter(m => m.isActiveInProject !== false)
+      .map(m => m.userId);
 
-    // Decrement the team members active projects count
-    const teamMembers = await TeamMember.find({ teamId: project.team_id }).session(session);
-    await Promise.all(
-      teamMembers.map((m) =>
-        User.findByIdAndUpdate(m.userId, {
-          $inc: { projectsCount: -1 },
-        }).session(session)
-      )
-    );
+    if (project.status === "Active") {
+      await decrementUsersProjectCount(activeMembers, session);
+    }
+
+    const projectIdObj = project._id;
 
     // Delete the project dependent data (Team, Team Members, Tasks, Sprints, Documents) before deleting the project itself
     await TeamMember.deleteMany({ teamId: project.team_id }).session(session);

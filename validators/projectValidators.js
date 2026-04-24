@@ -1,4 +1,5 @@
 import { errors } from "../errors/projectErrors.js";
+import AppError from "../utils/AppError.js";
 
 // Helper function to check if the project is archived, completed or on hold
 export const isProjectInactive = (project) => {

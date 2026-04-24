@@ -103,16 +103,29 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     role,
   });
 
-  // Increment the projectsCount of the user
-  const project = team.projectId;
-  const alreadyMember = await TeamMember.findOne({ teamId, userId });
+  // Increment the projectsCount of the new team member if the project is active
+  if (team.projectId.status === "Active") {
+    const updated = await User.findOneAndUpdate(
+      {
+        _id: userId,
+        projectsCount: { $lt: 2 },
+      },
+      {
+        $inc: { projectsCount: 1 },
+      },
+      { new: true },
+    );
 
-  if (!alreadyMember && project.countsTowardsWorkload) {
-    await User.findByIdAndUpdate(userId, {
-      $inc: { projectsCount: 1 },
-    });
+    if (!updated) {
+      throw new AppError(
+        commonErrors.USER_UNAVAILABLE.message,
+        commonErrors.USER_UNAVAILABLE.code,
+        commonErrors.USER_UNAVAILABLE.errorCode,
+        "User already has 2 active projects and therefore is not available to be added to another Active project.",
+      );
+    }
   }
-  
+
   return {
     status: "Success",
     code: 201,
@@ -121,7 +134,7 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
   };
 };
 
-// Update a team member's role in the team
+// Update a team member's role + active in project status in the team
 export const updateTeamMember = async (
   teamMemberId,
   { role, isActive },
@@ -217,7 +230,34 @@ export const updateTeamMember = async (
       }
     }
 
+    const wasActive = member.isActiveInProject !== false;
     member.isActiveInProject = isActive;
+
+    // Update the projectsCount of the user if the project is active
+    if (project.status === "Active") {
+      if (wasActive && isActive === false) {
+        await User.updateOne(
+          { _id: member.userId, projectsCount: { $gt: 0 } },
+          { $inc: { projectsCount: -1 } },
+        );
+      }
+
+      if (!wasActive && isActive === true) {
+        const updated = await User.findOneAndUpdate(
+          { _id: member.userId, projectsCount: { $lt: 2 } },
+          { $inc: { projectsCount: 1 } },
+        );
+
+        if (!updated) {
+          throw new AppError(
+            commonErrors.USER_UNAVAILABLE.message,
+            commonErrors.USER_UNAVAILABLE.code,
+            commonErrors.USER_UNAVAILABLE.errorCode,
+            "User already has 2 active projects",
+          );
+        }
+      }
+    }
   }
 
   await member.save();
@@ -272,18 +312,19 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
     );
   }
 
-  // Decrement the projectsCount of the user
-  if (project.countsTowardsWorkload) {
-    await User.findByIdAndUpdate(member.userId, {
-      $inc: { projectsCount: -1 },
-    });
-  } 
-
   // Unassign the tasks from the removed team member
   await Task.updateMany(
     { assignedTo: member.userId, projectId: project._id },
     { $set: { assignedTo: null } },
   );
+
+  // Decrement the projectsCount of the user if the project is active
+  if (project.status === "Active") {
+    await User.updateOne(
+      { _id: member.userId, projectsCount: { $gt: 0 } },
+      { $inc: { projectsCount: -1 } }
+    );
+  }
 
   await member.deleteOne();
 
@@ -292,7 +333,7 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
     code: 200,
     message: "Team member removed successfully",
   };
-};  
+};
 
 // Replace a team member with another user in the team
 export const replaceTeamMember = async (
@@ -327,7 +368,10 @@ export const replaceTeamMember = async (
 
   // Check if the new user exists and has as a supervisor (supervisor_id) = the project product owner
   const newUser = await User.findById(newUserId);
-  if (!newUser || newUser.supervisor_id?.toString() !== project.productOwnerId.toString()) {
+  if (
+    !newUser ||
+    newUser.supervisor_id?.toString() !== project.productOwnerId.toString()
+  ) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
@@ -367,6 +411,30 @@ export const replaceTeamMember = async (
     role: oldMember.role,
   });
 
+  // Update the projectsCount of the old and new users if the project is active
+  if (project.status === "Active") {
+    // increment the new user's projectsCount
+    const updated = await User.findOneAndUpdate(
+      { _id: newUserId, projectsCount: { $lt: 2 } },
+      { $inc: { projectsCount: 1 } }
+    );
+
+    if (!updated) {
+      throw new AppError(
+        commonErrors.USER_UNAVAILABLE.message,
+        commonErrors.USER_UNAVAILABLE.code,
+        commonErrors.USER_UNAVAILABLE.errorCode,
+        "New user already has 2 active projects"
+      );
+    }
+
+    // decrement the old user's projectsCount
+    await User.updateOne(
+      { _id: oldMember.userId, projectsCount: { $gt: 0 } },
+      { $inc: { projectsCount: -1 } }
+    );
+  }
+
   // Transfer the tasks
   await Task.updateMany(
     { assignedTo: oldMember.userId, projectId: project._id },
@@ -376,16 +444,6 @@ export const replaceTeamMember = async (
   // Deactivate the old team member
   oldMember.isActiveInProject = false;
   await oldMember.save();
-
-  if (project.countsTowardsWorkload) {
-    await User.findByIdAndUpdate(newUserId, {
-      $inc: { projectsCount: 1 },
-    });
-
-    await User.findByIdAndUpdate(oldMember.userId, {
-      $inc: { projectsCount: -1 },
-    });
-  }
 
   return {
     status: "Success",

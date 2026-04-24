@@ -57,11 +57,6 @@ const projectSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Team",
     },
-    countsTowardsWorkload: {
-      // Whether this project counts towards the team members workload limit of 2 active projects
-      type: Boolean,
-      default: true,
-    },
   },
   {
     timestamps: true,

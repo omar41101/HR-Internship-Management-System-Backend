@@ -248,5 +248,5 @@ export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber
 
 // Check if a user is available to take on a new project
 export const isUserAvailable = (user) => {
-  return user.activeProjectsCount < 2;
+  return user.projectsCount < 2;
 };
