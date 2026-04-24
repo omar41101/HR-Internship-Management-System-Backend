@@ -12,6 +12,12 @@ export const errors = {
     errorCode: "USER_NOT_FOUND",
     suggestion: "Please check the existence of the user(s).",
   },
+  USER_UNAVAILABLE: {
+    message: "User(s) unavailable to take on a new project",
+    code: 400,
+    errorCode: "USER_UNAVAILABLE",
+    suggestion: "User(s) already involved in 2 active projects.",
+  },
   NO_FILE_UPLOADED: {
     message: "No file uploaded",
     code: 400,

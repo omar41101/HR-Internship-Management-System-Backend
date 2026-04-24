@@ -10,7 +10,6 @@ import { errors as projectErrors } from "../errors/projectErrors.js";
 import { errors as documentErrors } from "../errors/documentErrors.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
 import crypto from "crypto";
-import errors from "../errors/documentErrors.js";
 import AppError from "../utils/AppError.js";
 import {
   uploadDocumentCore,

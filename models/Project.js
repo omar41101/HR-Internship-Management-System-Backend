@@ -38,6 +38,10 @@ const projectSchema = mongoose.Schema(
       type: Date,
       required: true,
     },
+    completedAt: {
+      type: Date,
+      default: null,
+    },
     productOwnerId: {
       // The supervisor
       type: mongoose.Schema.Types.ObjectId,
@@ -52,6 +56,11 @@ const projectSchema = mongoose.Schema(
     team_id: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Team",
+    },
+    countsTowardsWorkload: {
+      // Whether this project counts towards the team members workload limit of 2 active projects
+      type: Boolean,
+      default: true,
     },
   },
   {

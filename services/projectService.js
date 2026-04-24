@@ -6,31 +6,24 @@ import Team from "../models/Team.js";
 import TeamMember from "../models/TeamMember.js";
 import User from "../models/User.js";
 import Document from "../models/Document.js";
+import { errors } from "../errors/projectErrors.js";
 import AppError from "../utils/AppError.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
-import {
-  getOne,
-  getAll,
-  createOne,
-  updateOne,
-  deleteOne,
-} from "./handlersFactory.js";
 import { 
+  isTeamMemberOrProductOwnerOrAdmin,
   buildProjectMatchFilter,  
   buildProjectAccessMatch, 
   validateCreateProject, 
   validateTeamMembers,
   applyProjectUpdates,
-  validateActiveStateIfNeeded,
 } from "../utils/projectHelpers.js";
 import { 
   isProjectCompletedOrOnHold, 
   isProjectInactive,
   ensureCanUpdateProject,
 } from "../validators/projectValidators.js";
-import { errors } from "../errors/projectErrors.js";
 
-// Get the list of the sectors
+// Get the list of the sectors (For the dropdown in the project filters)
 export const getAllSectors = async () => {
   const sectors = Project.schema.path("sector").enumValues;
 
@@ -42,7 +35,7 @@ export const getAllSectors = async () => {
   };
 };
 
-// Get all project statuses except "Archived"
+// Get all project statuses except "Archived" (For the dropdown in the project filters, "Archived" is in a different section in the frontend)
 export const getAllStatuses = async () => {
   const statuses = Project.schema
     .path("status")
@@ -89,7 +82,7 @@ export const getAllProjects = async (req) => {
     archived,
   });
 
-  // Aggregate the projects
+  // Aggregate the project info with the related data (Product owner, Team members, Current sprint, Tasks stats).
   const projects = await Project.aggregate([
     { $match: match },
 
@@ -252,8 +245,8 @@ export const getAllProjects = async (req) => {
     data: projects,
     pagination: {
       currentPage: parsedPage,
-      limitPerPage: limit,
       totalPages: Math.ceil(totalProjects / limit),
+      limitPerPage: limit,
       totalCount: totalProjects,
     },
   };
@@ -274,11 +267,22 @@ export const getProjectById = async (projectId, user) => {
     );
   }
 
-  // Build match filter
+  // Authorization filter
   const match = await buildProjectAccessMatch(projectId, userId, role);
 
   const project = await Project.aggregate([
     { $match: match },
+
+    // Product owner
+    {
+      $lookup: {
+        from: "users",
+        localField: "productOwnerId",
+        foreignField: "_id",
+        as: "productOwner",
+      },
+    },
+    { $unwind: { path: "$productOwner", preserveNullAndEmptyArrays: true } },
 
     // Team
     {
@@ -309,17 +313,7 @@ export const getProjectById = async (projectId, user) => {
       },
     },
 
-    // Sprints
-    {
-      $lookup: {
-        from: "sprints",
-        localField: "_id",
-        foreignField: "projectId",
-        as: "sprints",
-      },
-    },
-
-    // Tasks
+    // Related data counts (Tasks, Sprints, Documents)
     {
       $lookup: {
         from: "tasks",
@@ -328,8 +322,14 @@ export const getProjectById = async (projectId, user) => {
         as: "tasks",
       },
     },
-
-    // Documents
+    {
+      $lookup: {
+        from: "sprints",
+        localField: "_id",
+        foreignField: "projectId",
+        as: "sprints",
+      },
+    },
     {
       $lookup: {
         from: "documents",
@@ -338,21 +338,33 @@ export const getProjectById = async (projectId, user) => {
         as: "documents",
       },
     },
-
-    // Product owner
     {
-      $lookup: {
-        from: "users",
-        localField: "productOwnerId",
-        foreignField: "_id",
-        as: "productOwnerInfo",
+      $addFields: {
+        tasksCount: { $size: "$tasks" },
+        sprintsCount: { $size: "$sprints" },
+        documentsCount: { $size: "$documents" },
       },
     },
+
     {
-      $unwind: {
-        path: "$productOwnerInfo",
-        preserveNullAndEmptyArrays: true,
+      $project: {
+        tasks: 0,
+        sprints: 0,
+        documents: 0,
       },
+    },
+
+    // Clean sensitive fields
+    {
+      $unset: [
+        "__v",
+        "team.__v",
+        "teamMembers.__v",
+        "teamMembersInfo.__v",
+        "productOwner.__v",
+        "productOwner.faceDescriptors",
+        "teamMembersInfo.faceDescriptors",
+      ],
     },
   ]);
 
@@ -367,8 +379,8 @@ export const getProjectById = async (projectId, user) => {
 
   return {
     status: "Success",
-    message: "Project retrieved successfully!",
     code: 200,
+    message: "Project retrieved successfully!",
     data: project[0],
   };
 };
@@ -414,7 +426,7 @@ export const createProject = async (data, user) => {
 
     const createdProject = project[0];
 
-    // Create the project team
+    // Create the project team automatically
     const team = await Team.create(
       [
         {
@@ -495,13 +507,13 @@ export const updateProject = async (projectId, data, userId) => {
     );
   }
 
+  // Ensure that the project is not archived + the product owner of the project is the one making the update request (Not any product owner)
   ensureCanUpdateProject(project, userId);
 
+  // Check if the project is completed or on hold
   const isLocked = isProjectCompletedOrOnHold(project);
 
-  applyProjectUpdates(project, data, isLocked);
-
-  await validateActiveStateIfNeeded(project, data.status);
+  await applyProjectUpdates(project, data, isLocked);
 
   await project.save();
 
@@ -529,10 +541,10 @@ export const archiveProject = async (projectId, userId) => {
   // Access control: Only the product owner of the project can archive it, not any product owner
   if (project.productOwnerId.toString() !== userId.toString()) {
     throw new AppError(
-      errors.UNAUTHORIZED_TO_ARCHIVE_PROJECT.message,
-      errors.UNAUTHORIZED_TO_ARCHIVE_PROJECT.code,
-      errors.UNAUTHORIZED_TO_ARCHIVE_PROJECT.errorCode,
-      errors.UNAUTHORIZED_TO_ARCHIVE_PROJECT.suggestion
+      errors.PROJECT_FORBIDDEN_ACTION.message,
+      errors.PROJECT_FORBIDDEN_ACTION.code,
+      errors.PROJECT_FORBIDDEN_ACTION.errorCode,
+      errors.PROJECT_FORBIDDEN_ACTION.suggestion
     );
   }
 
@@ -549,6 +561,16 @@ export const archiveProject = async (projectId, userId) => {
   // Archive project
   project.status = "Archived";
   project.onHoldReason = null;
+
+  // Look for the project team members + decrement their active projects count
+  const teamMembers = await TeamMember.find({ teamId: project.team_id });
+  await Promise.all(
+    teamMembers.map((m) =>
+      User.findByIdAndUpdate(m.userId, {
+        $inc: { projectsCount: -1 },
+      })
+    )
+  );
 
   await project.save();
 
@@ -576,10 +598,10 @@ export const restoreProject = async (projectId, userId) => {
   // Access control: Only the product owner of the project can restore it, not any product owner
   if (project.productOwnerId.toString() !== userId.toString()) {
     throw new AppError(
-      errors.UNAUTHORIZED_TO_RESTORE_PROJECT.message,
-      errors.UNAUTHORIZED_TO_RESTORE_PROJECT.code,
-      errors.UNAUTHORIZED_TO_RESTORE_PROJECT.errorCode,
-      errors.UNAUTHORIZED_TO_RESTORE_PROJECT.suggestion
+      errors.PROJECT_FORBIDDEN_ACTION.message,
+      errors.PROJECT_FORBIDDEN_ACTION.code,
+      errors.PROJECT_FORBIDDEN_ACTION.errorCode,
+      errors.PROJECT_FORBIDDEN_ACTION.suggestion
     );
   }
 
@@ -596,6 +618,16 @@ export const restoreProject = async (projectId, userId) => {
   // Restore project
   project.status = "Planning";
   await project.save();
+
+  // Look for the project team members + increment their active projects count
+  const teamMembers = await TeamMember.find({ teamId: project.team_id });
+  await Promise.all(
+    teamMembers.map((m) =>
+      User.findByIdAndUpdate(m.userId, {
+        $inc: { projectsCount: 1 },
+      })
+    )
+  );
 
   return {
     status: "Success",
@@ -624,6 +656,16 @@ export const deleteProject = async (projectId) => {
     }
 
     const projectIdObj = project._id;
+
+    // Decrement the team members active projects count
+    const teamMembers = await TeamMember.find({ teamId: project.team_id }).session(session);
+    await Promise.all(
+      teamMembers.map((m) =>
+        User.findByIdAndUpdate(m.userId, {
+          $inc: { projectsCount: -1 },
+        }).session(session)
+      )
+    );
 
     // Delete the project dependent data (Team, Team Members, Tasks, Sprints, Documents) before deleting the project itself
     await TeamMember.deleteMany({ teamId: project.team_id }).session(session);

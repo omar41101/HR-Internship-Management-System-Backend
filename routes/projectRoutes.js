@@ -9,6 +9,7 @@ import {
     archiveProject,
     restoreProject,
     deleteProject,
+    getProjectOverview,
 } from "../controllers/projectController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -21,8 +22,11 @@ router.get("/project-sectors", authenticate, getAllSectors);
 // Route to get all statuses
 router.get("/project-statuses", authenticate, getAllStatuses);
 
-// Route to get all projects with pagination (12 per page) + search + filters
+// Route to get all projects with pagination (12 per page)
 router.get("/projects", authenticate, getAllProjects);
+
+// Route to get project overview (Stats about sprints, tasks, velocity, etc.)
+router.get("/projects/:id/overview", authenticate, getProjectOverview);
 
 // Route to get a specific project by ID
 router.get("/projects/:id", authenticate, getProjectById);

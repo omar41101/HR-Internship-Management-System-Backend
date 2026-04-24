@@ -9,6 +9,7 @@ import { errors as tokenErrors } from "../errors/middlewareTokenErrors.js";
 import AppError from "../utils/AppError.js";
 import { getAll } from "./handlersFactory.js";
 import { assertTeamAccess } from "../utils/teamHelpers.js";
+import { isUserAvailable } from "../validators/userValidators.js";
 
 // Get the list of team roles
 export const getTeamRoles = async () => {
@@ -85,6 +86,16 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     }
   }
 
+  // Check if the new team member is available to take on a new project
+  if (!isUserAvailable(teamMember)) {
+    throw new AppError(
+      commonErrors.USER_UNAVAILABLE.message,
+      commonErrors.USER_UNAVAILABLE.code,
+      commonErrors.USER_UNAVAILABLE.errorCode,
+      commonErrors.USER_UNAVAILABLE.suggestion,
+    );
+  }
+
   // Create the new team member
   const newMember = await TeamMember.create({
     teamId,
@@ -92,6 +103,16 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     role,
   });
 
+  // Increment the projectsCount of the user
+  const project = team.projectId;
+  const alreadyMember = await TeamMember.findOne({ teamId, userId });
+
+  if (!alreadyMember && project.countsTowardsWorkload) {
+    await User.findByIdAndUpdate(userId, {
+      $inc: { projectsCount: 1 },
+    });
+  }
+  
   return {
     status: "Success",
     code: 201,
@@ -251,6 +272,13 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
     );
   }
 
+  // Decrement the projectsCount of the user
+  if (project.countsTowardsWorkload) {
+    await User.findByIdAndUpdate(member.userId, {
+      $inc: { projectsCount: -1 },
+    });
+  } 
+
   // Unassign the tasks from the removed team member
   await Task.updateMany(
     { assignedTo: member.userId, projectId: project._id },
@@ -264,7 +292,7 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
     code: 200,
     message: "Team member removed successfully",
   };
-};
+};  
 
 // Replace a team member with another user in the team
 export const replaceTeamMember = async (
@@ -299,7 +327,7 @@ export const replaceTeamMember = async (
 
   // Check if the new user exists and has as a supervisor (supervisor_id) = the project product owner
   const newUser = await User.findById(newUserId);
-  if (!newUser || newUser.supervisor_id !== project.productOwnerId.toString()) {
+  if (!newUser || newUser.supervisor_id?.toString() !== project.productOwnerId.toString()) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
@@ -322,6 +350,16 @@ export const replaceTeamMember = async (
     );
   }
 
+  // Check if the new user is available to take on a new project
+  if (!isUserAvailable(newUser)) {
+    throw new AppError(
+      commonErrors.USER_UNAVAILABLE.message,
+      commonErrors.USER_UNAVAILABLE.code,
+      commonErrors.USER_UNAVAILABLE.errorCode,
+      commonErrors.USER_UNAVAILABLE.suggestion,
+    );
+  }
+
   // Create new member
   const newMember = await TeamMember.create({
     teamId: oldMember.teamId._id,
@@ -338,6 +376,16 @@ export const replaceTeamMember = async (
   // Deactivate the old team member
   oldMember.isActiveInProject = false;
   await oldMember.save();
+
+  if (project.countsTowardsWorkload) {
+    await User.findByIdAndUpdate(newUserId, {
+      $inc: { projectsCount: 1 },
+    });
+
+    await User.findByIdAndUpdate(oldMember.userId, {
+      $inc: { projectsCount: -1 },
+    });
+  }
 
   return {
     status: "Success",

@@ -127,10 +127,12 @@ const userSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
-    isAvailable: {
-      // Availability to take more projects
-      type: Boolean,
-      default: true,
+    projectsCount: {
+      // Number of active projects the user is currently involved in      
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 2,
     },
     role_id: {
       type: mongoose.Schema.Types.ObjectId,

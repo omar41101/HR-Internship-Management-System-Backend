@@ -38,7 +38,6 @@ import documentRoutes from "./routes/documentRoutes.js";
 import specialShiftRoutes from "./routes/specialShiftRoutes.js";
 import leaveTypeRoutes from "./routes/leaveTypeRoutes.js";
 import leaveRequestRoutes from "./routes/leaveRequestRoutes.js";
-import dashboardRoutes from "./routes/dashboardRoutes.js";
 import projectRoutes from "./routes/projectRoutes.js";
 import teamMemberRoutes from "./routes/teamMemberRoutes.js";
 import taskRoutes from "./routes/taskRoutes.js";
@@ -46,6 +45,7 @@ import sprintRoutes from "./routes/sprintRoutes.js";
 import teamRoutes from "./routes/teamRoutes.js";
 import meetingRoutes from "./routes/meetingRoutes.js";
 import documentRequestRoutes from "./routes/documentRequestRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -89,7 +89,6 @@ app.use('/api', documentRoutes);
 app.use('/api', specialShiftRoutes);
 app.use('/api', leaveTypeRoutes);
 app.use('/api', leaveRequestRoutes);
-app.use('/api/dashboard', dashboardRoutes);
 app.use('/api', projectRoutes);
 app.use('/api', teamMemberRoutes);
 app.use('/api', taskRoutes);
@@ -97,6 +96,7 @@ app.use('/api', sprintRoutes);
 app.use('/api', teamRoutes);
 app.use('/api', meetingRoutes);
 app.use('/api', documentRequestRoutes);
+app.use('/api', dashboardRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

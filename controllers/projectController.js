@@ -1,4 +1,5 @@
 import * as projectService from "../services/projectService.js";
+import * as projectAnalyticsService from "../services/analytics/projectAnalyticsService.js";
 
 // Get all the sectors in a project
 export const getAllSectors = async (req, res, next) => {
@@ -28,6 +29,17 @@ export const getAllProjects = async (req, res, next) => {
     const result = await projectService.getAllProjects(req);
     res.status(result.code).json(result);
   } catch (err) {
+    next(err);
+  }
+};
+
+// Get project overview (Stats about sprints, tasks, velocity, etc.)
+export const getProjectOverview = async (req, res, next) => {
+  try {
+    const result = await projectAnalyticsService.getProjectOverview(req.params.id, req.user);
+    res.status(result.code).json(result);
+  }
+  catch (err) {
     next(err);
   }
 };

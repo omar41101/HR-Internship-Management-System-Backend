@@ -1,27 +1,19 @@
 import mongoose from "mongoose";
-import { errors } from "../errors/projectErrors.js";
-import { errors as commonErrors } from "../errors/commonErrors.js";
-import AppError from "./AppError.js";
 import Team from "../models/Team.js";
 import TeamMember from "../models/TeamMember.js";
 import User from "../models/User.js";
 import Project from "../models/Project.js";
-
-// Helper function to throw a locked error when trying to update locked fields in the project
-export const throwLocked = () => {
-  throw new AppError(
-    errors.LOCKED_PROJECT.message,
-    errors.LOCKED_PROJECT.code,
-    errors.LOCKED_PROJECT.errorCode,
-    errors.LOCKED_PROJECT.suggestion
-  );
-};
+import { errors } from "../errors/projectErrors.js";
+import { errors as commonErrors } from "../errors/commonErrors.js";
+import { errors as teamErrors } from "../errors/teamErrors.js";
+import AppError from "./AppError.js";
+import { isUserAvailable } from "../validators/userValidators.js";
 
 // Check if the user is a team member, product owner of the project or admins to allow access to the project resources
 export const isTeamMemberOrProductOwnerOrAdmin = async (
   project,
   user,
-  errorMessage = errors.UNAUTHORIZED_TO_ACCESS_PROJECT
+  errorMessage = errors.UNAUTHORIZED_TO_ACCESS_PROJECT,
 ) => {
   const userId = user.id;
 
@@ -43,12 +35,12 @@ export const isTeamMemberOrProductOwnerOrAdmin = async (
       errorMessage.message,
       errorMessage.code,
       errorMessage.errorCode,
-      errorMessage.suggestion
+      errorMessage.suggestion,
     );
   }
 };
 
-// Build the match filter
+// Build the match filter for the getAllProjects
 export const buildProjectMatchFilter = async ({
   userId,
   role,
@@ -63,7 +55,7 @@ export const buildProjectMatchFilter = async ({
   const match = {};
 
   /*
-    Authorization Access: Admins can access all projects, supervisors can access projects they own, 
+    Authorization Access: Admins can access all projects, supervisors can access projects they are product owners of, 
     and employees/interns can access projects where they are team members
   */
   if (role !== "Admin") {
@@ -124,7 +116,7 @@ export const buildProjectAccessMatch = async (projectId, userId, role) => {
         errors.UNAUTHORIZED_TO_ACCESS_PROJECT.message,
         errors.UNAUTHORIZED_TO_ACCESS_PROJECT.code,
         errors.UNAUTHORIZED_TO_ACCESS_PROJECT.errorCode,
-        errors.UNAUTHORIZED_TO_ACCESS_PROJECT.suggestion
+        errors.UNAUTHORIZED_TO_ACCESS_PROJECT.suggestion,
       );
     }
 
@@ -146,7 +138,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
       errors.MISSING_REQUIRED_FIELDS.message,
       errors.MISSING_REQUIRED_FIELDS.code,
       errors.MISSING_REQUIRED_FIELDS.errorCode,
-      errors.MISSING_REQUIRED_FIELDS.suggestion
+      errors.MISSING_REQUIRED_FIELDS.suggestion,
     );
   }
 
@@ -157,7 +149,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
       errors.PROJECT_EXISTS.message,
       errors.PROJECT_EXISTS.code,
       errors.PROJECT_EXISTS.errorCode,
-      errors.PROJECT_EXISTS.suggestion
+      errors.PROJECT_EXISTS.suggestion,
     );
   }
 
@@ -168,7 +160,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
       errors.INVALID_SECTOR.message,
       errors.INVALID_SECTOR.code,
       errors.INVALID_SECTOR.errorCode,
-      errors.INVALID_SECTOR.suggestion
+      errors.INVALID_SECTOR.suggestion,
     );
   }
 
@@ -178,7 +170,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
       errors.INVALID_DUE_DATE.message,
       errors.INVALID_DUE_DATE.code,
       errors.INVALID_DUE_DATE.errorCode,
-      errors.INVALID_DUE_DATE.suggestion
+      errors.INVALID_DUE_DATE.suggestion,
     );
   }
 
@@ -190,7 +182,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
         commonErrors.USER_NOT_FOUND.message,
         commonErrors.USER_NOT_FOUND.code,
         commonErrors.USER_NOT_FOUND.errorCode,
-        commonErrors.USER_NOT_FOUND.suggestion
+        commonErrors.USER_NOT_FOUND.suggestion,
       );
     }
 
@@ -200,17 +192,27 @@ export const validateCreateProject = async (data, productOwnerId) => {
         errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.message,
         errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.code,
         errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.errorCode,
-        errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.suggestion
+        errors.UNAUTHORIZED_TO_ASSIGN_SCRUM_MASTER.suggestion,
       );
     }
 
     // Check the scrum master is not an intern
-    if (scrumMaster.role_id?.name === "Intern") {
+    if (scrumMaster.role_id.name === "Intern") {
       throw new AppError(
         errors.INVALID_SCRUM_MASTER.message,
         errors.INVALID_SCRUM_MASTER.code,
         errors.INVALID_SCRUM_MASTER.errorCode,
-        errors.INVALID_SCRUM_MASTER.suggestion
+        errors.INVALID_SCRUM_MASTER.suggestion,
+      );
+    }
+
+    // Check the scrum master is available to take on a new project
+    if (!isUserAvailable(scrumMaster)) {
+      throw new AppError(
+        commonErrors.USER_UNAVAILABLE.message,
+        commonErrors.USER_UNAVAILABLE.code,
+        commonErrors.USER_UNAVAILABLE.errorCode,
+        commonErrors.USER_UNAVAILABLE.suggestion,
       );
     }
   }
@@ -220,7 +222,7 @@ export const validateCreateProject = async (data, productOwnerId) => {
 export const validateTeamMembers = async (
   membersToInsert,
   teamMembers,
-  productOwnerId
+  productOwnerId,
 ) => {
   // Get the user IDs from the members to be inserted
   const userIds = membersToInsert.map((m) => m.userId.toString());
@@ -232,24 +234,24 @@ export const validateTeamMembers = async (
       errors.DUPLICATE_USERS.message,
       errors.DUPLICATE_USERS.code,
       errors.DUPLICATE_USERS.errorCode,
-      errors.DUPLICATE_USERS.suggestion
+      errors.DUPLICATE_USERS.suggestion,
     );
   }
 
-  // Check the existence of the users 
+  // Check the existence of the users
   const users = await User.find({ _id: { $in: uniqueUserIds } });
   if (users.length !== uniqueUserIds.length) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
   // Check if the users are under the same supervisor as the product owner
   const invalidUsers = users.filter(
-    (u) => u.supervisor_id?.toString() !== productOwnerId.toString()
+    (u) => u.supervisor_id?.toString() !== productOwnerId.toString(),
   );
 
   if (invalidUsers.length > 0) {
@@ -257,26 +259,61 @@ export const validateTeamMembers = async (
       errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.message,
       errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.code,
       errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.errorCode,
-      errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.suggestion
+      errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.suggestion,
+    );
+  }
+
+  // Check if the users are available to take on a new project
+  const unavailableUsers = users.filter((u) => !isUserAvailable(u));
+  if (unavailableUsers.length > 0) {
+    throw new AppError(
+      commonErrors.USER_UNAVAILABLE.message,
+      commonErrors.USER_UNAVAILABLE.code,
+      commonErrors.USER_UNAVAILABLE.errorCode,
+      commonErrors.USER_UNAVAILABLE.suggestion,
     );
   }
 
   // Ensure that there are no more than one scrum master in the team members to be inserted
   const scrumMastersInTeam = teamMembers.filter(
-    (m) => m.role === "Scrum Master"
+    (m) => m.role === "Scrum Master",
   );
   if (scrumMastersInTeam.length > 0) {
     throw new AppError(
-      errors.MORE_THAN_ONE_SCRUM_MASTER.message,
-      errors.MORE_THAN_ONE_SCRUM_MASTER.code,
-      errors.MORE_THAN_ONE_SCRUM_MASTER.errorCode,
-      errors.MORE_THAN_ONE_SCRUM_MASTER.suggestion
+      errors.INVALID_SCRUM_MASTER.message,
+      errors.INVALID_SCRUM_MASTER.code,
+      errors.INVALID_SCRUM_MASTER.errorCode,
+      errors.INVALID_SCRUM_MASTER.suggestion,
+    );
+  }
+
+  // Check the validity of the roles assigned to the team members to be inserted
+  const allowedRoles = await TeamMember.schema.path("role").enumValues;
+  const invalidRoleMembers = membersToInsert.filter(
+    (m) => !allowedRoles.includes(m.role),
+  );
+  if (invalidRoleMembers.length > 0) {
+    throw new AppError(
+      teamErrors.INVALID_ROLE.message,
+      teamErrors.INVALID_ROLE.code,
+      teamErrors.INVALID_ROLE.errorCode,
+      teamErrors.INVALID_ROLE.suggestion,
     );
   }
 };
 
+// Helper function to throw a locked error when trying to update locked fields in the project
+export const throwLocked = () => {
+  throw new AppError(
+    errors.PROJECT_STATE_LOCKED.message,
+    errors.PROJECT_STATE_LOCKED.code,
+    errors.PROJECT_STATE_LOCKED.errorCode,
+    errors.PROJECT_STATE_LOCKED.suggestion,
+  );
+};
+
 // Apply the updates to the project object based on the input data
-export const applyProjectUpdates = (project, data, isLocked) => {
+export const applyProjectUpdates = async (project, data, isLocked) => {
   const {
     name,
     sector,
@@ -287,97 +324,138 @@ export const applyProjectUpdates = (project, data, isLocked) => {
     onHoldReason,
   } = data;
 
-  // Update the project name 
-  if (name && name !== project.name) {
-    if (isLocked) throwLocked();
-
-    project.name = name;
-  }
-
-  // Update the sector name
-  if (sector) {
-    if (isLocked) throwLocked();
-
-    const allowed = Project.schema.path("sector").enumValues;
-    if (!allowed.includes(sector)) throwInvalidSector();
-
-    project.sector = sector;
-  }
-
-  // Update the project description
-  if (description !== undefined) {
-    if (isLocked) throwLocked();
-    project.description = description;
-  }
-
-  // Update the project start and due dates
-  if (startDate || dueDate) {
-    if (isLocked) throwLocked();
-
-    const newStart = startDate ? new Date(startDate) : project.startDate;
-    const newDue = dueDate ? new Date(dueDate) : project.dueDate;
-
-    if (newDue < newStart) throwInvalidDates();
-
-    project.startDate = newStart;
-    project.dueDate = newDue;
-  }
-
-  // Update the project status
-  if (status) {
-    const allowedStatuses = Project.schema.path("status").enumValues;
-    if (!allowedStatuses.includes(status)) throwInvalidStatus();
-
-    project.status = status;
-
-    if (status === "On Hold") {
-      if (onHoldReason) project.onHoldReason = onHoldReason;
-    } else if (onHoldReason) {
-      throw new AppError(
-        errors.ON_HOLD_REASON_NOT_ALLOWED.message,
-        errors.ON_HOLD_REASON_NOT_ALLOWED.code,
-        errors.ON_HOLD_REASON_NOT_ALLOWED.errorCode,
-        errors.ON_HOLD_REASON_NOT_ALLOWED.suggestion
-      );
-    }
-  }
-};
-
-// Helper function to deal with the "Active" status update of a project
-export const validateActiveStateIfNeeded = async (project, status) => {
-  if (status !== "Active") return;
-
-  // Check the existence of the project team
+  // Check the team existence
   const team = await Team.findById(project.team_id);
   if (!team) {
     throw new AppError(
       errors.TEAM_NOT_FOUND.message,
       errors.TEAM_NOT_FOUND.code,
       errors.TEAM_NOT_FOUND.errorCode,
-      errors.TEAM_NOT_FOUND.suggestion
+      errors.TEAM_NOT_FOUND.suggestion,
     );
   }
 
-  // Count the number of team members in the project team
-  const membersCount = await TeamMember.countDocuments({
-    teamId: team._id,
-  });
+  // Get the team members
+  const members = await TeamMember.find({ teamId: team._id });
 
-  if (!project.scrumMasterId) {
-    throw new AppError(
-      errors.SCRUM_MASTER_REQUIRED.message,
-      errors.SCRUM_MASTER_REQUIRED.code,
-      errors.SCRUM_MASTER_REQUIRED.errorCode,
-      errors.SCRUM_MASTER_REQUIRED.suggestion
-    );
+  // Project name update
+  if (name && name !== project.name) {
+    if (isLocked) throwLocked();
+    project.name = name;
   }
 
-  if (membersCount < 1) {
-    throw new AppError(
-      errors.TEAM_MEMBERS_REQUIRED.message,
-      errors.TEAM_MEMBERS_REQUIRED.code,
-      errors.TEAM_MEMBERS_REQUIRED.errorCode,
-      errors.TEAM_MEMBERS_REQUIRED.suggestion
-    );
+  // Project sector update
+  if (sector) {
+    if (isLocked) throwLocked();
+
+    const allowed = Project.schema.path("sector").enumValues;
+    if (!allowed.includes(sector)) {
+      throw new AppError(
+        errors.INVALID_SECTOR.message,
+        errors.INVALID_SECTOR.code,
+        errors.INVALID_SECTOR.errorCode,
+        errors.INVALID_SECTOR.suggestion,
+      );
+    }
+
+    project.sector = sector;
+  }
+
+  // Project description update
+  if (description !== undefined) {
+    if (isLocked) throwLocked();
+    project.description = description;
+  }
+
+  // Project dates update
+  if (startDate || dueDate) {
+    if (isLocked) throwLocked();
+
+    const newStart = startDate ? new Date(startDate) : project.startDate;
+    const newDue = dueDate ? new Date(dueDate) : project.dueDate;
+
+    if (newDue < newStart) {
+      throw new AppError(
+        errors.INVALID_DUE_DATE.message,
+        errors.INVALID_DUE_DATE.code,
+        errors.INVALID_DUE_DATE.errorCode,
+        errors.INVALID_DUE_DATE.suggestion,
+      );
+    }
+
+    project.startDate = newStart;
+    project.dueDate = newDue;
+  }
+
+  // Project status update
+  if (status) {
+    const oldStatus = project.status;
+
+    // Validate the new status value
+    const allowedStatuses = Project.schema.path("status").enumValues;
+    if (!allowedStatuses.includes(status)) {
+      throw new AppError(
+        errors.INVALID_STATUS.message,
+        errors.INVALID_STATUS.code,
+        errors.INVALID_STATUS.errorCode,
+        errors.INVALID_STATUS.suggestion,
+      );
+    }
+
+    const newStatus = status;
+
+    const wasCounted = ["Planning", "Active"].includes(oldStatus);
+    const willBeCounted = ["Planning", "Active"].includes(newStatus);
+
+    // On hold status case
+    if (newStatus === "On Hold") {
+      project.onHoldReason = onHoldReason || project.onHoldReason;
+    } else {
+      project.onHoldReason = null;
+    }
+
+    // Completed status case
+    if (newStatus === "Completed") {
+      project.completedAt = new Date();
+    }
+
+    // Active/Planning status case
+    if (newStatus === "Active" || newStatus === "Planning") {
+      if (!project.scrumMasterId) {
+        throw new AppError(
+          errors.SCRUM_MASTER_REQUIRED.message,
+          errors.SCRUM_MASTER_REQUIRED.code,
+          errors.SCRUM_MASTER_REQUIRED.errorCode,
+          errors.SCRUM_MASTER_REQUIRED.suggestion,
+        );
+      }
+
+      if (members.length < 1) {
+        throw new AppError(
+          errors.TEAM_MEMBERS_REQUIRED.message,
+          errors.TEAM_MEMBERS_REQUIRED.code,
+          errors.TEAM_MEMBERS_REQUIRED.errorCode,
+          errors.TEAM_MEMBERS_REQUIRED.suggestion,
+        );
+      }
+    }
+
+    // projectCount update for the team members
+    if (wasCounted && !willBeCounted) {
+      await User.updateMany(
+        { _id: { $in: members.map(m => m.userId) } },
+        { $inc: { projectsCount: -1 } }
+      );
+    }
+
+    if (!wasCounted && willBeCounted) {
+      await User.updateMany(
+        { _id: { $in: members.map(m => m.userId) } },
+        { $inc: { projectsCount: 1 } }
+      );
+    }
+
+    project.countsTowardsWorkload = willBeCounted;
+    project.status = newStatus;
   }
 };
