@@ -8,7 +8,7 @@ import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors as tokenErrors } from "../errors/middlewareTokenErrors.js";
 import AppError from "../utils/AppError.js";
 import { getAll } from "./handlersFactory.js";
-import { assertTeamAccess } from "../utils/teamHelpers.js";
+import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
 import { isUserAvailable } from "../validators/userValidators.js";
 
 // Get the list of team roles

@@ -3,11 +3,11 @@ import { getOne, updateOne } from "./handlersFactory.js";
 import { errors } from "../errors/projectErrors.js";
 import { errors as teamErrors } from "../errors/teamErrors.js";
 import AppError from "../utils/AppError.js";
-import { assertTeamAccess } from "../utils/teamHelpers.js";
+import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
 import { isEmpty } from "../validators/userValidators.js";
 
 // Get team by ID
-export const getTeamById = async (teamId) => {
+export const getTeamById = async (teamId, currentUser) => {
   // Check the team existence
   const team = await Team.findById(teamId);
   if (!team) {
@@ -24,7 +24,7 @@ export const getTeamById = async (teamId) => {
   const project = team.projectId;
 
   // Authorize access to the team details (Admin, Product Owner, and the project team members can access the team details)
-  await assertTeamAccess(project, team, req.user);
+  await isTeamMemberOrProductOwnerOrAdmin(project,currentUser);
 
   return await getOne(Team, errors.TEAM_NOT_FOUND, [
     { path: "projectId", select: "name sector status" },

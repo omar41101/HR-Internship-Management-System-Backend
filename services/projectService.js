@@ -413,7 +413,7 @@ export const createProject = async (data, user) => {
     const project = await Project.create(
       [
         {
-          name,
+          name: name.trim(),
           sector,
           status: "Planning",
           description,
@@ -432,7 +432,7 @@ export const createProject = async (data, user) => {
     const team = await Team.create(
       [
         {
-          name: `The ${name} Team`,
+          name: `The ${name.trim()} Team`,
           projectId: createdProject._id,
         },
       ],
