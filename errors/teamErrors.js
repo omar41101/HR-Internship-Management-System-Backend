@@ -17,7 +17,7 @@ export const errors = {
     message: "The user cannot be added as a team member.",
     code: 403,
     errorCode: "TEAM_MEMBER_NOT_AUTHORIZED",
-    suggestion: "The user must be supervised by the same Product Owner to add it.",
+    suggestion: "The user must be supervised by the same Product Owner and among the project team members to add it.",
   },
   UNAUTHORIZED_TO_ADD_TEAM_MEMBER: {
     message: "You are not authorized to add team members.",

@@ -54,6 +54,9 @@ const taskSchema = mongoose.Schema(
       type: Date,
     },
     submission: {
+      summary: {
+        type: String,
+      },
       type: {
         type: String,
         enum: ["none", "file", "link"],
@@ -72,13 +75,18 @@ const taskSchema = mongoose.Schema(
       submittedAt: {
         type: Date,
       },
-      submittedBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
       comment :{
         type: String,
-      }
+      },
+      hoursSpent: {
+        type: Number,
+        min: 0,
+      },
+      completion: {
+        type: Number,
+        min: 0,
+        max: 100,
+      },
     },
     comments: [
       {
