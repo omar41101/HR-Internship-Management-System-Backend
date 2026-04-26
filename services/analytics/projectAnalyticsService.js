@@ -154,11 +154,84 @@ export const getProjectOverview = async (projectId, currentUser) => {
             $sort: { "sprint.startDate": 1 },
           },
         ],
+        activeSprint: [
+          {
+            $lookup: {
+              from: "sprints",
+              localField: "_id",
+              foreignField: "projectId",
+              as: "sprints",
+            },
+          },
+          { $unwind: "$sprints" },
+
+          {
+            $match: {
+              "sprints.status": "Active",
+            },
+          },
+
+          // Lookup tasks of this sprint
+          {
+            $lookup: {
+              from: "tasks",
+              localField: "sprints._id",
+              foreignField: "sprintId",
+              as: "tasks",
+            },
+          },
+
+          {
+            $addFields: {
+              totalTasks: { $size: "$tasks" },
+              completedTasks: {
+                $size: {
+                  $filter: {
+                    input: "$tasks",
+                    as: "task",
+                    cond: { $eq: ["$$task.status", "Done"] },
+                  },
+                },
+              },
+            },
+          },
+
+          // Sprint review meeting lookup
+          {
+            $lookup: {
+              from: "meetings",
+              localField: "sprints._id",
+              foreignField: "sprintId",
+              as: "meeting",
+            },
+          },
+          {
+            $unwind: {
+              path: "$meeting",
+              preserveNullAndEmptyArrays: true,
+            },
+          },
+
+          {
+            $project: {
+              _id: 0,
+              sprintId: "$sprints._id",
+              sprintNumber: "$sprints.number",
+              sprintName: "$sprints.name",
+              sprintGoal: "$sprints.goal",
+              startDate: "$sprints.startDate",
+              endDate: "$sprints.endDate",
+              reviewDate: "$meeting.date",
+              totalTasks: 1,
+              completedTasks: 1,
+            },
+          },
+        ],
       },
     },
   ]);
 
-  // FORMAT RESULT 
+  // FORMAT RESULT
   const sprintData = result.sprints[0] || {};
   const taskData = result.tasks[0] || {};
 
@@ -172,6 +245,8 @@ export const getProjectOverview = async (projectId, currentUser) => {
       sprintData.activeSprintIndex.findIndex((s) => s === "Active") + 1 || null;
   }
 
+  const activeSprint = result.activeSprint?.[0] || null;
+
   const totalTasks = taskData.totalTasks || 0;
   const completedTasks = taskData.completedTasks || 0;
 
@@ -180,6 +255,22 @@ export const getProjectOverview = async (projectId, currentUser) => {
 
   const sprintPercentage =
     totalSprints === 0 ? 0 : Math.round((doneSprints / totalSprints) * 100);
+
+  let activeSprintData = null;
+
+  if (activeSprint) {
+    const progress =
+      activeSprint.totalTasks === 0
+        ? 0
+        : Math.round(
+            (activeSprint.completedTasks / activeSprint.totalTasks) * 100,
+          );
+
+    activeSprintData = {
+      ...activeSprint,
+      progress,
+    };
+  }
 
   return {
     status: "Success",
@@ -208,6 +299,7 @@ export const getProjectOverview = async (projectId, currentUser) => {
         },
         velocity: result.velocity || [],
       },
+      activeSprint: activeSprintData,
     },
   };
 };
@@ -262,7 +354,7 @@ export const getProjectSummaryPerMonth = async () => {
     },
   ]);
 
-  const data = result[0] || {}; 
+  const data = result[0] || {};
 
   return {
     status: "Success",

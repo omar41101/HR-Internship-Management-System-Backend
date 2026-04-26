@@ -216,10 +216,9 @@ export const updateSprint = async (sprintId, updates, user) => {
   if (updates.startDate !== undefined) sprint.startDate = updates.startDate;
   if (updates.durationInWeeks !== undefined) sprint.durationInWeeks = updates.durationInWeeks;
 
+  // Recompute the end date in case of an update
   const start = new Date(sprint.startDate);
   const duration = sprint.durationInWeeks;
-
-  // Recompute the end date in case of an update
   const end = new Date(start);
   end.setDate(end.getDate() + duration * 7);
 
@@ -357,15 +356,19 @@ export const startSprint = async (sprintId, user) => {
   }
 
   // Adjust start date to today (In case of a late start to the sprint)
-  const todayMidnight = new Date();
-  todayMidnight.setHours(0,0,0,0);
-  if (sprint.startDate > todayMidnight) {
-    sprint.startDate = todayMidnight;
+  const today = new Date().toISOString().split("T")[0];
+  const sprintStart = sprint.startDate.toISOString().split("T")[0];
+
+  if (sprintStart < today) {
+    sprint.startDate = today;
 
     // Recompute the endDate based on duration
-    const end = new Date(todayMidnight);
+    const end = new Date(today);
     end.setDate(end.getDate() + sprint.durationInWeeks * 7);
     sprint.endDate = end;
+
+    // Update the sprint review meeting date based on the new end date
+    await upsertSprintReviewMeeting(sprint, project);
   }
 
   // Update sprint status

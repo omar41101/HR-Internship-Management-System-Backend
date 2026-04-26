@@ -5,17 +5,6 @@ import AppError from "../utils/AppError.js";
 // Get all sprints of a project
 export const getProjectSprints = async (req, res, next) => {
   try {
-    // Validate the project Id
-    const projectId = req.params.projectId;
-    if (!projectId) {
-      throw new AppError(
-        projectErrors.PROJECT_ID_REQUIRED.message,
-        projectErrors.PROJECT_ID_REQUIRED.code,
-        projectErrors.PROJECT_ID_REQUIRED.errorCode,
-        projectErrors.PROJECT_ID_REQUIRED.suggestion,
-      );
-    }
-    
     // Build the query parameters
     const queryParams = {
       ...req.query,

@@ -38,19 +38,31 @@ export const checkSprintAndProjectExistence = async (sprintId) => {
 export const upsertSprintReviewMeeting = async (sprint, project) => {
   // Get the project team
   const team = await Team.findOne({ projectId: project._id });
-  if (!team) return null;
+  if (!team){
+    throw new AppError(
+      projectErrors.TEAM_NOT_FOUND.message,
+      projectErrors.TEAM_NOT_FOUND.code,
+      projectErrors.TEAM_NOT_FOUND.errorCode,
+      projectErrors.TEAM_NOT_FOUND.suggestion,
+    );
+  }
 
   // Get all team members
   const teamMembers = await TeamMember.find({ teamId: team._id });
+  if(!teamMembers || teamMembers.length === 0){
+    return null; // No team members, so we can't create a sprint review meeting automatically
+  }
 
-  // Build attendees list
+  // Build the attendees list
   const attendees = teamMembers.map((member) => ({
     userId: member.userId,
     status: "Pending",
   }));
 
   // Compute meeting date (end of sprint + 1 day)
-  const meetingDate = new Date(sprint.endDate + 1 * 24 * 60 * 60 * 1000);
+  const meetingDate = new Date(sprint.endDate);
+  meetingDate.setDate(meetingDate.getDate() + 1);
+  meetingDate.setHours(10, 0, 0, 0);
 
   // Upsert (create OR update existing meeting)
   const meeting = await Meeting.findOneAndUpdate(
@@ -77,6 +89,4 @@ export const upsertSprintReviewMeeting = async (sprint, project) => {
       upsert: true,
     }
   );
-
-  return meeting;
 };
