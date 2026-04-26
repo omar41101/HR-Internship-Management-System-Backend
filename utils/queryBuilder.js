@@ -1,6 +1,6 @@
 // A helper function to help build the query for filtering, sorting, searching and pagination
 export const buildQuery = (Model, queryParams, searchFields = []) => {
-  // Get all documents 
+  // Get all documents
   let query = Model.find();
 
   // -------- Filtering -------- //
@@ -12,8 +12,17 @@ export const buildQuery = (Model, queryParams, searchFields = []) => {
   const excludedFields = ["page", "limit", "sort", "keyword"];
   excludedFields.forEach((el) => delete queryObj[el]);
 
+  // Advanced filtering (gte, lt, etc.)
+  let queryStr = JSON.stringify(queryObj);
+  queryStr = queryStr.replace(
+    /\b(gt|gte|lt|lte|in)\b/g,
+    (match) => `$${match}`,
+  );
+
+  const parsedQuery = JSON.parse(queryStr);
+
   // Filter
-  query = query.find(queryObj);
+  query = query.find(parsedQuery);
 
   // -------- Search (Dynamic: you choose the search fields based on the model) -------- //
   if (queryParams.keyword && searchFields.length > 0) {
@@ -23,9 +32,9 @@ export const buildQuery = (Model, queryParams, searchFields = []) => {
     query = query.find({
       $and: words.map((word) => ({
         $or: searchFields.map((field) => ({
-          [field]: { $regex: word, $options: "i" }
-        }))
-      }))
+          [field]: { $regex: word, $options: "i" },
+        })),
+      })),
     });
   }
 

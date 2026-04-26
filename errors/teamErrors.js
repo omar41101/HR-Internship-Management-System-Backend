@@ -14,10 +14,10 @@ export const errors = {
     suggestion: "Only the Product Owner of the project can update the team name.",
   },
   TEAM_MEMBER_NOT_AUTHORIZED: {
-    message: "The user is not authorized to be a team member.",
+    message: "The user cannot be added as a team member.",
     code: 403,
     errorCode: "TEAM_MEMBER_NOT_AUTHORIZED",
-    suggestion: "The user must be under the same product owner's team to be added as a team member.",
+    suggestion: "The user must be supervised by the same Product Owner to add it.",
   },
   UNAUTHORIZED_TO_ADD_TEAM_MEMBER: {
     message: "You are not authorized to add team members.",
@@ -32,16 +32,16 @@ export const errors = {
     suggestion: "Only the Product Owner of the project can remove team members from the team.",
   },
   TEAM_MEMBER_WITH_ACTIVE_TASKS: {
-    message: "The team member cannot be removed from the team.",
+    message: "The team member has active tasks and cannot be removed.",
     code: 400,
     errorCode: "TEAM_MEMBER_WITH_ACTIVE_TASKS",
     suggestion: "Please reassign the team member's active tasks to other team members before removing them from the team.",
   },
-  UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE: {
-    message: "You are not authorized to update the team member's role.",  
+  UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER: {
+    message: "You are not authorized to update the team member.",  
     code: 403,
-    errorCode: "UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE",
-    suggestion: "Only the Product Owner of the project can update the team member's role.",
+    errorCode: "UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER",
+    suggestion: "Only the Product Owner of the project can update a team member.",
   },
   INVALID_ROLE: {
     message: "Invalid team member role.",
@@ -60,11 +60,5 @@ export const errors = {
     code: 400,
     errorCode: "TEAM_MEMBER_ALREADY_EXISTS",
     suggestion: "The user is already a member of the team.",
-  },
-  CANNOT_DEACTIVATE_SCRUM_MASTER: {
-    message: "The Scrum Master cannot be deactivated while they have active tasks.",
-    code: 400,
-    errorCode: "CANNOT_DEACTIVATE_SCRUM_MASTER",
-    suggestion: "Please reassign the Scrum Master's active tasks to other team members before deactivating them.",
   },
 };

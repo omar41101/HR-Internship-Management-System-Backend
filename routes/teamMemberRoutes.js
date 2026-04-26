@@ -16,6 +16,17 @@ const router = express.Router();
 // Route to get all possible team roles
 router.get("/team-roles", authenticate, getTeamRoles);
 
+// Route to get all team members of a project
+router.get("/team-members/:teamId", authenticate, getProjectTeamMembers);
+
+// Route to get team members (Supervisor/admin only)
+router.get(
+  "/team-members/supervisor/:id",  
+  authenticate,
+  authorize(["Admin", "Supervisor"]),
+  getSupervisorTeamMembers
+);
+
 // Route to add a new team member to the team
 router.post("/team-members/:teamId", authenticate, authorize(["Supervisor"]), addTeamMember);
 
@@ -27,16 +38,5 @@ router.delete("/team-members/:teamMemberId", authenticate, authorize(["Superviso
 
 // Route to replace a team member with another user
 router.patch("/team-members/replace/:teamMemberId", authenticate, authorize(["Supervisor"]), replaceTeamMember);
-
-// Route to get all team members of a project
-router.get("/team-members/:teamId", authenticate, getProjectTeamMembers);
-
-// Route to get team members (Supervisor/admin only)
-router.get(
-  "/team-members/supervisor/:id",  
-  authenticate,
-  authorize(["Admin", "Supervisor"]),
-  getSupervisorTeamMembers
-);
 
 export default router;

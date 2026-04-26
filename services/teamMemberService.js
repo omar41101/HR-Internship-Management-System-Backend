@@ -1,7 +1,7 @@
+import User from "../models/User.js";
 import Task from "../models/Task.js";
 import Team from "../models/Team.js";
 import TeamMember from "../models/TeamMember.js";
-import User from "../models/User.js";
 import { errors as projectErrors } from "../errors/projectErrors.js";
 import { errors } from "../errors/teamErrors.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
@@ -10,6 +10,7 @@ import AppError from "../utils/AppError.js";
 import { getAll } from "./handlersFactory.js";
 import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
 import { isUserAvailable } from "../validators/userValidators.js";
+import { getUserTaskStats } from "./analytics/taskStatsService.js";
 
 // Get the list of team roles
 export const getTeamRoles = async () => {
@@ -21,6 +22,118 @@ export const getTeamRoles = async () => {
     message: "Team roles retrieved successfully!",
     data: roles,
   };
+};
+
+// Get all team members added to a team
+export const getProjectTeamMembers = async (queryParams, teamId, user) => {
+  // Check the team existence
+  const team = await Team.findById(teamId).populate("projectId");
+  if (!team) {
+    throw new AppError(
+      projectErrors.TEAM_NOT_FOUND.message,
+      projectErrors.TEAM_NOT_FOUND.code,
+      projectErrors.TEAM_NOT_FOUND.errorCode,
+      projectErrors.TEAM_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Get the project object
+  const project = team.projectId;
+
+  // Authorize access to the team members list (Admin, Product Owner, and the project team members can access the team members list)
+  await isTeamMemberOrProductOwnerOrAdmin(team.projectId, user);
+
+  const finalQuery = {
+    ...queryParams,
+    limit: 6,
+    sort: "-createdAt",
+    teamId,
+  };
+
+  // Get the list of team members
+  const result = await getAll(
+    TeamMember,
+    [{ path: "userId", select: "name email" }],
+    "--v -teamId",
+  )(finalQuery);
+
+  // Get the list of team members
+  const members = result.data;
+
+  // Get the task stats for each team member
+  const statMembers = await Promise.all(
+    members.map(async (member) => {
+      const stats = await getUserTaskStats(member.userId._id, project._id);
+
+      return {
+        user: member.userId,
+        role: member.role,
+        isActiveInProject: member.isActiveInProject,
+        stats,
+      };
+    }),
+  );
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Team members retrieved successfully!",
+    data: statMembers,
+  };
+};
+
+// Get the list team members under a supervisor (We can filter by active and available team members)
+export const getSupervisorTeamMembers = async (
+  supervisorId,
+  currentUser,
+  queryParams,
+) => {
+  // Check user existence
+  const supervisor = await User.findById(supervisorId);
+  if (!supervisor) {
+    throw new AppError(
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Authorization: Only the supervisor himself and the Admin can access the list of his team members
+  if (
+    currentUser.role !== "Admin" &&
+    currentUser.id.toString() !== supervisorId.toString()
+  ) {
+    throw new AppError(
+      tokenErrors.UNAUTHORIZED.message,
+      tokenErrors.UNAUTHORIZED.code,
+      tokenErrors.UNAUTHORIZED.errorCode,
+      tokenErrors.UNAUTHORIZED.suggestion,
+    );
+  }
+
+  const filters = { ...queryParams };
+
+  // If in the queryParams, isAvailable is set to true, we add the condition to retrieve only available users
+  if (queryParams.isAvailable === "true") {
+    filters.projectsCount = { lt: 2 };
+    delete filters.isAvailable;
+  }
+
+  // Inject the filter by the supervisor into the queryParams
+  const enrichedQueryParams = {
+    ...filters,
+    supervisor_id: supervisorId,
+  };
+
+  return await getAll(
+    User,
+    [
+      { path: "role_id", select: "name" },
+      { path: "department_id", select: "name" },
+    ],
+    "-faceDescriptors",
+  )(enrichedQueryParams);
 };
 
 // Add a team member to a team
@@ -36,7 +149,7 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     );
 
   // Authorize only the Product Owner of the project to add team members
-  if (team.projectId.productOwnerId.toString() !== currentUser.id) {
+  if (team.projectId.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.message,
       errors.UNAUTHORIZED_TO_ADD_TEAM_MEMBER.code,
@@ -49,7 +162,8 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
   const teamMember = await User.findById(userId);
   if (
     !teamMember ||
-    teamMember.supervisor_id !== team.projectId.productOwnerId
+    teamMember.supervisor_id.toString() !==
+      team.projectId.productOwnerId.toString()
   ) {
     throw new AppError(
       errors.TEAM_MEMBER_NOT_AUTHORIZED.message,
@@ -70,6 +184,17 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     );
   }
 
+  // Check the role value validity
+  const validRoles = TeamMember.schema.path("role").enumValues;
+  if (!validRoles.includes(role)) {
+    throw new AppError(
+      errors.INVALID_ROLE.message,
+      errors.INVALID_ROLE.code,
+      errors.INVALID_ROLE.errorCode,
+      errors.INVALID_ROLE.suggestion,
+    );
+  }
+
   // Check if the new team member is assigned the "Scrum Master" role while there is already a scrum master in the team
   if (role === "Scrum Master") {
     const existingScrumMaster = await TeamMember.findOne({
@@ -78,10 +203,10 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
     });
     if (existingScrumMaster) {
       throw new AppError(
-        projectErrors.MORE_THAN_ONE_SCRUM_MASTER.message,
-        projectErrors.MORE_THAN_ONE_SCRUM_MASTER.code,
-        projectErrors.MORE_THAN_ONE_SCRUM_MASTER.errorCode,
-        projectErrors.MORE_THAN_ONE_SCRUM_MASTER.suggestion,
+        projectErrors.INVALID_SCRUM_MASTER.message,
+        projectErrors.INVALID_SCRUM_MASTER.code,
+        projectErrors.INVALID_SCRUM_MASTER.errorCode,
+        projectErrors.INVALID_SCRUM_MASTER.suggestion,
       );
     }
   }
@@ -113,7 +238,7 @@ export const addTeamMember = async (teamId, userId, role, currentUser) => {
       {
         $inc: { projectsCount: 1 },
       },
-      { new: true },
+      { returnDocument: "after" },
     );
 
     if (!updated) {
@@ -154,15 +279,16 @@ export const updateTeamMember = async (
     );
   }
 
+  // Get the project object
   const project = member.teamId.projectId;
 
   // Authorization: Only the Product Owner of the project can update the team members
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
-      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE.message,
-      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE.code,
-      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE.errorCode,
-      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER_ROLE.suggestion,
+      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER.message,
+      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER.code,
+      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER.errorCode,
+      errors.UNAUTHORIZED_TO_UPDATE_TEAM_MEMBER.suggestion,
     );
   }
 
@@ -189,10 +315,10 @@ export const updateTeamMember = async (
 
       if (existingScrumMaster) {
         throw new AppError(
-          projectErrors.MORE_THAN_ONE_SCRUM_MASTER.message,
-          projectErrors.MORE_THAN_ONE_SCRUM_MASTER.code,
-          projectErrors.MORE_THAN_ONE_SCRUM_MASTER.errorCode,
-          projectErrors.MORE_THAN_ONE_SCRUM_MASTER.suggestion,
+          projectErrors.INVALID_SCRUM_MASTER.message,
+          projectErrors.INVALID_SCRUM_MASTER.code,
+          projectErrors.INVALID_SCRUM_MASTER.errorCode,
+          projectErrors.INVALID_SCRUM_MASTER.suggestion,
         );
       }
     }
@@ -216,16 +342,6 @@ export const updateTeamMember = async (
           errors.TEAM_MEMBER_WITH_ACTIVE_TASKS.code,
           errors.TEAM_MEMBER_WITH_ACTIVE_TASKS.errorCode,
           errors.TEAM_MEMBER_WITH_ACTIVE_TASKS.suggestion,
-        );
-      }
-
-      // Prevent deactivating Scrum Master
-      if (member.role === "Scrum Master") {
-        throw new AppError(
-          errors.CANNOT_DEACTIVATE_SCRUM_MASTER.message,
-          errors.CANNOT_DEACTIVATE_SCRUM_MASTER.code,
-          errors.CANNOT_DEACTIVATE_SCRUM_MASTER.errorCode,
-          errors.CANNOT_DEACTIVATE_SCRUM_MASTER.suggestion,
         );
       }
     }
@@ -260,6 +376,7 @@ export const updateTeamMember = async (
     }
   }
 
+  // Save the changes
   await member.save();
 
   return {
@@ -285,10 +402,11 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
       commonErrors.USER_NOT_FOUND.suggestion,
     );
 
+  // Get the project object
   const project = member.teamId.projectId;
 
   // Authorize only the Product Owner of the project to remove team members
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_REMOVE_TEAM_MEMBER.message,
       errors.UNAUTHORIZED_TO_REMOVE_TEAM_MEMBER.code,
@@ -322,7 +440,7 @@ export const removeTeamMember = async (teamMemberId, currentUser) => {
   if (project.status === "Active") {
     await User.updateOne(
       { _id: member.userId, projectsCount: { $gt: 0 } },
-      { $inc: { projectsCount: -1 } }
+      { $inc: { projectsCount: -1 } },
     );
   }
 
@@ -354,10 +472,11 @@ export const replaceTeamMember = async (
       commonErrors.USER_NOT_FOUND.suggestion,
     );
 
+  // Get the project object
   const project = oldMember.teamId.projectId;
 
   // Authorize only the Product Owner of the project to replace team members
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_REPLACE_TEAM_MEMBER.message,
       errors.UNAUTHORIZED_TO_REPLACE_TEAM_MEMBER.code,
@@ -416,22 +535,21 @@ export const replaceTeamMember = async (
     // increment the new user's projectsCount
     const updated = await User.findOneAndUpdate(
       { _id: newUserId, projectsCount: { $lt: 2 } },
-      { $inc: { projectsCount: 1 } }
+      { $inc: { projectsCount: 1 } },
     );
-
     if (!updated) {
       throw new AppError(
         commonErrors.USER_UNAVAILABLE.message,
         commonErrors.USER_UNAVAILABLE.code,
         commonErrors.USER_UNAVAILABLE.errorCode,
-        "New user already has 2 active projects"
+        "New user already has 2 active projects",
       );
     }
 
     // decrement the old user's projectsCount
     await User.updateOne(
       { _id: oldMember.userId, projectsCount: { $gt: 0 } },
-      { $inc: { projectsCount: -1 } }
+      { $inc: { projectsCount: -1 } },
     );
   }
 
@@ -451,74 +569,4 @@ export const replaceTeamMember = async (
     code: 200,
     data: newMember,
   };
-};
-
-// Get all team members of a team
-export const getProjectTeamMembers = async (queryParams, teamId, user) => {
-  // Check the team existence
-  const team = await Team.findById(teamId).populate("projectId");
-  if (!team) {
-    throw new AppError(
-      projectErrors.TEAM_NOT_FOUND.message,
-      projectErrors.TEAM_NOT_FOUND.code,
-      projectErrors.TEAM_NOT_FOUND.errorCode,
-      projectErrors.TEAM_NOT_FOUND.suggestion,
-    );
-  }
-
-  // Authorize access to the team members list (Admin, Product Owner, and the project team members can access the team members list)
-  await assertTeamAccess(team.projectId, team, user);
-
-  const finalQuery = {
-    ...queryParams,
-    limit: 6,
-    sort: "-createdAt",
-  };
-
-  return await getAll(TeamMember, commonErrors.USER_NOT_FOUND, [
-    { path: "teamId", select: "name" },
-    { path: "userId", select: "name email" },
-  ])(finalQuery);
-};
-
-// Get team members under a supervisor (Supervisor and Admin)
-export const getSupervisorTeamMembers = async (
-  supervisorId,
-  currentUser,
-  queryParams,
-) => {
-  // Check user existence
-  const supervisor = await User.findById(supervisorId);
-  if (!supervisor) {
-    throw new AppError(
-      commonErrors.USER_NOT_FOUND.message,
-      commonErrors.USER_NOT_FOUND.code,
-      commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion,
-    );
-  }
-
-  // Authorization
-  if (
-    currentUser.role !== "Admin" &&
-    currentUser._id.toString() !== supervisorId
-  ) {
-    throw new AppError(
-      tokenErrors.UNAUTHORIZED.message,
-      tokenErrors.UNAUTHORIZED.code,
-      tokenErrors.UNAUTHORIZED.errorCode,
-      tokenErrors.UNAUTHORIZED.suggestion,
-    );
-  }
-
-  // Inject the filter by the supervisor into the queryParams
-  const enrichedQueryParams = {
-    ...queryParams,
-    supervisor_id: supervisorId,
-  };
-
-  return await getAll(User, [
-    { path: "role_id", select: "name" },
-    { path: "department_id", select: "name" },
-  ])(enrichedQueryParams);
 };
