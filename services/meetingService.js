@@ -7,12 +7,106 @@ import { errors } from "../errors/meetingErrors.js";
 import { errors as projectErrors } from "../errors/projectErrors.js";
 import { getOne, getAll } from "./handlersFactory.js";
 
+// Get all meetings by project
+export const getAllMeetingsOfProject = async (
+  projectId,
+  currentUser,
+  queryParams
+) => {
+  // Check project existence
+  const project = await Project.findById(projectId);
+  if (!project) {
+    throw new AppError(
+      projectErrors.PROJECT_NOT_FOUND.message,
+      projectErrors.PROJECT_NOT_FOUND.code,
+      projectErrors.PROJECT_NOT_FOUND.errorCode,
+      projectErrors.PROJECT_NOT_FOUND.suggestion
+    );
+  }
+
+  // Build the base filter
+  let filter = { projectId };
+
+  // If NOT the Product Owner, restrict displaying the meetings to the attendees only
+  if (project.productOwnerId.toString() !== currentUser.id) {
+    filter["attendees.userId"] = currentUser.id;
+  }
+
+  // Build the query parameters
+  const enhancedQueryParams = {
+    ...queryParams,
+    ...filter,
+  };
+
+  return await getAll(
+    Meeting,
+    [
+      { path: "projectId", select: "name" },
+      { path: "attendees.userId", select: "name email" },
+    ],
+    null,
+    ["title", "description"]
+  )(enhancedQueryParams);
+};
+
+// Get a meeting by Id
+export const getMeetingById = async (meetingId, currentUser) => {
+  // Check the meeting existence
+  const meeting = await Meeting.findById(meetingId);
+  if (!meeting) {
+    throw new AppError(
+      errors.MEETING_NOT_FOUND.message,
+      errors.MEETING_NOT_FOUND.code,
+      errors.MEETING_NOT_FOUND.errorCode,
+      errors.MEETING_NOT_FOUND.suggestion
+    );
+  }
+
+  // Check the project existence
+  const project = await Project.findById(meeting.projectId);
+  if (!project) {
+    throw new AppError(
+      projectErrors.PROJECT_NOT_FOUND.message,
+      projectErrors.PROJECT_NOT_FOUND.code,
+      projectErrors.PROJECT_NOT_FOUND.errorCode,
+      projectErrors.PROJECT_NOT_FOUND.suggestion
+    );
+  }
+
+  // Check if the user is the Product Owner or an attendee of the meeting
+  const isProductOwner =
+    project.productOwnerId.toString() === currentUser.id;
+
+  const isAttendee = meeting.attendees.some(
+    (att) => att.userId.toString() === currentUser.id
+  );
+
+  // Authorization check
+  if (!isProductOwner && !isAttendee) {
+    throw new AppError(
+      errors.UNAUTHORIZED_TO_ACCESS_MEETING.message,
+      errors.UNAUTHORIZED_TO_ACCESS_MEETING.code,
+      errors.UNAUTHORIZED_TO_ACCESS_MEETING.errorCode,
+      errors.UNAUTHORIZED_TO_ACCESS_MEETING.suggestion
+    );
+  }
+
+  return await getOne(
+    Meeting,
+    errors.MEETING_NOT_FOUND,
+    [
+      { path: "projectId", select: "name" },
+      { path: "attendees.userId", select: "name email" },
+    ]
+  )(meetingId);
+};
+
 // Plan a new meeting (Product owner only)
 export const createMeeting = async (data, currentUser) => {
   const {
     title,
-    projectId,
     description,
+    projectId,
     date,
     startTime,
     endTime,
@@ -35,8 +129,8 @@ export const createMeeting = async (data, currentUser) => {
     );
   }
 
-  // Only Product Owner can create project meetings
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  // Authorization check: Only Product Owner can create project meetings
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_CREATE_MEETING.message,
       errors.UNAUTHORIZED_TO_CREATE_MEETING.code,
@@ -52,6 +146,17 @@ export const createMeeting = async (data, currentUser) => {
       errors.INVALID_TIME_RANGE.code,
       errors.INVALID_TIME_RANGE.errorCode,
       errors.INVALID_TIME_RANGE.suggestion,
+    );
+  }
+
+  // Validate the reminder time
+  const allowedReminders = Meeting.schema.path("reminderMinutesBefore").enumValues;
+  if (reminder && !allowedReminders.includes(reminder)) {
+    throw new AppError(
+      errors.INVALID_REMINDER.message,
+      errors.INVALID_REMINDER.code,
+      errors.INVALID_REMINDER.errorCode,
+      errors.INVALID_REMINDER.suggestion,
     );
   }
 
@@ -106,8 +211,13 @@ export const createMeeting = async (data, currentUser) => {
     );
   }
 
-  // Remove the user duplicates
+  // Remove the user duplicates (if any)
   const uniqueAttendees = [...new Set(attendees)];
+
+  // Add the meeting creator (product owner) to the attendees list if not already included
+  if (!uniqueAttendees.includes(currentUser.id)) {
+    uniqueAttendees.push(currentUser.id);
+  }
 
   // Create meeting
   const meeting = await Meeting.create({
@@ -162,7 +272,7 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
   }
 
   // Authorization check: Only Product Owner can update project meetings
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_UPDATE_MEETING.message,
       errors.UNAUTHORIZED_TO_UPDATE_MEETING.code,
@@ -172,7 +282,14 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
   }
 
   // Prevent updating past meetings
-  if (new Date(meeting.date) < new Date()) {
+  const now = new Date();
+  const meetingStart = new Date(meeting.date);
+
+  const [hours, minutes] = meeting.startTime.split(":");
+  meetingStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+  // Prevent updating if meeting already started
+  if (meetingStart <= now) {
     throw new AppError(
       errors.PAST_MEETING_UPDATE.message,
       errors.PAST_MEETING_UPDATE.code,
@@ -293,6 +410,11 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
       }
     }
 
+    // Add the meeting creator (product owner) to the attendees list if not already included
+    if (!uniqueAttendees.includes(currentUser.id)) {
+      uniqueAttendees.push(currentUser.id);
+    }
+
     // Assign the final list
     meeting.attendees = updatedAttendees;
   }
@@ -313,6 +435,78 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
     status: "Success",
     code: 200,
     message: "Meeting updated successfully!",
+    data: meeting,
+  };
+};
+
+// Cancel a meeting
+export const cancelMeeting = async (meetingId, currentUser) => {
+  // Check meeting existence
+  const meeting = await Meeting.findById(meetingId);
+  if (!meeting) {
+    throw new AppError(
+      errors.MEETING_NOT_FOUND.message,
+      errors.MEETING_NOT_FOUND.code,
+      errors.MEETING_NOT_FOUND.errorCode,
+      errors.MEETING_NOT_FOUND.suggestion
+    );
+  }
+
+  // Get project
+  const project = await Project.findById(meeting.projectId);
+  if (!project) {
+    throw new AppError(
+      projectErrors.PROJECT_NOT_FOUND.message,
+      projectErrors.PROJECT_NOT_FOUND.code,
+      projectErrors.PROJECT_NOT_FOUND.errorCode,
+      projectErrors.PROJECT_NOT_FOUND.suggestion
+    );
+  }
+
+  // Authorization check: Only Product Owner can cancel project meetings
+  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
+    throw new AppError(
+      errors.UNAUTHORIZED_TO_CANCEL_MEETING.message,
+      errors.UNAUTHORIZED_TO_CANCEL_MEETING.code,
+      errors.UNAUTHORIZED_TO_CANCEL_MEETING.errorCode,
+      errors.UNAUTHORIZED_TO_CANCEL_MEETING.suggestion
+    );
+  }
+
+  // Prevent the double meeting cancel
+  if (meeting.status === "Cancelled") {
+    throw new AppError(
+      errors.MEETING_ALREADY_CANCELLED.message,
+      errors.MEETING_ALREADY_CANCELLED.code,
+      errors.MEETING_ALREADY_CANCELLED.errorCode,
+      errors.MEETING_ALREADY_CANCELLED.suggestion
+    );
+  }
+
+  // Prevent cancelling past meetings
+  const now = new Date();
+  const meetingStart = new Date(meeting.date);
+
+  const [hours, minutes] = meeting.startTime.split(":");
+  meetingStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+  if (meetingStart <= now) {
+    throw new AppError(
+      errors.PAST_MEETING_CANCEL.message,
+      errors.PAST_MEETING_CANCEL.code,
+      errors.PAST_MEETING_CANCEL.errorCode,
+      errors.PAST_MEETING_CANCEL.suggestion,
+    );
+  }
+
+  // Cancel the meeting
+  meeting.status = "Cancelled";
+  await meeting.save();
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Meeting cancelled successfully!",
     data: meeting,
   };
 };
@@ -360,18 +554,24 @@ export const respondToMeeting = async (
   }
 
   // Prevent responding to past meetings
-  if (new Date(meeting.date) < new Date()) {
+  const now = new Date();
+  const meetingStart = new Date(meeting.date);
+
+  const [hours, minutes] = meeting.startTime.split(":");
+  meetingStart.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+  if (meetingStart <= now) {
     throw new AppError(
       errors.PAST_MEETING_RESPONSE.message,
       errors.PAST_MEETING_RESPONSE.code,
       errors.PAST_MEETING_RESPONSE.errorCode,
-      errors.PAST_MEETING_RESPONSE.suggestion
+      errors.PAST_MEETING_RESPONSE.suggestion,
     );
   }
 
   // Prevent the double response 
   const attendee = meeting.attendees.find(
-    (a) => a.userId.toString() === currentUser.id
+    (a) => a.userId.toString() === currentUser.id.toString()
   );
   if (attendee.status !== "Pending") {
     throw new AppError(
@@ -391,7 +591,7 @@ export const respondToMeeting = async (
     {
       $set: {
         "attendees.$.status": status,
-        "attendees.$.reason": reason? reason : null,
+        "attendees.$.responseReason": reason? reason : null,
         "attendees.$.respondedAt": new Date(),
       },
     },
@@ -404,164 +604,4 @@ export const respondToMeeting = async (
     message: "Meeting invitation response submitted successfully!",
     data: updatedMeeting,
   };
-};
-
-// Cancel a meeting
-export const cancelMeeting = async (meetingId, currentUser) => {
-  // Check meeting existence
-  const meeting = await Meeting.findById(meetingId);
-  if (!meeting) {
-    throw new AppError(
-      errors.MEETING_NOT_FOUND.message,
-      errors.MEETING_NOT_FOUND.code,
-      errors.MEETING_NOT_FOUND.errorCode,
-      errors.MEETING_NOT_FOUND.suggestion
-    );
-  }
-
-  // Get project
-  const project = await Project.findById(meeting.projectId);
-  if (!project) {
-    throw new AppError(
-      projectErrors.PROJECT_NOT_FOUND.message,
-      projectErrors.PROJECT_NOT_FOUND.code,
-      projectErrors.PROJECT_NOT_FOUND.errorCode,
-      projectErrors.PROJECT_NOT_FOUND.suggestion
-    );
-  }
-
-  // Authorization : Only Product Owner can cancel project meetings
-  if (project.productOwnerId.toString() !== currentUser.id) {
-    throw new AppError(
-      errors.UNAUTHORIZED_TO_CANCEL_MEETING.message,
-      errors.UNAUTHORIZED_TO_CANCEL_MEETING.code,
-      errors.UNAUTHORIZED_TO_CANCEL_MEETING.errorCode,
-      errors.UNAUTHORIZED_TO_CANCEL_MEETING.suggestion
-    );
-  }
-
-  // Prevent the double meeting cancel
-  if (meeting.status === "Cancelled") {
-    throw new AppError(
-      errors.MEETING_ALREADY_CANCELLED.message,
-      errors.MEETING_ALREADY_CANCELLED.code,
-      errors.MEETING_ALREADY_CANCELLED.errorCode,
-      errors.MEETING_ALREADY_CANCELLED.suggestion
-    );
-  }
-
-  // Prevent cancelling past meetings
-  if (new Date(meeting.date) < new Date()) {
-    throw new AppError(
-      errors.PAST_MEETING_CANCEL.message,
-      errors.PAST_MEETING_CANCEL.code,
-      errors.PAST_MEETING_CANCEL.errorCode,
-      errors.PAST_MEETING_CANCEL.suggestion
-    );
-  }
-
-  // Cancel the meeting
-  meeting.status = "Cancelled";
-  await meeting.save();
-
-  return {
-    status: "Success",
-    code: 200,
-    message: "Meeting cancelled successfully!",
-    data: meeting,
-  };
-};
-
-// Get all meetings by project
-export const getAllMeetingsByProject = async (
-  projectId,
-  currentUser,
-  queryParams
-) => {
-  // Check project existence
-  const project = await Project.findById(projectId);
-  if (!project) {
-    throw new AppError(
-      projectErrors.PROJECT_NOT_FOUND.message,
-      projectErrors.PROJECT_NOT_FOUND.code,
-      projectErrors.PROJECT_NOT_FOUND.errorCode,
-      projectErrors.PROJECT_NOT_FOUND.suggestion
-    );
-  }
-
-  // Build the base filter
-  let filter = { projectId };
-
-  // If NOT the Product Owner, restrict displaying the meetings to the attendees only
-  if (project.productOwnerId.toString() !== currentUser.id) {
-    filter["attendees.userId"] = currentUser.id;
-  }
-
-  // Build the query parameters
-  const enhancedQueryParams = {
-    ...queryParams,
-    ...filter,
-  };
-
-  return await getAll(
-    Meeting,
-    [
-      { path: "projectId", select: "name" },
-      { path: "attendees.userId", select: "name email" },
-    ],
-    null,
-    ["title", "description"]
-  )(enhancedQueryParams);
-};
-
-// Get a meeting by Id
-export const getMeetingById = async (meetingId, currentUser) => {
-  // Check the meeting existence
-  const meeting = await Meeting.findById(meetingId);
-  if (!meeting) {
-    throw new AppError(
-      errors.MEETING_NOT_FOUND.message,
-      errors.MEETING_NOT_FOUND.code,
-      errors.MEETING_NOT_FOUND.errorCode,
-      errors.MEETING_NOT_FOUND.suggestion
-    );
-  }
-
-  // Check the project existence
-  const project = await Project.findById(meeting.projectId);
-  if (!project) {
-    throw new AppError(
-      projectErrors.PROJECT_NOT_FOUND.message,
-      projectErrors.PROJECT_NOT_FOUND.code,
-      projectErrors.PROJECT_NOT_FOUND.errorCode,
-      projectErrors.PROJECT_NOT_FOUND.suggestion
-    );
-  }
-
-  // Check if the user is the Product Owner or an attendee of the meeting
-  const isProductOwner =
-    project.productOwnerId.toString() === currentUser.id;
-
-  const isAttendee = meeting.attendees.some(
-    (att) => att.userId.toString() === currentUser.id
-  );
-
-  // Authorization check
-  if (!isProductOwner && !isAttendee) {
-    throw new AppError(
-      errors.UNAUTHORIZED_TO_ACCESS_MEETING.message,
-      errors.UNAUTHORIZED_TO_ACCESS_MEETING.code,
-      errors.UNAUTHORIZED_TO_ACCESS_MEETING.errorCode,
-      errors.UNAUTHORIZED_TO_ACCESS_MEETING.suggestion
-    );
-  }
-
-  return await getOne(
-    Meeting,
-    errors.MEETING_NOT_FOUND,
-    [
-      { path: "projectId", select: "name" },
-      { path: "attendees.userId", select: "name email" },
-    ]
-  )(meetingId);
 };

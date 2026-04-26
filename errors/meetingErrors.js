@@ -106,4 +106,10 @@ export const errors = {
     errorCode: "UNAUTHORIZED_TO_ACCESS_MEETING",
     suggestion: "Please ensure you are an attendee of this meeting.",
   },
+  INVALID_REMINDER: {
+    message: "Invalid reminder time value.",
+    code: 400,
+    errorCode: "INVALID_REMINDER",
+    suggestion: "Please provide a valid reminder time value.",
+  },
 };

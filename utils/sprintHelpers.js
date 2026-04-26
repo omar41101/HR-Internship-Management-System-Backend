@@ -59,6 +59,14 @@ export const upsertSprintReviewMeeting = async (sprint, project) => {
     status: "Pending",
   }));
 
+  // Add the product owner to the attendees list if not already included
+  if (!attendees.some(att => att.userId.toString() === project.productOwnerId.toString())) {
+    attendees.push({
+      userId: project.productOwnerId,
+      status: "Pending",
+    });
+  }
+
   // Compute meeting date (end of sprint + 1 day)
   const meetingDate = new Date(sprint.endDate);
   meetingDate.setDate(meetingDate.getDate() + 1);
@@ -83,6 +91,7 @@ export const upsertSprintReviewMeeting = async (sprint, project) => {
       priority: "Medium",
       reminder: 15,
       attendees,
+      createdBy: project.productOwnerId,
     },
     {
       returnDocument: 'after',
