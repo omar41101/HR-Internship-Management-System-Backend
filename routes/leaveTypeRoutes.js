@@ -4,8 +4,7 @@ import {
   updateLeaveType,
   archiveLeaveType,
   restoreLeaveType,
-  getAllActiveLeaveTypes,
-  getAllArchivedLeaveTypes,
+  getAllLeaveTypes,
 } from "../controllers/leaveTypeController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -209,54 +208,26 @@ route.patch(
 // Route to get all active Leave Types (All authenticated users for the leave requests form)
 /**
  * @swagger
- * /api/leaveTypes/active:
+ * /api/leaveTypes:
  *   get:
  *     tags:
  *       - Leave Types
- *     summary: Get all active leave types (All authenticated users for the leave requests form)
- *     description: It allows any authenticated user to get the list of all active leave types. This is used in the leave request form to select the type of leave they want to request.
+ *     summary: Get all leave types (All authenticated users for the leave requests form)
+ *     description: It allows any authenticated user to get the list of all leave types. This is used in the leave request form to select the type of leave they want to request.
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: List of active leave types retrieved successfully
+ *         description: List of leave types retrieved successfully
  *       401:
  *         description: Missing/Invalid token
  *       500:
  *         description: Server error
  */
 route.get(
-  "/leaveTypes/active", 
+  "/leaveTypes", 
   authenticate, 
-  getAllActiveLeaveTypes
-);
-
-// Route to get all archived Leave Types (Admin only)
-/**
- * @swagger
- * /api/leaveTypes/archived:
- *   get:
- *     tags:
- *       - Leave Types
- *     summary: Get all archived leave types (Admin only)
- *     description: It allows an admin to get the list of all archived leave types.
- *     security:
- *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: List of archived leave types retrieved successfully
- *       401:
- *         description: Missing/Invalid token
- *       403:
- *         description: Unauthorized
- *       500:
- *         description: Server error
- */
-route.get(
-  "/leaveTypes/archived", 
-  authenticate, 
-  authorize(["Admin"]), 
-  getAllArchivedLeaveTypes
+  getAllLeaveTypes
 );
 
 export default route;

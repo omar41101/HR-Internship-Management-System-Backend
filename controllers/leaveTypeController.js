@@ -1,19 +1,72 @@
 import LeaveType from "../models/LeaveType.js";
+import { errors } from "../errors/leaveTypeErrors.js";
 import AppError from "../utils/AppError.js";
 import { logAuditAction } from "../utils/logger.js"; // For audit logs
+import { getAll } from "../services/handlersFactory.js";
 
 // ---------------------------------------------------------------- //
 // ----------------------- HELPER FUNCTIONS ----------------------- //
 // ---------------------------------------------------------------- //
 export const validateLeaveTypeName = (name) => {
   if (!name || name.trim() === "") {
-    throw new AppError("Leave type name is required!", 400);
+    throw new AppError(
+      errors.LEAVE_TYPE_NAME_REQUIRED.message,
+      errors.LEAVE_TYPE_NAME_REQUIRED.code,
+      errors.LEAVE_TYPE_NAME_REQUIRED.errorCode,
+      errors.LEAVE_TYPE_NAME_REQUIRED.suggestion,
+    );
   }
 
   // Normalize the leave type name
   return (
     name.trim().charAt(0).toUpperCase() + name.trim().slice(1).toLowerCase()
   );
+};
+
+export const validateDefaultDays = (defaultDays) => {
+  if (defaultDays === undefined || defaultDays < 0) {
+    throw new AppError(
+      errors.INVALID_DEFAULT_DAYS.message,
+      errors.INVALID_DEFAULT_DAYS.code,
+      errors.INVALID_DEFAULT_DAYS.errorCode,
+      errors.INVALID_DEFAULT_DAYS.suggestion,
+    );
+  }
+};
+
+export const validateMaxDays = (maxDays) => {
+  if (maxDays === undefined || maxDays < 0) {
+    throw new AppError(
+      errors.INVALID_MAX_DAYS.message,
+      errors.INVALID_MAX_DAYS.code,
+      errors.INVALID_MAX_DAYS.errorCode,
+      errors.INVALID_MAX_DAYS.suggestion,
+    );
+  }
+};
+
+export const validateLeaveTypeGender = (gender) => {
+  const allowedGenders = LeaveType.schema.path("gender").enumValues;
+  if (!allowedGenders.includes(gender)) {
+    throw new AppError(
+      errors.INVALID_GENDER.message,
+      errors.INVALID_GENDER.code,
+      errors.INVALID_GENDER.errorCode,
+      errors.INVALID_GENDER.suggestion,
+    );
+  }
+};
+
+export const validateLeaveTypeDeductFrom = (deductFrom) => {
+  const allowedValues = LeaveType.schema.path("deductFrom").enumValues;
+  if (!allowedValues.includes(deductFrom)) {
+    throw new AppError(
+      errors.INVALID_DEDUCT_FROM.message,
+      errors.INVALID_DEDUCT_FROM.code,
+      errors.INVALID_DEDUCT_FROM.errorCode,
+      errors.INVALID_DEDUCT_FROM.suggestion,
+    );
+  }
 };
 
 // Check the name existance
@@ -24,7 +77,12 @@ export const checkLeaveTypeNameExistence = async (name, id) => {
   });
 
   if (existingLeaveType) {
-    throw new AppError("Leave type already exists!", 409);
+    throw new AppError(
+      errors.LEAVE_TYPE_ALREADY_EXISTS.message,
+      errors.LEAVE_TYPE_ALREADY_EXISTS.code,
+      errors.LEAVE_TYPE_ALREADY_EXISTS.errorCode,
+      errors.LEAVE_TYPE_ALREADY_EXISTS.suggestion,
+    );
   }
 };
 
@@ -32,11 +90,42 @@ export const checkLeaveTypeNameExistence = async (name, id) => {
 // ---------------------- LEAVE TYPE MANAGEMENT ------------------- //
 // ---------------------------------------------------------------- //
 
+// Get all leave types 
+export const getAllLeaveTypes = async (req, res, next) => {
+  try {
+    let queryParams = req.query;
+    queryParams = {
+      ...queryParams,
+      limit: 6,
+      sort: "-createdAt",
+    }
+
+    const result = await getAll(
+      LeaveType,
+      null,
+      null,
+      ["name"]
+    )(queryParams);
+
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Add a new Leave Type (Admin only)
 export const addLeaveType = async (req, res, next) => {
   try {
     let { name } = req.body;
-    const { description, isPaid } = req.body;
+    const { 
+      description, 
+      isPaid, 
+      deductFrom,
+      defaultDays,
+      maxDays,
+      gender, 
+      requiresChildBirth 
+    } = req.body;
 
     // Validate the leave type name
     name = validateLeaveTypeName(name);
@@ -44,11 +133,38 @@ export const addLeaveType = async (req, res, next) => {
     // Check the name existance
     await checkLeaveTypeNameExistence(name, null);
 
+    // Validate the default days value
+    validateDefaultDays(defaultDays);
+
+    // Validate the max days value
+    validateMaxDays(maxDays);
+
+    // Validate the gender
+    validateLeaveTypeGender(gender);
+
+    // Validate the deductFrom value
+    validateLeaveTypeDeductFrom(deductFrom);
+
+    // If the leave type is related to childbirth, ensure that the gender is not set to "Both"
+    if (requiresChildBirth && gender === "Both") {
+      throw new AppError(
+        errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.message,
+        errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.code,
+        errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.errorCode,
+        errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.suggestion,
+      );
+    }
+
     // Add the new leave type (By default, the status will be "Active")
     const newLeaveType = await LeaveType.create({
       name,
       description,
       isPaid,
+      defaultDays,
+      gender,
+      requiresChildBirth,
+      deductFrom,
+      maxDays,
     });
 
     // Logging the action
@@ -67,8 +183,9 @@ export const addLeaveType = async (req, res, next) => {
 
     res.status(201).json({
       status: "Success",
+      code: 201,
       message: "Leave type created successfully!",
-      result: newLeaveType,
+      data: newLeaveType,
     });
   } catch (err) {
     next(err);
@@ -79,19 +196,35 @@ export const addLeaveType = async (req, res, next) => {
 export const updateLeaveType = async (req, res, next) => {
   try {
     const { id } = req.params;
-    let { name, description, isPaid } = req.body;
+    let { 
+      name, 
+      description, 
+      isPaid, 
+      defaultDays,
+      maxDays,
+      deductFrom,
+      gender,
+      requiresChildBirth 
+    } = req.body;
 
     // Check the leave type existance
     const existingLeaveType = await LeaveType.findById(id);
     if (!existingLeaveType) {
-      throw new AppError("Leave type not found!", 404);
+      throw new AppError(
+        errors.LEAVE_TYPE_NOT_FOUND.message,
+        errors.LEAVE_TYPE_NOT_FOUND.code,
+        errors.LEAVE_TYPE_NOT_FOUND.errorCode,
+        errors.LEAVE_TYPE_NOT_FOUND.suggestion,
+      );
     }
 
     // Prevent updating an archived leave type
     if (existingLeaveType.status === "Archived") {
       throw new AppError(
-        "Cannot update an archived leave type. Restore it first!",
-        400,
+        errors.LEAVE_TYPE_ARCHIVED.message,
+        errors.LEAVE_TYPE_ARCHIVED.code,
+        errors.LEAVE_TYPE_ARCHIVED.errorCode,
+        errors.LEAVE_TYPE_ARCHIVED.suggestion,
       );
     }
 
@@ -112,6 +245,44 @@ export const updateLeaveType = async (req, res, next) => {
     // Update isPaid (if provided)
     if (isPaid !== undefined) {
       updateData.isPaid = isPaid;
+    }
+
+    // Update the defaultDays (if provided)
+    if (defaultDays !== undefined) {
+      validateDefaultDays(defaultDays);
+      updateData.defaultDays = defaultDays;
+    }
+
+    // Update the maxDays (if provided)
+    if (maxDays !== undefined) {
+      validateMaxDays(maxDays);
+      updateData.maxDays = maxDays;
+    }
+
+    // Update the deductFrom value (if provided)
+    if (deductFrom !== undefined) {
+      validateLeaveTypeDeductFrom(deductFrom);
+      updateData.deductFrom = deductFrom;
+    }
+
+    // Update the gender (if provided)
+    if (gender !== undefined) {
+      validateLeaveTypeGender(gender);
+      updateData.gender = gender;
+    }
+
+    // Update requiresChildBirth
+    const finalGender = gender?? existingLeaveType.gender;
+    if (requiresChildBirth !== undefined) {
+      if (requiresChildBirth && finalGender === "Both") {
+        throw new AppError(
+          errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.message,
+          errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.code,
+          errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.errorCode,
+          errors.GENDER_REQUIRED_FOR_CHILD_BIRTH.suggestion,
+        );
+      }
+      updateData.requiresChildBirth = requiresChildBirth;
     }
 
     const updatedLeaveType = await LeaveType.findByIdAndUpdate(id, updateData, {
@@ -135,8 +306,9 @@ export const updateLeaveType = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Leave type updated successfully!",
-      result: updatedLeaveType,
+      data: updatedLeaveType,
     });
   } catch (err) {
     next(err);
@@ -151,12 +323,22 @@ export const archiveLeaveType = async (req, res, next) => {
     // Check the leave type existance
     const existingLeaveType = await LeaveType.findById(id);
     if (!existingLeaveType) {
-      throw new AppError("Leave type not found!", 404);
+      throw new AppError(
+        errors.LEAVE_TYPE_NOT_FOUND.message,
+        errors.LEAVE_TYPE_NOT_FOUND.code,
+        errors.LEAVE_TYPE_NOT_FOUND.errorCode,
+        errors.LEAVE_TYPE_NOT_FOUND.suggestion,
+      );
     }
 
     // Check if the leave type is already archived
     if (existingLeaveType.status === "Archived") {
-      throw new AppError("Leave type is already archived!", 400);
+      throw new AppError(
+        errors.LEAVE_TYPE_ARCHIVED.message,
+        errors.LEAVE_TYPE_ARCHIVED.code,
+        errors.LEAVE_TYPE_ARCHIVED.errorCode,
+        errors.LEAVE_TYPE_ARCHIVED.suggestion,
+      );
     }
 
     // Archive the leave type
@@ -179,8 +361,9 @@ export const archiveLeaveType = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Leave type archived successfully!",
-      result: existingLeaveType,
+      data: existingLeaveType,
     });
   } catch (err) {
     next(err);
@@ -195,12 +378,22 @@ export const restoreLeaveType = async (req, res, next) => {
     // Check the leave type existance
     const existingLeaveType = await LeaveType.findById(id);
     if (!existingLeaveType) {
-      throw new AppError("Leave type not found!", 404);
+      throw new AppError(
+        errors.LEAVE_TYPE_NOT_FOUND.message,
+        errors.LEAVE_TYPE_NOT_FOUND.code,
+        errors.LEAVE_TYPE_NOT_FOUND.errorCode,
+        errors.LEAVE_TYPE_NOT_FOUND.suggestion,
+      );
     }
 
     // Check if the leave type is already active
     if (existingLeaveType.status === "Active") {
-      throw new AppError("Leave type is already active!", 400);
+      throw new AppError(
+        errors.LEAVE_TYPE_ALREADY_ACTIVE.message,
+        errors.LEAVE_TYPE_ALREADY_ACTIVE.code,
+        errors.LEAVE_TYPE_ALREADY_ACTIVE.errorCode,
+        errors.LEAVE_TYPE_ALREADY_ACTIVE.suggestion,
+      );
     }
 
     // Restore the leave type
@@ -223,44 +416,9 @@ export const restoreLeaveType = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Leave type restored successfully!",
-      result: existingLeaveType,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Get all active leave types
-export const getAllActiveLeaveTypes = async (req, res, next) => {
-  try {
-    // Sort the leave types by creation date (newest first)
-    const leaveTypes = await LeaveType.find({ status: "Active" }).sort({
-      createdAt: -1,
-    });
-
-    res.status(200).json({
-      status: "Success",
-      totalActiveLeaveTypes: leaveTypes.length,
-      result: leaveTypes,
-    });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Get all archived leave types
-export const getAllArchivedLeaveTypes = async (req, res, next) => {
-  try {
-    // Sort the leave types by creation date (newest first)
-    const leaveTypes = await LeaveType.find({ status: "Archived" }).sort({
-      createdAt: -1,
-    });
-
-    res.status(200).json({
-      status: "Success",
-      totalArchivedLeaveTypes: leaveTypes.length,
-      result: leaveTypes,
+      data: existingLeaveType,
     });
   } catch (err) {
     next(err);

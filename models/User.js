@@ -11,6 +11,11 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    gender: {
+      type: String,
+      enum: ["Male", "Female"],
+      // required: true,
+    },
     email: {
       type: String,
       required: true,
@@ -110,10 +115,17 @@ const userSchema = mongoose.Schema(
     bio: {
       type: String,
     },
-    leaveBalance: {
-      type: Number,
-      default: 21,
-    },
+    leaveBalances: [
+      {
+        typeId: mongoose.Schema.Types.ObjectId,
+        remainingDays: {
+          // Represents the remaining leave days for this leave type
+          type: Number,
+          min: 0,
+          default: 0,
+        },
+      },
+    ],
     socialStatus: {
       type: String,
       enum: ["Married", "Not Married"],
@@ -128,7 +140,7 @@ const userSchema = mongoose.Schema(
       default: 0,
     },
     projectsCount: {
-      // Number of active projects the user is currently involved in      
+      // Number of active projects the user is currently involved in
       type: Number,
       default: 0,
       min: 0,
@@ -168,7 +180,7 @@ const userSchema = mongoose.Schema(
 // Index for the ID number uniqueness
 userSchema.index(
   { "idNumber.number": 1, "idNumber.countryCode": 1 },
-  { unique: true, sparse: true }
+  { unique: true, sparse: true },
 );
 
 export default mongoose.model("User", userSchema);

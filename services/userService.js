@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
 import Document from "../models/Document.js";
+import LeaveType from "../models/LeaveType.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors } from "../errors/userErrors.js";
 import AppError from "../utils/AppError.js";
@@ -15,7 +16,10 @@ import {
   fullCINPassportValidation,
 } from "../validators/userValidators.js";
 import { generateRandomCode } from "../utils/generateCode.js";
-import { uploadImageToCloudinary, deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
+import {
+  uploadImageToCloudinary,
+  deleteFromCloudinary,
+} from "../utils/cloudinaryHelper.js";
 import {
   resolveRoleId,
   resolveDepartmentId,
@@ -26,14 +30,11 @@ import { logAuditAction } from "../utils/logger.js";
 import { buildQuery } from "../utils/queryBuilder.js";
 
 // Get a single user by Id
-export const getUser = getOne(User, 
-  commonErrors.USER_NOT_FOUND,
-  [
-    { path: "role_id", select: "name" },
-    { path: "department_id", select: "name" },
-    { path: "supervisor_id", select: "name lastName email" },
-  ]
-);
+export const getUser = getOne(User, commonErrors.USER_NOT_FOUND, [
+  { path: "role_id", select: "name" },
+  { path: "department_id", select: "name" },
+  { path: "supervisor_id", select: "name lastName email" },
+]);
 
 // Get all users
 export const getUsers = getAll(
@@ -44,7 +45,7 @@ export const getUsers = getAll(
     { path: "supervisor_id", select: "name lastName email" },
   ],
   "-faceDescriptors",
-  ["name", "lastName", "email"]
+  ["name", "lastName", "email"],
 );
 
 // Create a new user
@@ -53,6 +54,7 @@ export const addUserService = async (data, currentUser, ip) => {
     name,
     lastName,
     email,
+    gender,
     idType, // Passport or CIN
     idCountryCode, // Passport or CIN country code
     idNumber, // Passport or CIN number
@@ -63,7 +65,6 @@ export const addUserService = async (data, currentUser, ip) => {
     position,
     bonus,
     bio,
-    leaveBalance,
     socialStatus,
     hasChildren,
     nbOfChildren,
@@ -104,6 +105,7 @@ export const addUserService = async (data, currentUser, ip) => {
     bio,
     hasChildren,
     nbOfChildren,
+    gender,
   });
 
   // Check the phone number validity
@@ -147,6 +149,7 @@ export const addUserService = async (data, currentUser, ip) => {
   const user = await User.create({
     name,
     lastName,
+    gender,
     email: trimmedEmail,
     idType,
     idNumber: {
@@ -162,7 +165,6 @@ export const addUserService = async (data, currentUser, ip) => {
     position,
     bonus,
     bio,
-    leaveBalance,
     socialStatus,
     hasChildren,
     nbOfChildren,
@@ -173,6 +175,16 @@ export const addUserService = async (data, currentUser, ip) => {
     supervisor_id: supervisorId,
     profileImageURL: finalProfileImageURL,
   });
+
+  // Initialize the leave balances for the user based on the active leave types
+  const leaveTypes = await LeaveType.find({ status: "Active" });
+  const leaveBalances = leaveTypes.map((type) => ({
+    typeId: type._id,
+    remainingDays: type.defaultDays,
+  }));
+
+  user.leaveBalances = leaveBalances;
+  await user.save();
 
   // Sending the welcome email to the user (Password + OTP Code + Platform link)
   try {
@@ -207,7 +219,7 @@ export const addUserService = async (data, currentUser, ip) => {
     code: 201,
     message: "User created successfully!",
     data: user,
-  }
+  };
 };
 
 // Update an existing user
@@ -261,6 +273,7 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
     bio: updateData.bio,
     hasChildren: updateData.hasChildren,
     nbOfChildren: updateData.nbOfChildren,
+    gender: updateData.gender,
   });
 
   // Check the phone number validity + uniqueness in case of an update
@@ -448,7 +461,7 @@ export const deleteUserService = async (userId, currentUser, ip) => {
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -494,7 +507,7 @@ export const toggleUserStatusService = async (id, currentUser, ip) => {
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -517,7 +530,7 @@ export const toggleUserStatusService = async (id, currentUser, ip) => {
     code: 200,
     message: `User status changed to ${user.status} successfully!`,
     data: user,
-  }
+  };
 };
 
 // Export users to csv
@@ -636,7 +649,7 @@ export const exportUsersToExcelService = async (queryParams, res) => {
   // HTTP response (res) handled in service (streaming requirement)
   res.setHeader(
     "Content-Type",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   );
   res.setHeader("Content-Disposition", "attachment; filename=users.xlsx");
 
@@ -645,7 +658,12 @@ export const exportUsersToExcelService = async (queryParams, res) => {
 };
 
 // Upload a profile image
-export const uploadProfileImageService = async (userId, file, currentUser, ip) => {
+export const uploadProfileImageService = async (
+  userId,
+  file,
+  currentUser,
+  ip,
+) => {
   // Check user existence
   const existingUser = await User.findById(userId);
   if (!existingUser) {
@@ -653,7 +671,7 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -663,7 +681,7 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
       commonErrors.NO_FILE_UPLOADED.message,
       commonErrors.NO_FILE_UPLOADED.code,
       commonErrors.NO_FILE_UPLOADED.errorCode,
-      commonErrors.NO_FILE_UPLOADED.suggestion
+      commonErrors.NO_FILE_UPLOADED.suggestion,
     );
   }
 
@@ -675,7 +693,7 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
   // Upload the new image
   const result = await uploadImageToCloudinary(
     file.buffer,
-    "hrcom/profile_images"
+    "hrcom/profile_images",
   );
 
   // Update the user
@@ -685,7 +703,7 @@ export const uploadProfileImageService = async (userId, file, currentUser, ip) =
       profileImageURL: result.secure_url,
       profileImagePublicId: result.public_id,
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
 
   // Audit log
@@ -719,7 +737,7 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -735,7 +753,7 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
       profileImageURL: "",
       profileImagePublicId: "",
     },
-    { returnDocument: "after" }
+    { returnDocument: "after" },
   );
 
   // Audit log
@@ -756,14 +774,14 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
   };
 };
 
-// Enroll the face descriptors for face recognition (Custom not generic) 
+// Enroll the face descriptors for face recognition (Custom not generic)
 export const enrollFaceService = async (userId, descriptors) => {
   if (!descriptors || !Array.isArray(descriptors) || descriptors.length === 0) {
     throw new AppError(
       errors.MISSING_FACE_DESCRIPTORS.message,
       errors.MISSING_FACE_DESCRIPTORS.code,
       errors.MISSING_FACE_DESCRIPTORS.errorCode,
-      errors.MISSING_FACE_DESCRIPTORS.suggestion
+      errors.MISSING_FACE_DESCRIPTORS.suggestion,
     );
   }
 
@@ -775,7 +793,7 @@ export const enrollFaceService = async (userId, descriptors) => {
         faceEnrolled: true,
         faceEnrollmentPromptRequired: false,
       },
-    }
+    },
   );
 
   if (result.matchedCount === 0) {
@@ -783,7 +801,7 @@ export const enrollFaceService = async (userId, descriptors) => {
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -803,7 +821,7 @@ export const resetFaceService = async (userId) => {
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion
+      commonErrors.USER_NOT_FOUND.suggestion,
     );
   }
 
@@ -818,4 +836,4 @@ export const resetFaceService = async (userId) => {
     code: 200,
     message: "Face Id reset successfully!",
   };
-}; 
+};

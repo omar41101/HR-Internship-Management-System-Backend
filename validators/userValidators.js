@@ -1,15 +1,16 @@
-// Validator functions that concern the userService 
+// Validator functions that concern the userService
 import { passportRules } from "../constants/idRules.js";
 import { countries } from "../constants/countries.js";
 import AppError from "../utils/AppError.js";
 import { errors } from "../errors/userErrors.js";
+import { errors as leaveTypeErrors } from "../errors/leaveTypeErrors.js";
 import pkg from "google-libphonenumber";
 const { PhoneNumberUtil, PhoneNumberFormat } = pkg;
 
 const phoneUtil = PhoneNumberUtil.getInstance();
 const PNF = PhoneNumberFormat;
 
-// Email validation with Regex 
+// Email validation with Regex
 export const isValidEmail = (email) => {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
@@ -33,17 +34,18 @@ export const validatePhoneNumber = (code, number) => {
     }
 
     const nationalNumber = phoneNumber.getNationalNumber().toString();
-    const regionCode = phoneUtil.getRegionCodeForNumber(phoneNumber) || code || "TN";
+    const regionCode =
+      phoneUtil.getRegionCodeForNumber(phoneNumber) || code || "TN";
 
     // Special Validation of Tunisian phone numbers (must start with 2,4,5,9 and be 8 digits)
     if (regionCode === "TN") {
       const tunisianPhoneRegex = /^[2459][0-9]{7}$/;
       if (!tunisianPhoneRegex.test(nationalNumber)) {
         throw new AppError(
-            errors.INVALID_PHONE_NUMBER.message,
-            errors.INVALID_PHONE_NUMBER.code,
-            errors.INVALID_PHONE_NUMBER.errorCode,
-            errors.INVALID_PHONE_NUMBER.suggestion
+          errors.INVALID_PHONE_NUMBER.message,
+          errors.INVALID_PHONE_NUMBER.code,
+          errors.INVALID_PHONE_NUMBER.errorCode,
+          errors.INVALID_PHONE_NUMBER.suggestion,
         );
       }
     }
@@ -82,7 +84,7 @@ export const fullPhoneNumberValidation = (countryCode, phoneNumber) => {
       errors.INVALID_PHONE_NUMBER.message,
       errors.INVALID_PHONE_NUMBER.code,
       errors.INVALID_PHONE_NUMBER.errorCode,
-      errors.INVALID_PHONE_NUMBER.suggestion
+      errors.INVALID_PHONE_NUMBER.suggestion,
     );
   }
 
@@ -108,57 +110,64 @@ export const validateUserData = (data) => {
     bio,
     hasChildren,
     nbOfChildren,
+    gender,
   } = data;
 
   // Validate the input fields
-  if (name && isEmpty(name)) throw new AppError(
-    errors.FIRST_NAME_REQUIRED.message,
-    errors.FIRST_NAME_REQUIRED.code,
-    errors.FIRST_NAME_REQUIRED.errorCode,
-    errors.FIRST_NAME_REQUIRED.suggestion
-  );
+  if (name && isEmpty(name))
+    throw new AppError(
+      errors.FIRST_NAME_REQUIRED.message,
+      errors.FIRST_NAME_REQUIRED.code,
+      errors.FIRST_NAME_REQUIRED.errorCode,
+      errors.FIRST_NAME_REQUIRED.suggestion,
+    );
 
-  if (lastName && isEmpty(lastName)) throw new AppError(
-    errors.LAST_NAME_REQUIRED.message,
-    errors.LAST_NAME_REQUIRED.code,
-    errors.LAST_NAME_REQUIRED.errorCode,
-    errors.LAST_NAME_REQUIRED.suggestion
-  );
+  if (lastName && isEmpty(lastName))
+    throw new AppError(
+      errors.LAST_NAME_REQUIRED.message,
+      errors.LAST_NAME_REQUIRED.code,
+      errors.LAST_NAME_REQUIRED.errorCode,
+      errors.LAST_NAME_REQUIRED.suggestion,
+    );
 
-  if (address && isEmpty(address)) throw new AppError(
-    errors.ADDRESS_REQUIRED.message,
-    errors.ADDRESS_REQUIRED.code,
-    errors.ADDRESS_REQUIRED.errorCode,
-    errors.ADDRESS_REQUIRED.suggestion
-  );
+  if (address && isEmpty(address))
+    throw new AppError(
+      errors.ADDRESS_REQUIRED.message,
+      errors.ADDRESS_REQUIRED.code,
+      errors.ADDRESS_REQUIRED.errorCode,
+      errors.ADDRESS_REQUIRED.suggestion,
+    );
 
-  if (position && isEmpty(position)) throw new AppError(
-    errors.POSITION_REQUIRED.message,
-    errors.POSITION_REQUIRED.code,
-    errors.POSITION_REQUIRED.errorCode,
-    errors.POSITION_REQUIRED.suggestion
-  );
+  if (position && isEmpty(position))
+    throw new AppError(
+      errors.POSITION_REQUIRED.message,
+      errors.POSITION_REQUIRED.code,
+      errors.POSITION_REQUIRED.errorCode,
+      errors.POSITION_REQUIRED.suggestion,
+    );
 
-  if (trimmedEmail && !isValidEmail(trimmedEmail)) throw new AppError(
-    errors.INVALID_EMAIL_FORMAT.message,
-    errors.INVALID_EMAIL_FORMAT.code,
-    errors.INVALID_EMAIL_FORMAT.errorCode,
-    errors.INVALID_EMAIL_FORMAT.suggestion
-  );
+  if (trimmedEmail && !isValidEmail(trimmedEmail))
+    throw new AppError(
+      errors.INVALID_EMAIL_FORMAT.message,
+      errors.INVALID_EMAIL_FORMAT.code,
+      errors.INVALID_EMAIL_FORMAT.errorCode,
+      errors.INVALID_EMAIL_FORMAT.suggestion,
+    );
 
-  if (trimmedSupervisorEmail && !isValidEmail(trimmedSupervisorEmail)) throw new AppError(
-    errors.INVALID_SUPERVISOR_EMAIL_FORMAT.message,
-    errors.INVALID_SUPERVISOR_EMAIL_FORMAT.code,
-    errors.INVALID_SUPERVISOR_EMAIL_FORMAT.errorCode,
-    errors.INVALID_SUPERVISOR_EMAIL_FORMAT.suggestion
-  );
-  
+  if (trimmedSupervisorEmail && !isValidEmail(trimmedSupervisorEmail))
+    throw new AppError(
+      errors.INVALID_SUPERVISOR_EMAIL_FORMAT.message,
+      errors.INVALID_SUPERVISOR_EMAIL_FORMAT.code,
+      errors.INVALID_SUPERVISOR_EMAIL_FORMAT.errorCode,
+      errors.INVALID_SUPERVISOR_EMAIL_FORMAT.suggestion,
+    );
+
   if (bio && !isWithinRange(bio, 0, 500))
     throw new AppError(
       errors.BIO_TOO_LONG.message,
       errors.BIO_TOO_LONG.code,
       errors.BIO_TOO_LONG.errorCode,
-      errors.BIO_TOO_LONG.suggestion
+      errors.BIO_TOO_LONG.suggestion,
     );
 
   if (hasChildren && nbOfChildren <= 0)
@@ -166,15 +175,24 @@ export const validateUserData = (data) => {
       errors.INVALID_NUMBER_OF_CHILDREN.message,
       errors.INVALID_NUMBER_OF_CHILDREN.code,
       errors.INVALID_NUMBER_OF_CHILDREN.errorCode,
-      errors.INVALID_NUMBER_OF_CHILDREN.suggestion
+      errors.INVALID_NUMBER_OF_CHILDREN.suggestion,
     );
 
-  if (bonus && bonus < 0) throw new AppError(
-    errors.INVALID_BONUS.message,
-    errors.INVALID_BONUS.code,
-    errors.INVALID_BONUS.errorCode,
-    errors.INVALID_BONUS.suggestion
-  );
+  if (bonus && bonus < 0)
+    throw new AppError(
+      errors.INVALID_BONUS.message,
+      errors.INVALID_BONUS.code,
+      errors.INVALID_BONUS.errorCode,
+      errors.INVALID_BONUS.suggestion,
+    );
+
+  if (gender && !["Male", "Female"].includes(gender))
+    throw new AppError(
+      leaveTypeErrors.INVALID_GENDER.message,
+      leaveTypeErrors.INVALID_GENDER.code,
+      leaveTypeErrors.INVALID_GENDER.errorCode,
+      leaveTypeErrors.INVALID_GENDER.suggestion,
+    );
 };
 
 // Tunisian CIN validation
@@ -201,14 +219,18 @@ export const getPassportHint = (countryCode) => {
 };
 
 // Full CIN/Passport validation helper function (format + uniqueness)
-export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber) => {
+export const fullCINPassportValidation = (
+  idType,
+  idCountryCode,
+  trimmedIdNumber,
+) => {
   // Check ID type validity
   if (!["CIN", "Passport"].includes(idType)) {
     throw new AppError(
       errors.INVALID_ID_TYPE.message,
       errors.INVALID_ID_TYPE.code,
       errors.INVALID_ID_TYPE.errorCode,
-      errors.INVALID_ID_TYPE.suggestion
+      errors.INVALID_ID_TYPE.suggestion,
     );
   }
   // Check the validity of IdNumber based on the ID type
@@ -219,7 +241,7 @@ export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber
           errors.INVALID_CIN_FORMAT.message,
           errors.INVALID_CIN_FORMAT.code,
           errors.INVALID_CIN_FORMAT.errorCode,
-          errors.INVALID_CIN_FORMAT.suggestion
+          errors.INVALID_CIN_FORMAT.suggestion,
         );
       }
       break;
@@ -230,7 +252,7 @@ export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber
           errors.INVALID_COUNTRY_CODE.message,
           errors.INVALID_COUNTRY_CODE.code,
           errors.INVALID_COUNTRY_CODE.errorCode,
-          errors.INVALID_COUNTRY_CODE.suggestion
+          errors.INVALID_COUNTRY_CODE.suggestion,
         );
       }
       if (!validatePassport(trimmedIdNumber, idCountryCode)) {
@@ -239,7 +261,7 @@ export const fullCINPassportValidation = (idType, idCountryCode, trimmedIdNumber
           errors.INVALID_PASSPORT_FORMAT.message + (hint ? ` (${hint})` : ""),
           errors.INVALID_PASSPORT_FORMAT.code,
           errors.INVALID_PASSPORT_FORMAT.errorCode,
-          errors.INVALID_PASSPORT_FORMAT.suggestion
+          errors.INVALID_PASSPORT_FORMAT.suggestion,
         );
       }
       break;
