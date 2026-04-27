@@ -82,7 +82,7 @@ const taskSchema = mongoose.Schema(
         type: Number,
         min: 0,
       },
-      completion: {
+      completionRate: {
         type: Number,
         min: 0,
         max: 100,

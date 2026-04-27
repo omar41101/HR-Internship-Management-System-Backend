@@ -167,16 +167,28 @@ export const errors = {
     errorCode: "TASK_NOT_IN_REVIEW",
     suggestion: "Please move the task to 'Review' status before reviewing.",
   },
-  NO_TASK_SUBMISSION_TO_REVIEW: {
-    message: "There is no submission to review for this task.",
+  NO_TASK_SUBMISSION_FOUND: {
+    message: "There is no submission for this task.",
     code: 400,
-    errorCode: "NO_TASK_SUBMISSION_TO_REVIEW",
-    suggestion: "The task must have a submission before it can be reviewed.", 
+    errorCode: "NO_TASK_SUBMISSION_FOUND",
+    suggestion: "The task must have a submission before it can be viewed or reviewed.", 
   },
   UNAUTHORIZED_TO_REVIEW_TASKS: {
     message: "You are not authorized to review tasks of this project.",
     code: 403,
     errorCode: "UNAUTHORIZED_TO_REVIEW_TASKS",
     suggestion: "Only the product owner of the project can review tasks.",
+  },
+  UNAUTHORIZED_TO_VIEW_SUBMISSION: {
+    message: "You are not authorized to view the submission of this task.",
+    code: 403,
+    errorCode: "UNAUTHORIZED_TO_VIEW_SUBMISSION",
+    suggestion: "Only the assigned user, product owner, and team members of the project can view the task submission.",
+  },
+  UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION: {
+    message: "You are not authorized to download the submission of this task.",
+    code: 403,
+    errorCode: "UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION",
+    suggestion: "Only the assigned user, product owner, and team members of the project can download the task submission.",
   },
 };

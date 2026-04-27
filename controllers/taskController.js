@@ -1070,9 +1070,10 @@ export const submitTask = async (req, res, next) => {
 
     // Validate the completion rate
     if ( completionRate !== undefined &&
-      typeof completionRate !== "number" ||
+      (typeof completionRate !== "number" ||
       completionRate < 0 ||
       completionRate > 100
+      )
     ) {
       throw new AppError(
         errors.INVALID_COMPLETION_RATE.message,
@@ -1083,7 +1084,7 @@ export const submitTask = async (req, res, next) => {
     }
 
     // Validate the hours spent
-    if (hoursSpent !== undefined && typeof hoursSpent !== "number" || hoursSpent < 0) {
+    if (hoursSpent !== undefined && (typeof hoursSpent !== "number" || hoursSpent < 0)) {
       throw new AppError(
         errors.INVALID_HOURS_SPENT.message,
         errors.INVALID_HOURS_SPENT.code,
@@ -1184,8 +1185,8 @@ export const unSubmitTask = async (req, res, next) => {
     }
 
     // If it's a file, delete it from Cloudinary
-    if (task.submission.type === "file" && task.submission.publicId) {
-      await deleteFromCloudinary(task.submission.publicId, "raw");
+    if (task.submission.type === "file" && task.submission.linkPublicId) {
+      await deleteFromCloudinary(task.submission.linkPublicId, "raw");
     }
 
     // Clear the submission
@@ -1357,10 +1358,10 @@ export const reviewTask = async (req, res, next) => {
     // Check if there is a submission to review
     if (!task.submission || task.submission.type === "none") {
       throw new AppError(
-        errors.NO_TASK_SUBMISSION_TO_REVIEW.message,
-        errors.NO_TASK_SUBMISSION_TO_REVIEW.code,
-        errors.NO_TASK_SUBMISSION_TO_REVIEW.errorCode,
-        errors.NO_TASK_SUBMISSION_TO_REVIEW.suggestion,
+        errors.NO_TASK_SUBMISSION_FOUND.message,
+        errors.NO_TASK_SUBMISSION_FOUND.code,
+        errors.NO_TASK_SUBMISSION_FOUND.errorCode,
+        errors.NO_TASK_SUBMISSION_FOUND.suggestion,
       );
     }
 
@@ -1408,6 +1409,150 @@ export const reviewTask = async (req, res, next) => {
           : "Task rejected and sent back to In Progress!",
       data: task,
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Consult a task submission
+export const getTaskSubmission = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+
+    // Check task existence
+    const task = await Task.findById(taskId);
+    if (!task) {
+      throw new AppError(
+        errors.TASK_NOT_FOUND.message,
+        errors.TASK_NOT_FOUND.code,
+        errors.TASK_NOT_FOUND.errorCode,
+        errors.TASK_NOT_FOUND.suggestion
+      );
+    }
+
+    // Check project existence
+    const project = await Project.findById(task.projectId);
+    if (!project) {
+      throw new AppError(
+        projectErrors.PROJECT_NOT_FOUND.message,
+        projectErrors.PROJECT_NOT_FOUND.code,
+        projectErrors.PROJECT_NOT_FOUND.errorCode,
+        projectErrors.PROJECT_NOT_FOUND.suggestion
+      );
+    }
+
+    // Authorization: Only the product owner and the assigned user can consult the task submission
+    const userId = req.user.id;
+    const isAssigned = task.assignedTo?.toString() === userId.toString();
+    const isPO = project.productOwnerId.toString() === userId.toString();
+
+    if (!isAssigned && !isPO) {
+      throw new AppError(
+        errors.UNAUTHORIZED_TO_VIEW_SUBMISSION.message,
+        errors.UNAUTHORIZED_TO_VIEW_SUBMISSION.code,
+        errors.UNAUTHORIZED_TO_VIEW_SUBMISSION.errorCode,
+        errors.UNAUTHORIZED_TO_VIEW_SUBMISSION.suggestion
+      );
+    }
+
+    if (!task.submission || task.submission.type === "none") {
+      throw new AppError(
+        errors.NO_TASK_SUBMISSION_FOUND.message,
+        errors.NO_TASK_SUBMISSION_FOUND.code,
+        errors.NO_TASK_SUBMISSION_FOUND.errorCode,
+        errors.NO_TASK_SUBMISSION_FOUND.suggestion
+      );
+    }
+
+    res.status(200).json({
+      status: "Success",
+      code: 200,
+      message: "Task submission retrieved successfully!",
+      data: task.submission.linkUrl,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Download a task submission file
+export const downloadTaskSubmission = async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const userId = req.user.id;
+
+    // Check task existence
+    const task = await Task.findById(taskId);
+    if (!task) {
+      throw new AppError(
+        errors.TASK_NOT_FOUND.message,
+        errors.TASK_NOT_FOUND.code,
+        errors.TASK_NOT_FOUND.errorCode,
+        errors.TASK_NOT_FOUND.suggestion
+      );
+    }
+
+    // Check project existence
+    const project = await Project.findById(task.projectId);
+    if (!project) {
+      throw new AppError(
+        projectErrors.PROJECT_NOT_FOUND.message,
+        projectErrors.PROJECT_NOT_FOUND.code,
+        projectErrors.PROJECT_NOT_FOUND.errorCode,
+        projectErrors.PROJECT_NOT_FOUND.suggestion
+      );
+    }
+
+    // Authorization
+    const isAssigned =
+      task.assignedTo?.toString() === userId.toString();
+
+    const isPO =
+      project.productOwnerId?.toString() === userId.toString();
+
+    if (!isAssigned && !isPO) {
+      throw new AppError(
+        errors.UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION.message,
+        errors.UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION.code,
+        errors.UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION.errorCode,
+        errors.UNAUTHORIZED_TO_DOWNLOAD_SUBMISSION.suggestion
+      );
+    }
+
+    // Check the task submission existence
+    if (!task.submission || task.submission.type === "none") {
+      throw new AppError(
+        errors.NO_TASK_SUBMISSION_FOUND.message,
+        errors.NO_TASK_SUBMISSION_FOUND.code,
+        errors.NO_TASK_SUBMISSION_FOUND.errorCode,
+        errors.NO_TASK_SUBMISSION_FOUND.suggestion
+      );
+    }
+
+    // Handle the link submission
+    if (task.submission.type === "link") {
+      return res.status(200).json({
+        status: "Success",
+        code: 200,
+        message: "Submission link retrieved successfully",
+        data: {
+          url: task.submission.linkUrl,
+        },
+      });
+    }
+
+    // Handle the file submission
+    if (task.submission.type === "file") {
+      return res.redirect(task.submission.linkUrl);
+    }
+
+    // In case of an invalid submission type
+    throw new AppError(
+      errors.INVALID_SUBMISSION_TYPE.message,
+      errors.INVALID_SUBMISSION_TYPE.code,
+      errors.INVALID_SUBMISSION_TYPE.errorCode,
+      errors.INVALID_SUBMISSION_TYPE.suggestion
+    );
   } catch (err) {
     next(err);
   }

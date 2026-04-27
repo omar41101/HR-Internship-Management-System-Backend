@@ -14,6 +14,8 @@ import {
   assignTask,
   getMyTasks,
   reviewTask,
+  getTaskSubmission,
+  downloadTaskSubmission,
 } from "../controllers/taskController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -78,6 +80,16 @@ router.patch(
 
 // Route to remove a task submission
 router.patch("/tasks/:taskId/unsubmit", authenticate, unSubmitTask);
+
+// Route to consult the task submission
+router.get("/tasks/:taskId/submission", authenticate, getTaskSubmission);
+
+// Route to download the task submission file
+router.get(
+  "/tasks/:taskId/submission/download",
+  authenticate,
+  downloadTaskSubmission,
+);
 
 // Route to assign a task
 router.patch("/tasks/:taskId/assign", authenticate, assignTask);
