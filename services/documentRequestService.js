@@ -12,70 +12,7 @@ import { errors as documentTypeErrors } from "../errors/documentTypeErrors.js";
 import AppError from "../utils/AppError.js";
 import { getOne, getAll } from "./handlersFactory.js";
 import { validateDocumentRequestScope } from "../utils/documentRequestHelpers.js";
-
-// Add a new document request
-export const createDocumentRequest = async (data, currentUser) => {
-  const { title, description, projectId, scope, sprintId, taskId, dueDate } =
-    data;
-
-  // Check the project existence
-  const project = await Project.findById(projectId);
-  if (!project) {
-    throw new AppError(
-      projectErrors.PROJECT_NOT_FOUND.message,
-      projectErrors.PROJECT_NOT_FOUND.code,
-      projectErrors.PROJECT_NOT_FOUND.errorCode,
-      projectErrors.PROJECT_NOT_FOUND.suggestion,
-    );
-  }
-
-  // Check the team existence for the project
-  const team = await Team.findOne({ projectId });
-  if (!team) {
-    throw new AppError(
-      projectErrors.TEAM_NOT_FOUND.message,
-      projectErrors.TEAM_NOT_FOUND.code,
-      projectErrors.TEAM_NOT_FOUND.errorCode,
-      projectErrors.TEAM_NOT_FOUND.suggestion,
-    );
-  }
-
-  // Check if the user is a member of the project
-  const isMember = await TeamMember.exists({
-    teamId: team._id,
-    userId: currentUser.id,
-  });
-  if (!isMember) {
-    throw new AppError(
-      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.message,
-      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.code,
-      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.errorCode,
-      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.suggestion,
-    );
-  }
-
-  // Validate the scope logic
-  await validateDocumentRequestScope(scope, sprintId, taskId, projectId);
-
-  // Create the document request
-  const request = await DocumentRequest.create({
-    title,
-    description,
-    projectId,
-    scope,
-    sprintId,
-    taskId,
-    dueDate,
-    requestedBy: currentUser.id,
-  });
-
-  return {
-    status: "Success",
-    code: 201,
-    message: "Document request created successfully!",
-    data: request,
-  };
-};
+import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
 
 // Get all document requests for a project
 export const getAllDocumentRequests = async (projectId, queryParams, user) => {
@@ -91,34 +28,7 @@ export const getAllDocumentRequests = async (projectId, queryParams, user) => {
   }
 
   // Access control: Only Admin + project members can view document requests
-  const isAdmin = user.role === "Admin";
-
-  const team = await Team.findOne({ projectId });
-  if (!team) {
-    throw new AppError(
-      projectErrors.TEAM_NOT_FOUND.message,
-      projectErrors.TEAM_NOT_FOUND.code,
-      projectErrors.TEAM_NOT_FOUND.errorCode,
-      projectErrors.TEAM_NOT_FOUND.suggestion,
-    );
-  }
-
-  const isMember = await TeamMember.exists({
-    teamId: team._id,
-    userId: user.id,
-  });
-
-  const isProductOwner =
-    project.productOwnerId.toString() === user.id.toString();
-
-  if (!isMember && !isProductOwner && !isAdmin) {
-    throw new AppError(
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.message,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.code,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.errorCode,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.suggestion,
-    );
-  }
+  await isTeamMemberOrProductOwnerOrAdmin(project, user, errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS);
 
   // Filter by project (To view only document requests related to the project)
   const filters = {
@@ -132,7 +42,6 @@ export const getAllDocumentRequests = async (projectId, queryParams, user) => {
       { path: "requestedBy", select: "name email" },
       { path: "sprintId", select: "name number" },
       { path: "taskId", select: "title status" },
-      { path: "fulfilledDocumentId", select: "title fileURL" },
     ],
     null,
     ["title", "description"],
@@ -164,31 +73,78 @@ export const getDocumentRequestById = async (requestId, user) => {
   }
 
   // Access control: Only Admin + project members can view document requests
-  const isAdmin = user.role === "Admin";
-  const team = await Team.findOne({ projectId: project._id });
-  const isMember = await TeamMember.exists({
-    teamId: team._id,
-    userId: user.id,
-  });
-
-  const isProductOwner =
-    project.productOwnerId.toString() === user.id.toString();
-
-  if (!isMember && !isProductOwner && !isAdmin) {
-    throw new AppError(
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.message,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.code,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.errorCode,
-      errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS.suggestion,
-    );
-  }
+  await isTeamMemberOrProductOwnerOrAdmin(project, user, errors.UNAUTHORIZED_TO_VIEW_DOCUMENT_REQUESTS);
 
   return await getOne(DocumentRequest, errors.DOCUMENT_REQUEST_NOT_FOUND, [
     { path: "requestedBy", select: "name email" },
     { path: "sprintId", select: "name number" },
     { path: "taskId", select: "title status" },
-    { path: "fulfilledDocumentId", select: "title fileURL" },
   ])(requestId);
+};
+
+// Add a new document request
+export const createDocumentRequest = async (data, currentUser) => {
+  const { title, description, projectId, scope, sprintId, taskId, dueDate } =
+    data;
+
+  // Check the project existence
+  const project = await Project.findById(projectId);
+  if (!project) {
+    throw new AppError(
+      projectErrors.PROJECT_NOT_FOUND.message,
+      projectErrors.PROJECT_NOT_FOUND.code,
+      projectErrors.PROJECT_NOT_FOUND.errorCode,
+      projectErrors.PROJECT_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Check the team existence for the project
+  const team = await Team.findOne({ projectId });
+  if (!team) {
+    throw new AppError(
+      projectErrors.TEAM_NOT_FOUND.message,
+      projectErrors.TEAM_NOT_FOUND.code,
+      projectErrors.TEAM_NOT_FOUND.errorCode,
+      projectErrors.TEAM_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Check if the user is a member of the project
+  const isProductOwner = project.productOwnerId.toString() === currentUser.id.toString();
+  const isMember = await TeamMember.exists({
+    teamId: team._id,
+    userId: currentUser.id,
+  });
+  if (!isMember && !isProductOwner) {
+    throw new AppError(
+      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.message,
+      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.code,
+      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.errorCode,
+      errors.UNAUTHORIZED_TO_ADD_DOCUMENT_REQUEST.suggestion,
+    );
+  }
+
+  // Validate the scope logic
+  await validateDocumentRequestScope(scope, sprintId, taskId, projectId);
+
+  // Create the document request
+  const request = await DocumentRequest.create({
+    title,
+    description,
+    projectId,
+    scope,
+    sprintId: sprintId? sprintId : null,
+    taskId: taskId? taskId : null,
+    dueDate: dueDate? dueDate : null,
+    requestedBy: currentUser.id,
+  });
+
+  return {
+    status: "Success",
+    code: 201,
+    message: "Document request created successfully!",
+    data: request,
+  };
 };
 
 // Edit a document request (Only the creator of the request can edit the request)
@@ -236,7 +192,7 @@ export const editDocumentRequest = async (requestId, data, user) => {
       scope,
       sprintId,
       taskId,
-      request.projectId.toString(),
+      request.projectId,
     );
   }
 
@@ -296,6 +252,8 @@ export const deleteDocumentRequest = async (requestId, user) => {
   // Delete the document request
   await request.deleteOne();
 
+  // Later, delete the docs related to the request
+
   return {
     status: "Success",
     code: 200,
@@ -317,7 +275,7 @@ export const markDocumentRequestAsFulfilled = async (requestId, user) => {
   }
 
   // Authorization check: Only the creator of the document request can mark it as fulfilled
-  if (request.createdBy.toString() !== user.id.toString()) {
+  if (request.requestedBy.toString() !== user.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_FULFILL_DOCUMENT_REQUEST.message,
       errors.UNAUTHORIZED_TO_FULFILL_DOCUMENT_REQUEST.code,

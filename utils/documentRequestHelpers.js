@@ -7,6 +7,15 @@ import AppError from "../utils/AppError.js";
 
 // Validate the document request scope
 export const validateDocumentRequestScope = async (scope, sprintId, taskId, projectId) => {
+  if (!["Sprint", "Backlog", "Project"].includes(scope)) {
+    throw new AppError(
+      errors.INVALID_DOCUMENT_REQUEST_SCOPE.message,
+      errors.INVALID_DOCUMENT_REQUEST_SCOPE.code,
+      errors.INVALID_DOCUMENT_REQUEST_SCOPE.errorCode,
+      errors.INVALID_DOCUMENT_REQUEST_SCOPE.suggestion,
+    );
+  }
+  
   if (scope === "Sprint" && !sprintId) {
     throw new AppError(
       errors.SPRINT_REQUIRED_FOR_SPRINT_SCOPE.message,
@@ -28,7 +37,7 @@ export const validateDocumentRequestScope = async (scope, sprintId, taskId, proj
   // Check the sprint existence
   if (sprintId) {
     const sprint = await Sprint.findById(sprintId);
-    if (!sprint || sprint.projectId.toString() !== projectId) {
+    if (!sprint || sprint.projectId.toString() !== projectId.toString()) {
       throw new AppError(
         sprintErrors.SPRINT_NOT_FOUND.message,
         sprintErrors.SPRINT_NOT_FOUND.code,
@@ -40,7 +49,7 @@ export const validateDocumentRequestScope = async (scope, sprintId, taskId, proj
 
   if (taskId) {
     const task = await Task.findById(taskId);
-    if (!task || task.projectId.toString() !== projectId) {
+    if (!task || task.projectId.toString() !== projectId.toString()) {
       throw new AppError(
         taskErrors.TASK_NOT_FOUND.message,
         taskErrors.TASK_NOT_FOUND.code,

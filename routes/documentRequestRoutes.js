@@ -18,9 +18,6 @@ import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-// Create a new document request
-router.post("/document-requests", authenticate, createDocumentRequest);
-
 // Get all document requests for a project
 router.get(
   "/document-requests/:projectId",
@@ -29,7 +26,10 @@ router.get(
 );
 
 // Get a document request by ID
-router.get("/document-requests/:id", authenticate, getDocumentRequestById);
+router.get("/document-request/:id", authenticate, getDocumentRequestById);
+
+// Create a new document request
+router.post("/document-requests", authenticate, createDocumentRequest);
 
 // Edit a document request
 router.patch("/document-requests/:id", authenticate, editDocumentRequest);

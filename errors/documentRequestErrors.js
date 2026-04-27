@@ -68,4 +68,10 @@ export const errors = {
     suggestion:
       "Only the creator of the document request can mark a doc request it as fulfilled and any project member can upload a document to fulfill the request.",
   },
+  INVALID_DOCUMENT_REQUEST_SCOPE: {
+    message: "Invalid document request scope.",
+    code: 400,
+    errorCode: "INVALID_DOCUMENT_REQUEST_SCOPE",
+    suggestion: "Scope must be one of 'Sprint', 'Backlog', or 'Project'.",
+  },
 };
