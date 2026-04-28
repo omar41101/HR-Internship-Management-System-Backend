@@ -55,9 +55,13 @@ export const addUserService = async (data, currentUser, ip) => {
     lastName,
     email,
     gender,
+    dateOfBirth,
+    placeOfBirth,
     idType, // Passport or CIN
     idCountryCode, // Passport or CIN country code
     idNumber, // Passport or CIN number
+    issueDate, // Passport or CIN issue date
+    issuePlace, // Passport or CIN issue place
     address,
     joinDate,
     countryCode, // Country code for the phone number
@@ -74,6 +78,8 @@ export const addUserService = async (data, currentUser, ip) => {
     department,
     supervisor_email, // Pass the supervisor email instead of the full name for avoiding duplicate issues
     profileImageURL,
+    contractJoinDate,
+    contractEndDate,
   } = data;
 
   const trimmedEmail = (email || "").trim().toLowerCase();
@@ -106,6 +112,10 @@ export const addUserService = async (data, currentUser, ip) => {
     hasChildren,
     nbOfChildren,
     gender,
+    dateOfBirth,
+    placeOfBirth,
+    contractJoinDate,
+    contractEndDate,
   });
 
   // Check the phone number validity
@@ -128,7 +138,7 @@ export const addUserService = async (data, currentUser, ip) => {
   }
 
   // Check the CIN/Passport validity
-  fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber);
+  fullCINPassportValidation(idType, idCountryCode, trimmedIdNumber, issueDate, issuePlace);
 
   // Resolve role, department and supervisor
   const roleId = await resolveRoleId(role);
@@ -151,10 +161,14 @@ export const addUserService = async (data, currentUser, ip) => {
     lastName,
     gender,
     email: trimmedEmail,
+    dateOfBirth,
+    placeOfBirth,
     idType,
     idNumber: {
       number: trimmedIdNumber,
       countryCode: idCountryCode,
+      issueDate,
+      issuePlace,
     },
     password: hashedPassword,
     verificationCode: hashedOTP,
@@ -174,6 +188,10 @@ export const addUserService = async (data, currentUser, ip) => {
     department_id: departmentId,
     supervisor_id: supervisorId,
     profileImageURL: finalProfileImageURL,
+    employment: {
+      contractJoinDate,
+      contractEndDate
+    },
   });
 
   // Initialize the leave balances for the user based on the active leave types
@@ -274,6 +292,10 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
     hasChildren: updateData.hasChildren,
     nbOfChildren: updateData.nbOfChildren,
     gender: updateData.gender,
+    dateOfBirth: updateData.dateOfBirth,
+    placeOfBirth: updateData.placeOfBirth,
+    contractJoinDate: updateData.employment.contractJoinDate,
+    contractEndDate: updateData.employment.contractEndDate,
   });
 
   // Check the phone number validity + uniqueness in case of an update
@@ -304,11 +326,15 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   if (updateData.idType || updateData.idNumber) {
     let trimmedIdNumber = updateData.idNumber?.number?.trim();
     let idCountryCode = updateData.idNumber?.countryCode;
+    let issueDate = updateData.idNumber?.issueDate;
+    let issuePlace = updateData.idNumber?.issuePlace;
 
     fullCINPassportValidation(
       updateData.idType,
       idCountryCode,
       trimmedIdNumber,
+      issueDate,
+      issuePlace,
     );
 
     // Force TN for CIN
@@ -342,6 +368,8 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
 
     updateData.idNumber.number = trimmedIdNumber;
     updateData.idNumber.countryCode = idCountryCode;
+    updateData.idNumber.issueDate = issueDate;
+    updateData.idNumber.issuePlace = issuePlace;
   }
 
   // Check the role validity and send the role change email (updateDate.role only exists if the role is being changed)

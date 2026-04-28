@@ -122,4 +122,41 @@ export const errors = {
     errorCode: "MISSING_FACE_DESCRIPTORS",
     suggestion: "Please provide valid face descriptors for enrollment.",
   },
+  INVALID_ID_ISSUE_DATE: {
+    message: "Invalid issue date for the ID",
+    code: 400,
+    errorCode: "INVALID_ID_ISSUE_DATE",
+    suggestion: "Please provide a valid ID issue date.",
+  },
+  INVALID_ID_ISSUE_PLACE: {
+    message: "Invalid issue place for the ID",
+    code: 400,
+    errorCode: "INVALID_ID_ISSUE_PLACE",
+    suggestion: "Please provide a valid ID issue place.",
+  },
+  INVALID_DATE_OF_BIRTH: {
+    message: "Invalid date of birth",
+    code: 400,
+    errorCode: "INVALID_DATE_OF_BIRTH",
+    suggestion: "Please provide a valid date of birth that is in the past.",
+  },
+  PLACE_OF_BIRTH_REQUIRED: {
+    message: "Place of birth is required",
+    code: 400,
+    errorCode: "PLACE_OF_BIRTH_REQUIRED",
+    suggestion: "Please provide the user's place of birth.",
+  },
+  INVALID_CONTRACT_DATE: {
+    message: "Invalid Contract Date",
+    code: 400,
+    errorCode: "INVALID_CONTRACT_DATE",
+    suggestion: "Please provide a valid contract date.",
+  },
+  CONTRACT_JOIN_DATE_REQUIRED: {
+    message: "Contract join date is required",
+    code: 400,
+    errorCode: "CONTRACT_JOIN_DATE_REQUIRED",
+    suggestion: "Please provide the contract join date.",
+  },
 };
+

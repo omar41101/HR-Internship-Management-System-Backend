@@ -14,9 +14,17 @@ const userSchema = mongoose.Schema(
     gender: {
       type: String,
       enum: ["Male", "Female"],
-      // required: true,
+      required: true,
     },
     email: {
+      type: String,
+      required: true,
+    },
+    dateOfBirth: {
+      type: Date,
+      required: true,
+    },
+    placeOfBirth: {
       type: String,
       required: true,
     },
@@ -37,6 +45,14 @@ const userSchema = mongoose.Schema(
         minlength: 2,
         maxlength: 2,
         enum: countries.map((c) => c.code), // Ensure It's a valid country code from the list of countries
+      },
+      issueDate: {
+        type: Date,
+        required: true,
+      },
+      issuePlace: {
+        type: String,
+        required: true,
       },
     },
     password: {
@@ -86,10 +102,21 @@ const userSchema = mongoose.Schema(
       required: true,
     },
     joinDate: {
-      // UTC Join Date (No timezone issues)
+      // UTC Join Date to the platform (No timezone issues)
       type: Date,
       required: true,
       default: Date.now,
+    },
+    employment: { 
+      // Employment contract details
+      contractJoinDate: {
+        type: Date,
+        required: true,
+      },
+      contractEndDate: {
+        type: Date,
+        required: true,
+      },
     },
     phoneNumber: {
       type: String,

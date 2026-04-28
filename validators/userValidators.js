@@ -111,6 +111,10 @@ export const validateUserData = (data) => {
     hasChildren,
     nbOfChildren,
     gender,
+    dateOfBirth,
+    placeOfBirth,
+    contractJoinDate,
+    contractEndDate,
   } = data;
 
   // Validate the input fields
@@ -193,6 +197,109 @@ export const validateUserData = (data) => {
       leaveTypeErrors.INVALID_GENDER.errorCode,
       leaveTypeErrors.INVALID_GENDER.suggestion,
     );
+
+  // Validate the date of birth (should be a valid date, not in the future, and the age should be between 18 and 60)
+  const today = new Date();
+  if (!dateOfBirth)
+    throw new AppError(
+      errors.INVALID_DATE_OF_BIRTH.message,
+      errors.INVALID_DATE_OF_BIRTH.code,
+      errors.INVALID_DATE_OF_BIRTH.errorCode,
+      "The Date of Birth is required and must be a valid date.",
+    );
+  else {
+    // Get the date of birth from the input and check its existence
+    const dob = new Date(dateOfBirth);
+    if (isNaN(dob.getTime())) {
+      throw new AppError(
+        errors.INVALID_DATE_OF_BIRTH.message,
+        errors.INVALID_DATE_OF_BIRTH.code,
+        errors.INVALID_DATE_OF_BIRTH.errorCode,
+        "The Date of Birth is required and must be a valid date.",
+      );
+    }
+
+    // Calculate the age based on the date of birth
+    const age = today.getFullYear() - dob.getFullYear();
+
+    // Check if the date of birth is valid, not in the future, and the age is between 18 and 60
+    if (dob >= today || age < 18 || age > 60) {
+      throw new AppError(
+        errors.INVALID_DATE_OF_BIRTH.message,
+        errors.INVALID_DATE_OF_BIRTH.code,
+        errors.INVALID_DATE_OF_BIRTH.errorCode,
+        "The Person must be at least 18 years old and not older than 60 years. Please provide a valid date of birth.",
+      );
+    }
+  }
+
+  // Validate the place of birth
+  if (isEmpty(placeOfBirth))
+    throw new AppError(
+      errors.PLACE_OF_BIRTH_REQUIRED.message,
+      errors.PLACE_OF_BIRTH_REQUIRED.code,
+      errors.PLACE_OF_BIRTH_REQUIRED.errorCode,
+      errors.PLACE_OF_BIRTH_REQUIRED.suggestion,
+    );
+
+  // Validate the contract dates (join date should not be in the future, end date should be after join date)
+  if (!contractJoinDate)
+    throw new AppError(
+      errors.CONTRACT_JOIN_DATE_REQUIRED.message,
+      errors.CONTRACT_JOIN_DATE_REQUIRED.code,
+      errors.CONTRACT_JOIN_DATE_REQUIRED.errorCode,
+      errors.CONTRACT_JOIN_DATE_REQUIRED.suggestion,
+    );
+  else {
+    const joinDate = new Date(contractJoinDate);
+
+    if (isNaN(joinDate.getTime())) {
+      throw new AppError(
+        "Invalid Contract Join Date",
+        errors.INVALID_CONTRACT_DATE.code,
+        errors.INVALID_CONTRACT_DATE.errorCode,
+        "Contract join date is required and must be a valid date.",
+      );
+    }
+
+    if (joinDate > today) {
+      throw new AppError(
+        "Invalid Contract Join Date",
+        errors.INVALID_CONTRACT_DATE.code,
+        errors.INVALID_CONTRACT_DATE.errorCode,
+        "Contract join date cannot be in the future. Please provide a valid contract join date.",
+      );
+    }
+
+    if (!contractEndDate) {
+      throw new AppError(
+        "Invalid Contract End Date",
+        errors.INVALID_CONTRACT_DATE.code,
+        errors.INVALID_CONTRACT_DATE.errorCode,
+        "Contract end date is required. Please provide a valid contract end date.",
+      );
+    }
+    else {
+      const endDate = new Date(contractEndDate);
+      if (isNaN(endDate.getTime())) {
+        throw new AppError(
+          "Invalid Contract End Date",
+          errors.INVALID_CONTRACT_DATE.code,
+          errors.INVALID_CONTRACT_DATE.errorCode,
+          "Contract end date is required and must be a valid date.",
+        );
+      }
+
+      if (endDate <= joinDate) {
+        throw new AppError(
+          "Invalid Contract End Date",
+          errors.INVALID_CONTRACT_DATE.code,
+          errors.INVALID_CONTRACT_DATE.errorCode,
+          "Contract end date must be after the join date. Please provide a valid contract end date.",
+        );
+      }
+    }
+  }
 };
 
 // Tunisian CIN validation
@@ -218,11 +325,48 @@ export const getPassportHint = (countryCode) => {
   return ruleObj.description;
 };
 
+// Validate the issue date and place for CIN/Passport
+export const validateIdIssueDetails = (issueDate, issuePlace) => {
+  const today = new Date();
+  const issueDateObj = new Date(issueDate);
+
+  if (isNaN(issueDateObj)) {
+    throw new AppError(
+      errors.INVALID_ID_ISSUE_DATE.message,
+      errors.INVALID_ID_ISSUE_DATE.code,
+      errors.INVALID_ID_ISSUE_DATE.errorCode,
+      "The ID issue date is required and must be a valid date. Please provide a valid issue date.",
+    );
+  }
+
+  // Check if the Issue date should not be in the future
+  if (issueDateObj > today) {
+    throw new AppError(
+      errors.INVALID_ID_ISSUE_DATE.message,
+      errors.INVALID_ID_ISSUE_DATE.code,
+      errors.INVALID_ID_ISSUE_DATE.errorCode,
+      "ID issue date cannot be in the future. Please provide a valid issue date.",
+    );
+  }
+
+  // Check the issue place existence
+  if (isEmpty(issuePlace)) {
+    throw new AppError(
+      errors.INVALID_ID_ISSUE_PLACE.message,
+      errors.INVALID_ID_ISSUE_PLACE.code,
+      errors.INVALID_ID_ISSUE_PLACE.errorCode,
+      errors.INVALID_ID_ISSUE_PLACE.suggestion,
+    );
+  }
+};
+
 // Full CIN/Passport validation helper function (format + uniqueness)
 export const fullCINPassportValidation = (
   idType,
   idCountryCode,
   trimmedIdNumber,
+  issueDate,
+  issuePlace,
 ) => {
   // Check ID type validity
   if (!["CIN", "Passport"].includes(idType)) {
@@ -244,6 +388,8 @@ export const fullCINPassportValidation = (
           errors.INVALID_CIN_FORMAT.suggestion,
         );
       }
+
+      validateIdIssueDetails(issueDate, issuePlace);
       break;
 
     case "Passport":
@@ -264,6 +410,8 @@ export const fullCINPassportValidation = (
           errors.INVALID_PASSPORT_FORMAT.suggestion,
         );
       }
+
+      validateIdIssueDetails(issueDate, issuePlace);
       break;
   }
 };
