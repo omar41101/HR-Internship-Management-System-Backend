@@ -6,6 +6,7 @@ import {
   bulkUpdateTimetableEntries,
   deleteTimetableEntry,
   clearMonthTimetable,
+  getAllTimetables,
 } from "../controllers/timetableController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -141,6 +142,14 @@ router.put(
   authenticate,
   authorize(["Admin"]),
   updateTimetableEntry
+);
+
+// Route to get all user's timetables (Admin and Supervisor only)
+router.get(
+  "/timetable",
+  authenticate,
+  authorize(["Admin", "Supervisor"]),
+  getAllTimetables
 );
 
 // Route to get a user's timetable: All users can see their own timetable, Admin can see all timetables, Supervisor can see the timetable of the users they supervise

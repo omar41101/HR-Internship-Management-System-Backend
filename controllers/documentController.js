@@ -74,7 +74,7 @@ export const getPersonalDocuments = async (req, res, next) => {
   }
 };
 
-// Toggle the confidentiality of a personal document controller
+// Toggle Document Confidentiality (True/False) (User himself or Admin)
 export const toggleConfidentiality = async (req, res, next) => {
   try {
     const result = await documentService.toggleConfidentialityService({

@@ -31,8 +31,8 @@ const getDistanceInMeters = (lat1, lon1, lat2, lon2) => {
   const a =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) ** 2;
+    Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) ** 2;
 
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
@@ -226,8 +226,10 @@ export const checkIn = async (req, res, next) => {
 
     // Determine presence status (late/present)
     let status = "present";
-    if (shift?.startTime) {
-      const [startHour, startMinute] = shift.startTime.split(":").map(Number);
+    const resolvedStartTime = shift?.startTime || shift?.specialShiftData?.periods?.[0]?.startTime;
+
+    if (resolvedStartTime) {
+      const [startHour, startMinute] = resolvedStartTime.split(":").map(Number);
       const shiftStart = new Date(todayUTC);
       shiftStart.setUTCHours(startHour, startMinute, 0, 0);
       const grace = shift.gracePeriod || 15;
@@ -235,6 +237,7 @@ export const checkIn = async (req, res, next) => {
       if (now > lateThreshold) status = "late";
     } else {
       // Fallback if no shift: mark late after 09:15 local time
+      console.warn(`[ATTENDANCE-FALLBACK] No shift timing found for user ${userId} on date ${todayUTC.toISOString().split('T')[0]}. Falling back to 09:15 threshold.`);
       const currentHour = now.getHours();
       const currentMinute = now.getMinutes();
       if (currentHour > 9 || (currentHour === 9 && currentMinute > 15)) {
@@ -371,15 +374,15 @@ export const getMyStatus = async (req, res, next) => {
 // Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {
   try {
-    const { 
-      userId, 
-      startDate, 
-      endDate, 
-      status, 
-      role, 
-      department, 
+    const {
+      userId,
+      startDate,
+      endDate,
+      status,
+      role,
+      department,
       search,
-      page = 1, 
+      page = 1,
       limit: queryLimit, // [PAGINATION-FIX]
     } = req.query;
 
@@ -445,7 +448,7 @@ export const getAttendance = async (req, res, next) => {
     // ──────────────────────────────────────────────────────────────────────────
     if (req.query.forSummary === "true") {
       const totalUsers = await User.countDocuments(userFilter);
-      
+
       const pagedUsers = await User.find(userFilter)
         .populate("role_id", "name")
         .populate("department_id", "name")
@@ -456,46 +459,46 @@ export const getAttendance = async (req, res, next) => {
 
       // Find attendance records for these specific users on the target date
       const attendanceFilter = {
-  date: {
-    $gte: getStartOfDay(startDate),
-    $lte: getEndOfDay(endDate),
-  },
-};
+        date: {
+          $gte: getStartOfDay(startDate),
+          $lte: getEndOfDay(endDate),
+        },
+      };
       const userIds = pagedUsers.map(u => u._id);
       attendanceFilter.userId = { $in: userIds };
 
       const records = await Attendance.find(attendanceFilter)
-  .populate({
-    path: "userId",
-    populate: [
-      { path: "role_id", select: "name" },
-      { path: "department_id", select: "name" },
-      { path: "supervisor_id", select: "name lastName" },
-    ],
-  })
-  .lean();
+        .populate({
+          path: "userId",
+          populate: [
+            { path: "role_id", select: "name" },
+            { path: "department_id", select: "name" },
+            { path: "supervisor_id", select: "name lastName" },
+          ],
+        })
+        .lean();
 
 
       // Map attendance onto the users (Left Join)
       const mappedResults = pagedUsers.map(user => {
         const record = records.find(r => r.userId.toString() === user._id.toString());
-return record || {
-  userId: {
-    _id: user._id,
-    name: user.name,
-    lastName: user.lastName,
-    email: user.email,
-    role_id: user.role_id,
-    department_id: user.department_id,
-    supervisor_id: user.supervisor_id,
-  },
-  date: getStartOfDay(startDate),
-  status: "absent",
-  checkInTime: null,
-  checkOutTime: null,
-  workLocation: null,
-  isImplicit: true,
-};
+        return record || {
+          userId: {
+            _id: user._id,
+            name: user.name,
+            lastName: user.lastName,
+            email: user.email,
+            role_id: user.role_id,
+            department_id: user.department_id,
+            supervisor_id: user.supervisor_id,
+          },
+          date: getStartOfDay(startDate),
+          status: "absent",
+          checkInTime: null,
+          checkOutTime: null,
+          workLocation: null,
+          isImplicit: true,
+        };
       });
 
       // Special handling: if we return the user object inside 'userId', it matches 'populate' format
@@ -525,7 +528,7 @@ return record || {
     }
 
     // ─── Standard 'Record-Centric' Logic (For History / Calendar) ───────────────────
-    
+
     // Search for users matching the userFilter criteria and get their IDs
     let userIds = null;
     if (Object.keys(userFilter).length > 0) {
@@ -544,22 +547,22 @@ return record || {
       }
 
       if (filter.userId && !Array.isArray(filter.userId)) {
-  // A specific userId was already set — check if it's in the matched set
-  const specificId = filter.userId.toString();
-  const inSet = userIds.some(id => id.toString() === specificId);
-  if (!inSet) {
-    return res.status(200).json({
-      status: "Success",
-      page: parsedPage,
-      totalPages: 0,
-      totalRecords: 0,
-      result: [],
-    });
-  }
-  // else: keep filter.userId as the specific ID (more precise than $in)
-} else {
-  filter.userId = { $in: userIds };
-}
+        // A specific userId was already set — check if it's in the matched set
+        const specificId = filter.userId.toString();
+        const inSet = userIds.some(id => id.toString() === specificId);
+        if (!inSet) {
+          return res.status(200).json({
+            status: "Success",
+            page: parsedPage,
+            totalPages: 0,
+            totalRecords: 0,
+            result: [],
+          });
+        }
+        // else: keep filter.userId as the specific ID (more precise than $in)
+      } else {
+        filter.userId = { $in: userIds };
+      }
     }
 
     // Get total count for pagination

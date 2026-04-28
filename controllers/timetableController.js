@@ -246,6 +246,46 @@ export const getTimetableByUser = async (req, res, next) => {
   }
 };
 
+// Get all timetables (shifts) for all users (Admin/Supervisor only)
+export const getAllTimetables = async (req, res, next) => {
+  try {
+    const { month, year } = req.query;
+
+    const now = new Date();
+    const queryMonth = month ? Number(month) : now.getUTCMonth() + 1;
+    const queryYear = year ? Number(year) : now.getUTCFullYear();
+
+    const startDate = new Date(Date.UTC(queryYear, queryMonth - 1, 1));
+    const endDate = new Date(Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999));
+
+    const filter = {
+      date: { $gte: startDate, $lte: endDate },
+    };
+
+    // If Supervisor, only get timetables for users they supervise
+    if (req.user.role === "Supervisor") {
+      const supervisees = await User.find({ supervisor_id: req.user.id }).select("_id");
+      const superviseeIds = supervisees.map((u) => u._id);
+      filter.userId = { $in: superviseeIds };
+    }
+
+    const shifts = await Timetable.find(filter).sort({ date: 1 });
+
+    res.status(200).json({
+      status: "Success",
+      message: "All timetables fetched successfully!",
+      result: shifts,
+      meta: {
+        month: queryMonth,
+        year: queryYear,
+        total: shifts.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Bulk update or create multiple timetable entries (shifts) for a user across multiple dates: STILL NOT DONE
 export const bulkUpdateTimetableEntries = async (req, res, next) => {
   try {
