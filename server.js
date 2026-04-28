@@ -7,6 +7,7 @@ import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
+import "./cron/resignationCron.js"; // To automatically update resignation statuses and deactivate users
 
 // Creation of an express app
 const app = express();
@@ -46,6 +47,7 @@ import teamRoutes from "./routes/teamRoutes.js";
 import meetingRoutes from "./routes/meetingRoutes.js";
 import documentRequestRoutes from "./routes/documentRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import resignationRoutes from "./routes/resignationRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -97,6 +99,7 @@ app.use('/api', teamRoutes);
 app.use('/api', meetingRoutes);
 app.use('/api', documentRequestRoutes);
 app.use('/api', dashboardRoutes);
+app.use('/api', resignationRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
