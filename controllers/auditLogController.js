@@ -108,8 +108,14 @@ export const getRecentAuditLogs = async (req, res, next) => {
     // Format the output to match the frontend expected structure
     const formattedLogs = logs.map(formatAuditLog);
 
-    res.status(200).json(formattedLogs);
-  } catch (error) {
+    res.status(200).json({
+      status: "Success",
+      code: 200,
+      message: "Recent audit logs retrieved successfully!",
+      data: formattedLogs,
+    });
+  }
+  catch (error) {
     next(error);
   }
 };
@@ -185,11 +191,14 @@ export const getAllAuditLogs = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
-      total,
-      page: parsedPage,
-      limit: limit,
-      pages: Math.ceil(total / parseInt(limit)),
-      logs: formattedLogs,
+      code: 200,
+      data: formattedLogs,
+      pagination: {
+        currentPage: parsedPage,
+        totalPages: Math.ceil(total / limit),
+        limitPerPage: limit,
+        totalCount: total,
+      }
     });
   } catch (error) {
     next(error);

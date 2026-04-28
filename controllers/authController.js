@@ -9,6 +9,7 @@ export const login = async (req, res, next) => {
     if (result.type === "OTP_REQUIRED") {
       return res.status(200).json({
         status: "Success but OTPVerificationRequired",
+        message: "OTP verification is required to complete the login process",
         code : 200
       });
     }
@@ -16,6 +17,7 @@ export const login = async (req, res, next) => {
     if (result.type === "RESET_PASSWORD_REQUIRED") {
       return res.status(200).json({
         status: "Success but MustResetPassword",
+        message: "Password reset is required to complete the login process",
         code: 200
       });
     }

@@ -19,7 +19,7 @@ const SHIFT_CONFIG = {
   "Full-time Shift": {
     startTime: "09:00",
     endTime: "17:00",
-  }
+  },
 };
 
 // Checks the HH:mm format for startTime and endTime fields in Special Shifts
@@ -39,21 +39,11 @@ const isValidLocation = (location) => {
 // Add a new timetable entry (shift) for a user on a specific date: Only used for empty days (Admin only)
 export const addTimetableEntry = async (req, res, next) => {
   try {
-    const {
-      userId,
-      date,
-      type,
-      location,
-      color,
-      startTime,
-      endTime,
-    } = req.body;
+    const { userId, date, type, location, color, startTime, endTime } =
+      req.body;
 
     if (!userId || !date || !type) {
-      throw new AppError(
-        "Missing required fields (userId, date, type)",
-        400
-      );
+      throw new AppError("Missing required fields (userId, date, type)", 400);
     }
 
     // Check the user existence
@@ -62,7 +52,8 @@ export const addTimetableEntry = async (req, res, next) => {
 
     // Normalize the date to UTC to ensure consistency
     const normalizedDate = new Date(date);
-    if (isNaN(normalizedDate.getTime())) throw new AppError("Invalid date", 400);
+    if (isNaN(normalizedDate.getTime()))
+      throw new AppError("Invalid date", 400);
     const dateStr = normalizedDate.toISOString().split("T")[0]; // E.g., "2026-04-04"
 
     // Check a timetable entry existence for the same user and date
@@ -92,7 +83,8 @@ export const addTimetableEntry = async (req, res, next) => {
     }
 
     // Check the location constraint for working shifts (Morning, Evening, Special, Full-time)
-    if (!location) throw new AppError("Location is required for working shifts!", 400);
+    if (!location)
+      throw new AppError("Location is required for working shifts!", 400);
     if (!isValidLocation(location)) {
       throw new AppError("Invalid location! Must be 'Remote' or 'Onsite'", 400);
     }
@@ -101,14 +93,17 @@ export const addTimetableEntry = async (req, res, next) => {
     // Handle the working shifts cases (Morning, Evening, Special, Full-time)
     if (type === "Special Shift") {
       if (!startTime || !endTime) {
-        throw new AppError("Special Shift requires startTime and endTime!", 400);
+        throw new AppError(
+          "Special Shift requires startTime and endTime!",
+          400,
+        );
       }
       if (!isValidTime(startTime) || !isValidTime(endTime)) {
         throw new AppError("Time must be HH:mm format!", 400);
       }
       shiftData.startTime = startTime;
       shiftData.endTime = endTime;
-    } 
+    }
     // Handle the Morning, Evening and Full-time shift cases
     else {
       const config = SHIFT_CONFIG[type];
@@ -123,8 +118,9 @@ export const addTimetableEntry = async (req, res, next) => {
 
     res.status(201).json({
       status: "Success",
+      code: 201,
       message: "Timetable entry created successfully!",
-      result: shift,
+      data: shift,
     });
   } catch (err) {
     next(err);
@@ -134,7 +130,17 @@ export const addTimetableEntry = async (req, res, next) => {
 // Update timetable entry (shift) for a user on a specific date: For already existing shifts (Admin only)
 export const updateTimetableEntry = async (req, res, next) => {
   try {
-    const { userId, date, type, location, color, duration, specialShiftId, specialShiftData, specialShiftName } = req.body;
+    const {
+      userId,
+      date,
+      type,
+      location,
+      color,
+      duration,
+      specialShiftId,
+      specialShiftData,
+      specialShiftName,
+    } = req.body;
 
     if (!userId || !date || !type || !location) {
       throw new AppError(
@@ -171,8 +177,9 @@ export const updateTimetableEntry = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Timetable entry updated successfully!",
-      result: shift,
+      data: shift,
     });
   } catch (err) {
     next(err);
@@ -181,7 +188,7 @@ export const updateTimetableEntry = async (req, res, next) => {
 
 // Get timetable (shifts) for a specific user
 export const getTimetableByUser = async (req, res, next) => {
-  try { 
+  try {
     const { userId } = req.params; // Get userId from URL parameters
     const { month, year } = req.query; // Month and year filtering (Pagination)
 
@@ -192,7 +199,11 @@ export const getTimetableByUser = async (req, res, next) => {
     }
 
     // Check if the id (if supervisor) is the user's supervisor id
-    if (req.user.role === "Supervisor" && (user.supervisor_id && !user.supervisor_id.equals(new mongoose.Types.ObjectId(req.user.id)))) {
+    if (
+      req.user.role === "Supervisor" &&
+      user.supervisor_id &&
+      !user.supervisor_id.equals(new mongoose.Types.ObjectId(req.user.id))
+    ) {
       throw new AppError("Unauthorized!", 403);
     }
 
@@ -201,9 +212,11 @@ export const getTimetableByUser = async (req, res, next) => {
     const queryMonth = month ? Number(month) : now.getUTCMonth() + 1;
     const queryYear = year ? Number(year) : now.getUTCFullYear();
 
-    // Calculate the first and last day of the month 
+    // Calculate the first and last day of the month
     const startDate = new Date(Date.UTC(queryYear, queryMonth - 1, 1));
-    const endDate = new Date(Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999));
+    const endDate = new Date(
+      Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999),
+    );
 
     // Find all shifts for the user within the specified month
     const shifts = await Timetable.find({
@@ -212,16 +225,20 @@ export const getTimetableByUser = async (req, res, next) => {
     }).sort({ date: 1 });
 
     // [DEBUG-PAGINATION] Added log to track pagination requests from frontend for testing purposes
-    console.log(`[PAGINATION] Module: Timetable | Month: ${queryMonth || ""} | Year: ${queryYear || ""} | Returned: ${shifts?.length || 0} records`);
+    console.log(
+      `[PAGINATION] Module: Timetable | Month: ${queryMonth || ""} | Year: ${queryYear || ""} | Returned: ${shifts?.length || 0} records`,
+    );
 
+    // Special pagination for the month by month timetable retrieval
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Timetable fetched successfully!",
-      result: shifts,
-      meta: {
+      data: shifts,
+      pagination: {
         month: queryMonth,
         year: queryYear,
-        total: shifts.length,
+        totalCount: shifts.length,
       },
     });
   } catch (err) {
@@ -232,15 +249,8 @@ export const getTimetableByUser = async (req, res, next) => {
 // Bulk update or create multiple timetable entries (shifts) for a user across multiple dates: STILL NOT DONE
 export const bulkUpdateTimetableEntries = async (req, res, next) => {
   try {
-    const {
-      userId,
-      dates,
-      type,
-      location,
-      color,
-      startTime,
-      endTime,
-    } = req.body;
+    const { userId, dates, type, location, color, startTime, endTime } =
+      req.body;
 
     if (
       !userId ||
@@ -267,7 +277,8 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
     for (const date of dates) {
       // Normalize the date to UTC to ensure consistency
       const normalizedDate = new Date(date);
-      if (isNaN(normalizedDate.getTime())) throw new AppError("Invalid date", 400);
+      if (isNaN(normalizedDate.getTime()))
+        throw new AppError("Invalid date", 400);
       const dateStr = normalizedDate.toISOString().split("T")[0]; // E.g., "2026-04-04"
 
       // Prepare the common shift data
@@ -288,15 +299,18 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
 
         updatedShifts.push(shift);
         continue; // Move to the next date
-      }
-      else { // For working shifts (Morning, Evening, Full-time and Special Shift)
+      } else {
+        // For working shifts (Morning, Evening, Full-time and Special Shift)
 
         // Check the location constraint for working shifts (Morning, Evening, Special, Full-time)
-        if (!location){
+        if (!location) {
           throw new AppError("Location is required for working shifts!", 400);
         }
         if (!isValidLocation(location)) {
-          throw new AppError("Invalid location! Must be 'Remote' or 'Onsite'", 400);
+          throw new AppError(
+            "Invalid location! Must be 'Remote' or 'Onsite'",
+            400,
+          );
         }
 
         // Morning, Evening, Full-time and Special Shift cases
@@ -305,8 +319,7 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
           if (!config) throw new AppError("Invalid shift type", 400);
           shiftData = { ...shiftData, ...config };
           shiftData.location = location;
-        } 
-        else {
+        } else {
           // Special Shift requires startTime and endTime
           if (!startTime || !endTime) {
             throw new AppError(
@@ -315,7 +328,10 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
             );
           }
           if (!isValidTime(startTime) || !isValidTime(endTime)) {
-            throw new AppError("startTime and endTime must be in HH:mm format!", 400);
+            throw new AppError(
+              "startTime and endTime must be in HH:mm format!",
+              400,
+            );
           }
 
           shiftData = { ...shiftData, startTime, endTime };
@@ -337,8 +353,9 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: `${updatedShifts.length} timetable entries updated successfully!`,
-      results: updatedShifts,
+      data: updatedShifts,
     });
   } catch (err) {
     next(err);
@@ -383,6 +400,7 @@ export const deleteTimetableEntry = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: "Timetable entry deleted successfully!",
     });
   } catch (err) {
@@ -396,7 +414,10 @@ export const clearMonthTimetable = async (req, res, next) => {
     const { userId, year: yearParam, month: monthParam } = req.params;
 
     if (!userId || yearParam === undefined || monthParam === undefined) {
-      throw new AppError("Missing required parameters (userId, year, month)", 400);
+      throw new AppError(
+        "Missing required parameters (userId, year, month)",
+        400,
+      );
     }
 
     const year = parseInt(yearParam);
@@ -427,8 +448,11 @@ export const clearMonthTimetable = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
       message: `${startDate.toLocaleString("default", { month: "long" })} timetable cleared successfully!`,
-      deletedCount: result.deletedCount,
+      data: {
+        deletedCount: result.deletedCount,
+      },
     });
   } catch (err) {
     next(err);

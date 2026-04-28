@@ -10,6 +10,8 @@ export const getSpecialShifts = async (req, res, next) => {
 
     res.status(200).json({
       status: "Success",
+      code: 200,
+      message: `${shifts.length} Special Shift types retrieved successfully!`,
       data: shifts,
     });
   } catch (err) {
@@ -78,6 +80,7 @@ export const createSpecialShift = async (req, res, next) => {
 
     res.status(201).json({
       status: "Success",
+      code: 201,
       message: "Special Shift type created successfully",
       data: specialShift,
     });

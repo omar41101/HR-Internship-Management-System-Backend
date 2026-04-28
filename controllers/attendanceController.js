@@ -284,9 +284,10 @@ export const checkIn = async (req, res, next) => {
     });
 
     res.status(200).json({
-      status: "success",
+      status: "Success",
+      code: 200,
       message: "Checked in successfully!",
-      result: attendance,
+      data: attendance,
     });
   } catch (error) {
     next(error);
@@ -352,13 +353,15 @@ export const getMyStatus = async (req, res, next) => {
         status: "success",
         message:
           "No attendance record found for today. You haven't checked in yet!",
-        result: null,
+        data: null,
       });
     }
 
     res.status(200).json({
-      status: "success",
-      result: attendance,
+      status: "Success",
+      code: 200,
+      message: "Attendance record retrieved successfully!",
+      data: attendance,
     });
   } catch (error) {
     next(error);
@@ -392,6 +395,7 @@ export const getAttendance = async (req, res, next) => {
       if (!user) {
         return res.status(404).json({
           status: "Error",
+          code: 404,
           message: "User not found!",
         });
       }
