@@ -107,8 +107,13 @@ const userSchema = mongoose.Schema(
       required: true,
       default: Date.now,
     },
-    employment: { 
+    employment: {
       // Employment contract details
+      contractType: {
+        type: String,
+        enum: ["CDI", "INTERNSHIP"],
+        required: true,
+      },
       contractJoinDate: {
         type: Date,
         required: true,
@@ -197,6 +202,18 @@ const userSchema = mongoose.Schema(
     faceEnrollmentPromptRequired: {
       type: Boolean,
       default: true,
+    },
+    salary: {
+      // Base salary for the payroll calculations
+      base: {
+        // Base salary amount: Fixed monthly salary of the employee
+        type: Number,
+        min: 0,
+      },
+      currency: {
+        type: String,
+        default: "DT",
+      },
     },
   },
   {
