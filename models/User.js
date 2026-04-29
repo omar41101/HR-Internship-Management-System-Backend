@@ -208,6 +208,7 @@ const userSchema = mongoose.Schema(
       base: {
         // Base salary amount: Fixed monthly salary of the employee
         type: Number,
+        default: 0,
         min: 0,
       },
       currency: {

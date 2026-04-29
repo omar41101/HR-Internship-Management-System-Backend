@@ -1,4 +1,5 @@
 import * as projectAnalytics from "./analytics/projectAnalyticsService.js";
+import * as userStatsService from "./analytics/userStatsService.js";
 
 // Get Dashboard data for supervisors
 export const getSupervisorDashboard = async (user) => {
@@ -20,14 +21,18 @@ export const getSupervisorDashboard = async (user) => {
 
 // Get Dashboard data for Admins
 export const getAdminDashboard = async (user) => {
-  const globalStats = await projectAnalytics.getGlobalProjectStats();
+  const [userStats, projectStats] = await Promise.all([
+    userStatsService.getUserStats(),
+    projectAnalytics.getGlobalProjectStats(),
+  ]);
 
   return {
     status: "Success",
     code: 200,
     message: "Admin dashboard retrieved successfully",
     data: {
-      globalProjectStats: globalStats.data,
+      globalProjectStats: projectStats.data,
+      userStats: userStats.data,
     },
   };
 };
