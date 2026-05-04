@@ -131,10 +131,6 @@ const userSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    bonus: {
-      type: Number,
-      min: 0,
-    },
     profileImageURL: {
       type: String,
       default: "",
@@ -163,14 +159,31 @@ const userSchema = mongoose.Schema(
       enum: ["Married", "Not Married"],
       default: "Not Married",
     },
-    hasChildren: {
+    isHeadOfFamily: {
+      // Whether the employee is considered the head of the family for tax deduction purposes (e.g., for IRPP family deduction in Tunisia)
       type: Boolean,
       default: false,
     },
-    nbOfChildren: {
-      type: Number,
-      default: 0,
-    },
+    children: [
+      {
+        dateOfBirth: {
+          type: Date,
+          required: true,
+        },
+        isStudent: {
+          type: Boolean,
+          default: false,
+        },
+        hasScholarship: {
+          type: Boolean,
+          default: false,
+        },
+        isDisabled: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     projectsCount: {
       // Number of active projects the user is currently involved in
       type: Number,
@@ -216,10 +229,36 @@ const userSchema = mongoose.Schema(
         default: "DT",
       },
     },
+    allowances: [
+      {
+        allowanceTypeId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "AllowanceType",
+        },
+        name: {
+          type: String,
+        },
+        amount: {
+          type: Number,
+        },
+      },
+    ],
+    bonuses: [
+      {
+        bonusTypeId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "BonusType",
+        },
+        name: {
+          type: String,
+        },
+        amount: {
+          type: Number,
+        },
+      },
+    ],
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
 // Index for the ID number uniqueness

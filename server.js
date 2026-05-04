@@ -6,6 +6,7 @@ import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
+import cors from "cors";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 import "./cron/resignationCron.js"; // To automatically update resignation statuses and deactivate users
 
@@ -48,6 +49,7 @@ import meetingRoutes from "./routes/meetingRoutes.js";
 import documentRequestRoutes from "./routes/documentRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import resignationRoutes from "./routes/resignationRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -71,6 +73,12 @@ if (!process.env.FACE_ATTESTATION_SECRET) {
 
 app.use(express.json({ limit: "10mb" })); // Handle JSON payloads (max size 10mb)
 app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data sent from HTML forms
+
+app.use(cors({
+  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  credentials: true
+}));
 
 // Swagger API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -100,6 +108,7 @@ app.use('/api', meetingRoutes);
 app.use('/api', documentRequestRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', resignationRoutes);
+app.use('/api', payrollRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

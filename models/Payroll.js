@@ -3,13 +3,11 @@ import mongoose from "mongoose";
 const payrollSchema = new mongoose.Schema(
   {
     employeeId: {
-      // Reference to the Employee for whom this payroll record is created
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
     month: {
-      // 1-12
       type: Number,
       min: 1,
       max: 12,
@@ -19,72 +17,146 @@ const payrollSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    baseSalary: {
-      // Fixed monthly salary for the employee
-      type: Number,
-      required: true,
-    },
     currency: {
       type: String,
       default: "DT",
     },
+    baseSalary: {
+      // The agreed monthly salary for the employee
+      type: Number,
+      required: true,
+    },
+    hourlyRate: {
+      type: Number,
+      default: 0,
+    },
+    workedDays: {
+      type: Number,
+      default: 0,
+    },
     earnings: {
       bonuses: [
         {
-          type: {
+          code: {
             type: String,
-            enum: ["project", "child", "performance", "manual"],
-            required: true,
+          },
+          name: {
+            type: String,
           },
           amount: {
             type: Number,
-            required: true,
-            min: 0,
           },
-          description: {
+          isTaxable: {
+            type: Boolean,
+          },
+        },
+      ],
+      allowances: [
+        {
+          code: {
             type: String,
-            default: "",
+          },
+          name: {
+            type: String,
+          },
+          amount: {
+            type: Number,
+          },
+          isTaxable: {
+            type: Boolean,
           },
         },
       ],
       overtime: {
-        // Overtime pay: Additional compensation for hours worked beyond the standard work hours
-        type: Number,
-        default: 0,
+        amount: {
+          type: Number,
+          default: 0,
+        },
+        hours: {
+          type: Number,
+          default: 0,
+        },
       },
-      allowances: [
+      totals: {
+        bonuses: {
+          type: Number,
+        },
+        allowancesTaxable: {
+          type: Number,
+        },
+        allowancesNonTaxable: {
+          type: Number,
+        },
+      },
+      total: {
+        type: Number,
+      },
+    },
+    family: {
+      spouse: {
+        eligible: {
+          type: Boolean,
+        },
+        amount: {
+          type: Number,
+        },
+      },
+      children: [
         {
-          type: {
-            type: String,
-            enum: ["transport", "meal", "housing", "other"],
-            required: true,
+          category: {
+            type: String, // "normal" | "student" | "disabled"
           },
           amount: {
             type: Number,
-            required: true,
-            min: 0,
           },
         },
       ],
+      total: {
+        type: Number,
+      },
+    },
+    cnssBase: {
+      // The portion of the salary subject to CNSS contributions (capped at the CNSS ceiling)
+      type: Number,
+    },
+    taxableIncome: {
+      // Income before IRPP
+      type: Number,
+    },
+    netTaxableIncome: {
+      // Income after IRPP
+      type: Number,
+    },
+    fraisProfessionnels: {
+      type: Number,
     },
     deductions: {
       cnss: {
-        // 9.68% of the gross salary accorfing to the current regulations in Tunisia
         type: Number,
-        default: 0,
       },
-      tax: {
-        // IRPP
+      css: {
         type: Number,
-        default: 0,
+      },
+      irpp: {
+        // Income tax deduction
+        type: Number,
       },
       absences: {
+        // Deductions for absences
         type: Number,
-        default: 0,
       },
       lateArrivals: {
+        // Deductions for late arrivals
         type: Number,
-        default: 0,
+      },
+      unpaidLeave: {
+        // Deductions for unpaid leaves
+        type: Number,
+      },
+      total: {
+        // Total deductions
+        type: Number,
+        required: true,
       },
     },
     grossSalary: {
@@ -95,15 +167,51 @@ const payrollSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    workedDays: {
-      // Number of days the employee actually worked during the month (excluding absences and unpaid leave)
-      type: Number,
-      default: 0,
-    },
-    unpaidLeaveDays: {
-      // Number of days the employee took as unpaid leave during the month
-      type: Number,
-      default: 0,
+    configSnapshot: {
+      // A snapshot of the payroll configuration (CNSS, CSS, IRPP) at the time of payroll generation to ensure historical accuracy
+      year: {
+        type: Number,
+        required: true,
+      },
+      cnss: {
+        rate: {
+          type: Number,
+        },
+        ceiling: {
+          type: Number,
+        },
+      },
+      css: {
+        rate: {
+          type: Number,
+        },
+        threshold: {
+          type: Number,
+        },
+      },
+      irpp: {
+        brackets: [
+          {
+            limit: {
+              type: Number,
+            },
+            rate: {
+              type: Number,
+            },
+          },
+        ],
+        fraisPro: {
+          rate: {
+            type: Number,
+          },
+          ceiling: {
+            type: Number,
+          },
+        },
+      },
+      standardMonthlyHours: {
+        type: Number,
+      },
     },
     status: {
       type: String,
@@ -123,7 +231,7 @@ const payrollSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Add an index to ensure on payroll per month and year for each employee
+// Ensure one payroll per employee per month
 payrollSchema.index({ employeeId: 1, month: 1, year: 1 }, { unique: true });
 
 export default mongoose.model("Payroll", payrollSchema);

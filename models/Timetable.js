@@ -13,8 +13,19 @@ const timetableSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["Morning Shift", "Evening Shift", "Full-time Shift", "Day Off", "Special Shift"],
+      enum: [
+        "Morning Shift",
+        "Evening Shift",
+        "Full-time Shift",
+        "Day Off",
+        "Special Shift",
+      ],
       required: true,
+    },
+    isPublicHoliday: {
+      // Flag to indicate if the day is a public holiday (affects payroll calculations)
+      type: Boolean,
+      default: false,
     },
     startTime: {
       // Shift Start time in HH:mm format
@@ -46,7 +57,7 @@ const timetableSchema = mongoose.Schema(
     gracePeriod: {
       // Period in minutes for late arrivals
       type: Number,
-      default: 15,
+      default: 5,
     },
     location: {
       type: String,
@@ -77,7 +88,7 @@ const timetableSchema = mongoose.Schema(
             },
           ],
         },
-        { _id: false }
+        { _id: false },
       ),
       default: null,
     },
@@ -88,10 +99,10 @@ const timetableSchema = mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Compound index to ensure a single shift per day per user
-timetableSchema.index({ userId: 1, date: 1}, { unique: true });
+timetableSchema.index({ userId: 1, date: 1 }, { unique: true });
 
 export default mongoose.model("Timetable", timetableSchema);

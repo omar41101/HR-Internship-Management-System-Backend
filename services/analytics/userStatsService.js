@@ -1,12 +1,9 @@
 import User from "../../models/User.js";
+import { getMonthRange } from "../../utils/timeHelpers.js";
 
 export const getUserStats = async () => {
-  // -------------------- WE'LL IMPORT THIS AS A HELPER FUNCTION ---------------------- //
   const now = new Date();
-
-  const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  // ----------------------------------------------------------------------------------- //
+  const { startOfThisMonth, startOfLastMonth } = getMonthRange(now.getFullYear(), now.getMonth() + 1);
 
   const result = await User.aggregate([
     {
@@ -43,7 +40,6 @@ export const getUserStats = async () => {
           { $count: "count" },
         ],
 
-        // 🎓 INTERNS TOTAL
         internsTotal: [
           {
             $match: {

@@ -17,4 +17,10 @@ export const errors = {
     errorCode: "INVALID_BASE_SALARY",
     suggestion: "Update the employee's salary information with a valid base salary and try again."
   },
+  INVALID_MONTHLY_HOURS: {
+    message: "Invalid standard monthly hours configuration for payroll calculation.",
+    code: 400,
+    errorCode: "INVALID_MONTHLY_HOURS",
+    suggestion: "Check the payroll configuration for standard monthly hours and ensure it is set to a valid positive number."
+  },
 };
