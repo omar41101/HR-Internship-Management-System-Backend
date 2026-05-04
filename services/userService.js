@@ -29,12 +29,15 @@ import { sendEmail } from "../utils/sendEmail.js";
 import { logAuditAction } from "../utils/logger.js";
 import { buildQuery } from "../utils/queryBuilder.js";
 
+// Sensitive fields that must never leave the backend
+const SENSITIVE_FIELDS = "-password -verificationCode -verificationCodeExpires -resetPasswordToken -resetPasswordExpires -loginAttempts -resendCount -resendDate -mustResetPassword";
+
 // Get a single user by Id
 export const getUser = getOne(User, commonErrors.USER_NOT_FOUND, [
   { path: "role_id", select: "name" },
   { path: "department_id", select: "name" },
   { path: "supervisor_id", select: "name lastName email" },
-]);
+], SENSITIVE_FIELDS);
 
 // Get all users
 export const getUsers = getAll(
@@ -44,7 +47,7 @@ export const getUsers = getAll(
     { path: "department_id", select: "name" },
     { path: "supervisor_id", select: "name lastName email" },
   ],
-  "-faceDescriptors",
+  `-faceDescriptors ${SENSITIVE_FIELDS}`,
   ["name", "lastName", "email"],
 );
 
@@ -236,7 +239,17 @@ export const addUserService = async (data, currentUser, ip) => {
     status: "Success",
     code: 201,
     message: "User created successfully!",
-    data: user,
+    // Sanitize: strip all sensitive fields before returning to client
+    result: {
+      _id: user._id,
+      name: user.name,
+      lastName: user.lastName,
+      email: user.email,
+      status: user.status,
+      role_id: user.role_id,
+      department_id: user.department_id,
+      joinDate: user.joinDate,
+    },
   };
 };
 
@@ -435,7 +448,7 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   const user = await User.findByIdAndUpdate(id, updateData, {
     returnDocument: "after",
   })
-    .select("-faceDescriptors")
+    .select(`-faceDescriptors ${SENSITIVE_FIELDS}`)
     .populate("role_id")
     .populate("department_id")
     .populate("supervisor_id", "name lastName email");
@@ -557,7 +570,12 @@ export const toggleUserStatusService = async (id, currentUser, ip) => {
     status: "Success",
     code: 200,
     message: `User status changed to ${user.status} successfully!`,
-    data: user,
+    // Sanitize: re-fetch with select to strip sensitive fields
+    data: await User.findById(user._id)
+      .select(`-faceDescriptors ${SENSITIVE_FIELDS}`)
+      .populate("role_id", "name")
+      .populate("department_id", "name")
+      .populate("supervisor_id", "name lastName email"),
   };
 };
 
@@ -752,7 +770,7 @@ export const uploadProfileImageService = async (
     status: "Success",
     code: 200,
     message: "Profile Image uploaded successfully!",
-    data: user,
+    data: await User.findById(userId).select(SENSITIVE_FIELDS),
   };
 };
 
@@ -798,7 +816,7 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
     status: "Success",
     code: 200,
     message: "Profile Image removed successfully!",
-    data: user,
+    data: await User.findById(userId).select(SENSITIVE_FIELDS),
   };
 };
 

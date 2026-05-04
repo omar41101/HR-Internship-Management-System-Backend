@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import * as sprintService from "../services/sprintService.js";
 import { errors as projectErrors } from "../errors/projectErrors.js";
 import AppError from "../utils/AppError.js";
@@ -6,10 +7,16 @@ import AppError from "../utils/AppError.js";
 export const getProjectSprints = async (req, res, next) => {
   try {
     // Build the query parameters
+    const { projectId: pid } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(pid)) {
+      return res.status(400).json({ message: 'Invalid project ID' });
+    }
+    const projectId = new mongoose.Types.ObjectId(pid);
+
     const queryParams = {
       ...req.query,
       limit: 6,
-      projectId: req.params.projectId,
+      projectId,
       user: req.user,
     };
 
@@ -23,7 +30,13 @@ export const getProjectSprints = async (req, res, next) => {
 // Get a sprint by Id
 export const getSprintById = async (req, res, next) => {
   try {
-    const result = await sprintService.getSprintById(req.params.id, req.user);
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid sprint ID' });
+    }
+    const sprintId = new mongoose.Types.ObjectId(id);
+
+    const result = await sprintService.getSprintById(sprintId, req.user);
     res.status(result.code).json(result);
   } catch (err) {
     next(err);
@@ -44,8 +57,14 @@ export const createSprint = async (req, res, next) => {
 // Update a sprint
 export const updateSprint = async (req, res, next) => {
   try {
+    const { sprintId: sid } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(sid)) {
+      return res.status(400).json({ message: 'Invalid sprint ID' });
+    }
+    const sprintId = new mongoose.Types.ObjectId(sid);
+
     const result = await sprintService.updateSprint(
-      req.params.sprintId,
+      sprintId,
       req.body,
       req.user
     );
@@ -59,7 +78,13 @@ export const updateSprint = async (req, res, next) => {
 // Delete a sprint
 export const deleteSprint = async (req, res, next) => {
   try {
-    const result = await sprintService.deleteSprint(req.params.sprintId, req.user);
+    const { sprintId: sid } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(sid)) {
+      return res.status(400).json({ message: 'Invalid sprint ID' });
+    }
+    const sprintId = new mongoose.Types.ObjectId(sid);
+
+    const result = await sprintService.deleteSprint(sprintId, req.user);
     res.status(result.code).json(result);
   }
   catch (err) {
@@ -70,7 +95,13 @@ export const deleteSprint = async (req, res, next) => {
 // Start a sprint
 export const startSprint = async (req, res, next) => {
   try {
-    const result = await sprintService.startSprint(req.params.sprintId, req.user);
+    const { sprintId: sid } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(sid)) {
+      return res.status(400).json({ message: 'Invalid sprint ID' });
+    }
+    const sprintId = new mongoose.Types.ObjectId(sid);
+
+    const result = await sprintService.startSprint(sprintId, req.user);
     res.status(result.code).json(result);
   } catch (err) {
     next(err);
@@ -80,7 +111,13 @@ export const startSprint = async (req, res, next) => {
 // Complete a sprint
 export const completeSprint = async (req, res, next) => {
   try {
-    const result = await sprintService.completeSprint(req.params.sprintId, req.user);
+    const { sprintId: sid } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(sid)) {
+      return res.status(400).json({ message: 'Invalid sprint ID' });
+    }
+    const sprintId = new mongoose.Types.ObjectId(sid);
+
+    const result = await sprintService.completeSprint(sprintId, req.user);
     res.status(result.code).json(result);
   } catch (err) {
     next(err);

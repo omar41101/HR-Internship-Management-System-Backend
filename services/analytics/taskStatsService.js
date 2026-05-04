@@ -23,6 +23,7 @@ export const getUserTaskStats = async (userId, projectId) => {
     backlog: 0,
     todo: 0,
     inProgress: 0,
+    review: 0,
     done: 0,
   };
 
@@ -32,6 +33,7 @@ export const getUserTaskStats = async (userId, projectId) => {
     if (s._id === "Backlog") formatted.backlog = s.count;
     if (s._id === "To Do") formatted.todo = s.count;
     if (s._id === "In Progress") formatted.inProgress = s.count;
+    if (s._id === "Review") formatted.review = s.count;
     if (s._id === "Done") formatted.done = s.count;
   });
 

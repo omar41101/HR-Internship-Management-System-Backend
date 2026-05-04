@@ -7,6 +7,7 @@ import TeamMember from "../models/TeamMember.js";
 import User from "../models/User.js";
 import Document from "../models/Document.js";
 import { errors } from "../errors/projectErrors.js";
+import { errors as commonErrors } from "../errors/commonErrors.js";
 import AppError from "../utils/AppError.js";
 import { deleteFromCloudinary } from "../utils/cloudinaryHelper.js";
 import { 
@@ -149,11 +150,11 @@ export const getAllProjects = async (req) => {
     {
       $lookup: {
         from: "tasks",
-        let: { sprintId: "$currentSprint._id" },
+        let: { projectId: "$_id" },
         pipeline: [
           {
             $match: {
-              $expr: { $eq: ["$sprintId", "$$sprintId"] },
+              $expr: { $eq: ["$projectId", "$$projectId"] },
             },
           },
           {
@@ -211,7 +212,7 @@ export const getAllProjects = async (req) => {
         sector: 1,
         status: 1,
         startDate: 1,
-        endDate: 1,
+        dueDate: 1,
         productOwner: {
           _id: "$productOwner._id",
           name: "$productOwner.name",
@@ -256,6 +257,11 @@ export const getAllProjects = async (req) => {
 // Get a project by Id
 export const getProjectById = async (projectId, user) => {
   const { role, id: userId } = user;
+
+  // Validate ID
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new AppError(commonErrors.INVALID_ID.message, commonErrors.INVALID_ID.code);
+  }
 
   // Check existence
   const existingProject = await Project.findById(projectId);
@@ -588,7 +594,9 @@ export const archiveProject = async (projectId, userId) => {
 
 // Restore a project
 export const restoreProject = async (projectId, userId) => {
-  // Check the project existence
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new AppError(commonErrors.INVALID_ID.message, commonErrors.INVALID_ID.code);
+  }
   const project = await Project.findById(projectId);
   if (!project) {
     throw new AppError(

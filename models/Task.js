@@ -112,6 +112,12 @@ const taskSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    startDate: {
+      type: Date,
+    },
+    dueDate: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

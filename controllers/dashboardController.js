@@ -1,3 +1,6 @@
+import mongoose from "mongoose";
+import Project from "../models/Project.js";
+import Task from "../models/Task.js";
 import * as dashboardService from "../services/dashboardService.js";
 
 // Supervisor Dashboard
@@ -32,15 +35,15 @@ export const getProjectCharts = async (req, res) => {
       return res.status(400).json({ message: "Invalid project ID" });
     }
 
-    const project = await Project.findById(projectId).select("_id supervisor_id createdAt description");
+    const project = await Project.findById(projectId).select("_id productOwnerId createdAt description");
     if (!project) {
       return res.status(404).json({ message: "Project not found" });
     }
 
-    const userId = String(req.user?._id || "");
+    const userId = String(req.user?._id || req.user?.id || "");
     const userRole = String(req.user?.role || "").toLowerCase();
 
-    if (userRole === "supervisor" && String(project.supervisor_id) !== userId) {
+    if (userRole === "supervisor" && String(project.productOwnerId) !== userId) {
       return res.status(403).json({ message: "Unauthorized to access this project" });
     }
 
@@ -54,9 +57,9 @@ export const getProjectCharts = async (req, res) => {
     const tasks = await Task.find({ projectId: project._id }).select("status completedAt createdAt dueDate");
 
     const statusCounts = {
-      todo: tasks.filter((t) => t.status === "todo").length,
-      in_progress: tasks.filter((t) => t.status === "in_progress").length,
-      done: tasks.filter((t) => t.status === "done").length,
+      todo: tasks.filter((t) => t.status === "To Do" || t.status === "Backlog").length,
+      in_progress: tasks.filter((t) => t.status === "In Progress" || t.status === "Review" || t.status === "Blocked").length,
+      done: tasks.filter((t) => t.status === "Done").length,
     };
 
     const taskCompletionByStatus = [
@@ -95,16 +98,16 @@ export const getProjectCharts = async (req, res) => {
       return pivotTime >= activeSprintStart.getTime() && pivotTime <= activeSprintEnd.getTime();
     });
 
-    const activeSprintDone = activeSprintTasks.filter((task) => task.status === "done").length;
-    const activeSprintInProgress = activeSprintTasks.filter((task) => task.status === "in_progress").length;
-    const activeSprintTodo = activeSprintTasks.filter((task) => task.status === "todo").length;
+    const activeSprintDone = activeSprintTasks.filter((task) => task.status === "Done").length;
+    const activeSprintInProgress = activeSprintTasks.filter((task) => task.status === "In Progress" || task.status === "Review" || task.status === "Blocked").length;
+    const activeSprintTodo = activeSprintTasks.filter((task) => task.status === "To Do" || task.status === "Backlog").length;
 
     const velocityBySprint = Array.from({ length: sprintCount }, (_, index) => {
       const start = new Date(anchorDate.getTime() + index * sprintWindowMs);
       const end = new Date(start.getTime() + sprintWindowMs - 1);
 
       const completed = tasks.filter((task) => {
-        if (task.status !== "done" || !task.completedAt) return false;
+        if (task.status !== "Done" || !task.completedAt) return false;
         const completedAt = new Date(task.completedAt).getTime();
         return completedAt >= start.getTime() && completedAt <= end.getTime();
       }).length;

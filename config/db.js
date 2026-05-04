@@ -9,23 +9,33 @@ if (process.env.NODE_ENV === "test") {
 }
 
 // Connect MongoDB based on the NODE_ENV
-const connectMongo = async () => {
-  try {
-    const URI =
-      process.env.NODE_ENV === "test"
-        ? process.env.MONGO_URI_TEST
-        : process.env.MONGO_URI;
+// Connect MongoDB based on the NODE_ENV with retry logic for replica sets
+const connectMongo = async (retryCount = 5) => {
+  const URI =
+    process.env.NODE_ENV === "test"
+      ? process.env.MONGO_URI_TEST
+      : process.env.MONGO_URI;
 
-    // Only connect if the DB not already connected
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(URI);
-
-      console.log(`MongoDB Connected!`);
-    } else {
-      console.log("MongoDB Already Connected!");
+  for (let i = 0; i < retryCount; i++) {
+    try {
+      if (mongoose.connection.readyState === 0) {
+        await mongoose.connect(URI, {
+          serverSelectionTimeoutMS: 5000,
+        });
+        console.log(`MongoDB Connected (Replica Set ready)!`);
+        return;
+      } else {
+        console.log("MongoDB Already Connected!");
+        return;
+      }
+    } catch (err) {
+      console.error(`MongoDB connection attempt ${i + 1} failed. Retrying in 5s...`);
+      if (i === retryCount - 1) {
+        console.error("Max retries reached. Ensure MongoDB is running as a replica set (rs0).");
+        process.exit(1);
+      }
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
-  } catch (err) {
-    console.log(err);
   }
 };
 

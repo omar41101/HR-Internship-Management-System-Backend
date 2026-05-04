@@ -52,7 +52,7 @@ router.get("/public/interns", getPublicInterns);
 router.get(
   "/users", 
   authenticate, 
-  authorize(["Admin"]), 
+  authorize(["Admin", "Supervisor"]), 
   getAllUsers
 );
 

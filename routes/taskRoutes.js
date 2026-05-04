@@ -33,14 +33,14 @@ router.get("/task-priorities", authenticate, getAllTaskPriorities);
 router.get("/task-types", authenticate, getAllTaskTypes);
 
 // Route to get all tasks for a specific project
-router.get("/project/:projectId/tasks", authenticate, getProjectTasks);
+router.get("/projects/:projectId/tasks", authenticate, getProjectTasks);
 
 // Route to get a task by Id
 router.get("/tasks/:taskId", authenticate, getTaskById);
 
 // Route to add a new task to a project (supervisor only)
 router.post(
-  "/project/:id/tasks",
+  "/projects/:id/tasks",
   authenticate,
   authorize(["Supervisor"]),
   addTask,

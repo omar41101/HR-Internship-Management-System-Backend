@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Document from "../models/Document.js";
 import DocumentType from "../models/DocumentType.js";
+import DocumentRequest from "../models/DocumentRequest.js";
 import AppError from "../utils/AppError.js";
 import { errors } from "../errors/documentErrors.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
@@ -19,6 +20,7 @@ import {
   getValidPersonalDocument, 
   getValidAdminDocument 
 } from "../utils/documentHelper.js";
+import { getIO } from "../socket.js";
 
 // ---------------------------------------------------------------------- //
 // -------------------- PERSONAL DOCUMENTS SERVICES --------------------- //
@@ -329,3 +331,81 @@ export const consultAdminDocumentService = async ({ documentId }) => {
 
   return await consultDocumentCore(document);
 };
+
+// ---------------------------------------------------------------------- //
+// -------------------- DOCUMENT REQUESTS SERVICES ---------------------- //
+// ---------------------------------------------------------------------- //
+
+// Upload a document to fulfill a document request service
+export const fulfillDocumentRequestService = async (id, file, userId) => {
+  if (!file) {
+    throw new AppError(
+      commonErrors.NO_FILE_UPLOADED.message,
+      commonErrors.NO_FILE_UPLOADED.code,
+      commonErrors.NO_FILE_UPLOADED.errorCode,
+      commonErrors.NO_FILE_UPLOADED.suggestion,
+    );
+  }
+
+  // Handle frontend string IDs vs MongoDB ObjectIds
+  let docRequest;
+  if (id && id.match(/^[0-9a-fA-F]{24}$/)) {
+    docRequest = await DocumentRequest.findById(id);
+  } else {
+    docRequest = await DocumentRequest.findOne({ 
+      $or: [{ docId: id }, { requestId: id }] 
+    });
+  }
+
+  // If we still can't find it and the frontend passed a local ID, we shouldn't crash the backend.
+  // We'll proceed to upload and return the file URL.
+  
+  const fileData = await uploadDocumentCore(
+    file,
+    "hrcom/project_docs/images",
+    "hrcom/project_docs/docs",
+  );
+
+  if (docRequest) {
+    docRequest.fileURL = fileData.fileURL;
+    docRequest.fileName = file.originalname;
+    docRequest.public_id = fileData.filePublicId; // Fix: uploadDocumentCore returns filePublicId
+    docRequest.status = "in_review";
+    docRequest.fulfilledBy = userId;
+    
+    console.log(`[DocumentService] Fulfilling request ${id}. Setting fulfilledBy to: ${userId}`);
+    await docRequest.save();
+
+    // Populate for real-time frontend display
+    await docRequest.populate([
+      { path: "requestedBy", select: "name email" },
+      { path: "fulfilledBy", select: "name email" },
+      { path: "sprintId", select: "name" },
+      { path: "taskId", select: "title" }
+    ]);
+    
+    console.log(`[DocumentService] Populated docRequest fulfilledBy:`, docRequest.fulfilledBy);
+
+    // Emit socket event for real-time update
+    try {
+      const io = getIO();
+      if (io) {
+        const projectRoom = `project:${docRequest.projectId}`;
+        io.to(projectRoom).emit("documentRequestUpdated", {
+          projectId: String(docRequest.projectId),
+          document: docRequest
+        });
+      }
+    } catch (socketErr) {
+      console.error("[Socket] Failed to emit documentRequestUpdated:", socketErr);
+    }
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+    message: docRequest ? "Document request fulfilled successfully!" : "File uploaded to Cloudinary",
+    data: docRequest || { fileURL: fileData.fileURL, fileName: file.originalname, public_id: fileData.filePublicId },
+  };
+};
+

@@ -411,8 +411,14 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
     }
 
     // Add the meeting creator (product owner) to the attendees list if not already included
-    if (!uniqueAttendees.includes(currentUser.id)) {
-      uniqueAttendees.push(currentUser.id);
+    const attendeeUserIds = updatedAttendees.map(a => a.userId.toString());
+    if (!attendeeUserIds.includes(currentUser.id.toString())) {
+      updatedAttendees.push({
+        userId: currentUser.id,
+        status: "Pending",
+        reason: null,
+        respondedAt: null,
+      });
     }
 
     // Assign the final list

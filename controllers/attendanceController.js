@@ -124,7 +124,7 @@ const verifyFaceProof = (jwtUserId, faceProof) => {
 
 export const createFaceChallenge = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     purgeExpiredFaceChallenges();
 
     const nonce = crypto.randomBytes(24).toString("hex");
@@ -176,7 +176,7 @@ const getUtcDayRange = (date) => {
 // Check-in function
 export const checkIn = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { location, latitude, longitude, faceProof } = req.body || {};
 
     // Optional face attestation: validate only when faceProof is provided.
@@ -300,7 +300,7 @@ export const checkIn = async (req, res, next) => {
 // Get the user's attendance status for today
 export const getMyStatus = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { start: today, end: tomorrow } = getUtcDayRange(new Date());
 
     const indicatesCheckIn = (record) =>
@@ -408,7 +408,7 @@ export const getAttendance = async (req, res, next) => {
     if (req.user.role === "Admin" || req.user.role === "Supervisor") {
       if (userId) filter.userId = userId;
     } else {
-      filter.userId = req.user._id;
+      filter.userId = req.user.id;
     }
 
     // Date Filtering
@@ -658,7 +658,7 @@ export const updateAttendance = async (req, res, next) => {
 // Check-out
 export const checkOut = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const now = new Date();
     const { start: todayUTC, end: tomorrowUTC } = getUtcDayRange(now);
 
