@@ -42,6 +42,7 @@ const payrollConfigSchema = new mongoose.Schema({
         rate: {
           type: Number,
         },
+        _id: false,
       },
     ],
     fraisPro: {

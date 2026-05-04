@@ -50,6 +50,7 @@ import documentRequestRoutes from "./routes/documentRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import resignationRoutes from "./routes/resignationRoutes.js";
 import payrollRoutes from "./routes/payrollRoutes.js";
+import payrollConfigRoutes from "./routes/payrollConfigRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -109,6 +110,7 @@ app.use('/api', documentRequestRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', resignationRoutes);
 app.use('/api', payrollRoutes);
+app.use('/api', payrollConfigRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);
