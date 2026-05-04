@@ -2,6 +2,7 @@ import * as userService from "../services/userService.js";
 import * as supervisorService from "../services/supervisorService.js";
 import * as internService from "../services/internService.js";
 import { transformUserFilters } from "../utils/userQueryTransformer.js";
+import { resolveRoleId } from "../utils/userResolvers.js";
 
 // Get User by ID
 export const getUserById = async (req, res, next) => {
@@ -34,9 +35,27 @@ export const getUserById = async (req, res, next) => {
 // Get all Users (Admin only)
 export const getAllUsers = async (req, res, next) => {
   try {
+    const { id: userId, role } = req.user;
+
+    // Default filters: prevent user from seeing themselves in the list
+    req.query._id = { ne: userId };
+
+    // If the requester is a Supervisor, restrict results to their team only
+    if (role === "Supervisor") {
+      req.query.supervisorId = userId;
+      
+      // Also exclude other Supervisors from the list
+      const supervisorRoleId = await resolveRoleId("Supervisor");
+      req.query.role_id = { ne: supervisorRoleId };
+    }
+
+    console.log("USER FETCH DEBUG - Original Query:", req.query);
+
     // Map the query parameters (For ex: role -> role_id and department -> department_id)
     const queryParams = await transformUserFilters(req.query);
     
+    console.log("USER FETCH DEBUG - Transformed Query:", queryParams);
+
     const result = await userService.getUsers(queryParams);
     
     res.status(result.code).json(result);

@@ -1,4 +1,5 @@
 // STILL NEED REFACTORING, JUST UNIFIED THE RESPONSE //
+import mongoose from "mongoose";
 import Project from "../models/Project.js";
 import Sprint from "../models/Sprint.js";
 import TeamMember from "../models/TeamMember.js";
@@ -15,6 +16,17 @@ import {
 } from "../utils/cloudinaryHelper.js";
 import { isProjectInactive } from "../validators/projectValidators.js";
 import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
+
+const normalizeStatus = (status) => {
+  if (!status) return status;
+  const s = status.toLowerCase().replace(/[_-]/g, " ");
+  if (s === "backlog") return "Backlog";
+  if (s === "todo" || s === "to do") return "To Do";
+  if (s === "in progress") return "In Progress";
+  if (s === "review") return "Review";
+  if (s === "done") return "Done";
+  return status;
+};
 
 // Get all the statuses of a task
 export const getAllTaskStatuses = async (req, res, next) => {
@@ -68,6 +80,9 @@ export const getAllTaskTypes = async (req, res, next) => {
 export const getProjectTasks = async (req, res, next) => {
   try {
     const { projectId } = req.params;
+    
+    // Explicitly cast to ObjectId to avoid CastError if frontend sends string
+    const objectId = new mongoose.Types.ObjectId(projectId);
     const { sprintId, page = 1, type, status } = req.query;
 
     const limit = 10;
@@ -75,7 +90,7 @@ export const getProjectTasks = async (req, res, next) => {
     const skip = (parsedPage - 1) * limit;
 
     // Check project existence
-    const project = await Project.findById(projectId);
+    const project = await Project.findById(objectId);
     if (!project) {
       throw new AppError(
         projectErrors.PROJECT_NOT_FOUND.message,
@@ -93,13 +108,13 @@ export const getProjectTasks = async (req, res, next) => {
     );
 
     // Build the filter
-    const filter = { projectId };
+    const filter = { projectId: objectId };
 
     // Filter by sprint (If NOT provided, then we return all the tasks (backlog + sprint tasks))
     if (sprintId) {
       // Check the sprint existance
       const sprint = await Sprint.findById(sprintId);
-      if (!sprint || sprint.projectId.toString() !== projectId.toString()) {
+      if (!sprint || sprint.projectId.toString() !== objectId.toString()) {
         throw new AppError(
           sprintErrors.SPRINT_NOT_FOUND.message,
           sprintErrors.SPRINT_NOT_FOUND.code,
@@ -143,7 +158,7 @@ export const getProjectTasks = async (req, res, next) => {
 
     // Prepare the project tasks
     let query = Task.find(filter)
-      .populate("assignedTo", "name lastName profileImageURL")
+      .populate("assignedTo", "name lastName profileImageURL role")
       .populate("sprintId", "number name goal status")
       .sort({ createdAt: -1 });
 
@@ -368,8 +383,12 @@ export const getTaskById = async (req, res, next) => {
 // Add a task to a specific project (Product owner only)
 export const addTask = async (req, res, next) => {
   try {
+    console.log("✅ ADD TASK CONTROLLER HIT");
+    console.log("PARAM ID:", req.params.id);
+    console.log("BODY:", req.body);
     // Get the project ID to which the task will be added
     const { id } = req.params;
+    const objectId = new mongoose.Types.ObjectId(id);
 
     const {
       title,
@@ -378,13 +397,18 @@ export const addTask = async (req, res, next) => {
       priority,
       storyPoints,
       parentTaskId,
-      assignedTo,
+      assignees,
       sprintId,
+      startDate,
+      dueDate,
     } = req.body;
+
+    console.log("ASSIGNEES RECEIVED:", assignees);
 
     // Check the project existence
     const project = await Project.findById(id);
     if (!project) {
+      console.log("❌ FAIL REASON: project not found");
       throw new AppError(
         projectErrors.PROJECT_NOT_FOUND.message,
         projectErrors.PROJECT_NOT_FOUND.code,
@@ -531,19 +555,35 @@ export const addTask = async (req, res, next) => {
     }
 
     // User Assignment validation
-    if (assignedTo) {
-      // Check the user existence and if the user is a team member of the project
-      const membership = await TeamMember.findOne({
-        userId: assignedTo,
-        teamId: project.team_id,
-      });
-
-      if (!membership) {
+    let validAssignedTo = null;
+    if (assignees && Array.isArray(assignees) && assignees.length > 0) {
+      // 1. Verify all selected users exist in DB
+      const users = await mongoose.model("User").find({ _id: { $in: assignees } });
+      console.log("FOUND USERS:", users);
+      if (users.length !== assignees.length) {
+        console.log("❌ FAIL REASON: users not found in DB");
         throw new AppError(
           commonErrors.USER_NOT_FOUND.message,
           commonErrors.USER_NOT_FOUND.code,
           commonErrors.USER_NOT_FOUND.errorCode,
           commonErrors.USER_NOT_FOUND.suggestion,
+        );
+      }
+
+      // 2. Ensure the selected user is a team member of the project
+      validAssignedTo = assignees[0];
+      const membership = await TeamMember.findOne({
+        userId: validAssignedTo,
+        teamId: project.team_id,
+      });
+
+      if (!membership) {
+        console.log("❌ FAIL REASON: user is not a member of project team");
+        throw new AppError(
+          commonErrors.USER_NOT_FOUND.message,
+          commonErrors.USER_NOT_FOUND.code,
+          commonErrors.USER_NOT_FOUND.errorCode,
+          "User is not a member of the project team.",
         );
       }
     }
@@ -552,15 +592,23 @@ export const addTask = async (req, res, next) => {
     const task = await Task.create({
       title,
       description,
-      status,
+      status: normalizeStatus(status),
       priority,
       storyPoints,
       type,
       parentTaskId: parentTaskId || null,
-      assignedTo: assignedTo || null,
-      projectId: id,
+      assignedTo: validAssignedTo || null,
+      projectId: objectId,
       sprintId: validSprintId || null,
+      startDate: startDate || null,
+      dueDate: dueDate || null,
     });
+
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskCreated", { projectId: id, task });
+    }
 
     res.status(201).json({
       status: "Success",
@@ -696,7 +744,7 @@ export const updateTask = async (req, res, next) => {
 
     // Validate the Status workflow rules
     if (updates.status) {
-      const nextStatus = updates.status;
+      const nextStatus = normalizeStatus(updates.status);
 
       // Check the new status validity
       if (!Task.schema.path("status").enumValues.includes(nextStatus)) {
@@ -759,6 +807,8 @@ export const updateTask = async (req, res, next) => {
       "priority",
       "storyPoints",
       "type",
+      "startDate",
+      "dueDate",
     ];
 
     simpleFields.forEach((field) => {
@@ -769,6 +819,12 @@ export const updateTask = async (req, res, next) => {
 
     // Save the changes
     await task.save();
+
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskUpdated", { projectId: task.projectId, task });
+    }
 
     res.status(200).json({
       status: "Success",
@@ -851,6 +907,12 @@ export const deleteTask = async (req, res, next) => {
     await Task.deleteMany({ parentTaskId: taskId });
     await Task.findByIdAndDelete(taskId);
 
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskDeleted", { projectId: task.projectId, taskId });
+    }
+
     res.status(200).json({
       status: "Success",
       code: 200,
@@ -865,7 +927,8 @@ export const deleteTask = async (req, res, next) => {
 export const moveTask = async (req, res, next) => {
   try {
     const { taskId } = req.params;
-    const { status } = req.body;
+    const { status: rawStatus } = req.body;
+    const status = normalizeStatus(rawStatus);
 
     // Check the task existence
     const task = await Task.findById(taskId);
@@ -936,6 +999,12 @@ export const moveTask = async (req, res, next) => {
     // Save the changes
     await task.save();
 
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskUpdated", { projectId: String(task.projectId), task });
+    }
+
     res.status(200).json({
       status: "Success",
       code: 200,
@@ -953,6 +1022,13 @@ export const submitTask = async (req, res, next) => {
     const { taskId } = req.params;
     const { type, linkUrl, comment, summary, completionRate, hoursSpent } =
       req.body;
+
+    const parsedCompletionRate = completionRate !== undefined && completionRate !== "" 
+      ? Number(completionRate) 
+      : undefined;
+    const parsedHoursSpent = hoursSpent !== undefined && hoursSpent !== "" 
+      ? Number(hoursSpent) 
+      : undefined;
 
     // Check the task existence
     const task = await Task.findById(taskId);
@@ -1069,10 +1145,11 @@ export const submitTask = async (req, res, next) => {
     }
 
     // Validate the completion rate
-    if ( completionRate !== undefined &&
-      (typeof completionRate !== "number" ||
-      completionRate < 0 ||
-      completionRate > 100
+    if ( parsedCompletionRate !== undefined &&
+      (typeof parsedCompletionRate !== "number" ||
+      isNaN(parsedCompletionRate) ||
+      parsedCompletionRate < 0 ||
+      parsedCompletionRate > 100
       )
     ) {
       throw new AppError(
@@ -1084,7 +1161,7 @@ export const submitTask = async (req, res, next) => {
     }
 
     // Validate the hours spent
-    if (hoursSpent !== undefined && (typeof hoursSpent !== "number" || hoursSpent < 0)) {
+    if (parsedHoursSpent !== undefined && (typeof parsedHoursSpent !== "number" || isNaN(parsedHoursSpent) || parsedHoursSpent < 0)) {
       throw new AppError(
         errors.INVALID_HOURS_SPENT.message,
         errors.INVALID_HOURS_SPENT.code,
@@ -1101,8 +1178,8 @@ export const submitTask = async (req, res, next) => {
       linkPublicId: publicId,
       submittedAt: new Date(),
       comment: comment || "",
-      completionRate: completionRate || 0,
-      hoursSpent: hoursSpent || 0,
+      completionRate: parsedCompletionRate || 0,
+      hoursSpent: parsedHoursSpent || 0,
     };
 
     // Move the task to Review automatically
@@ -1114,6 +1191,20 @@ export const submitTask = async (req, res, next) => {
     task.sprintClosedAtSubmission = sprintClosed;
 
     await task.save();
+
+    // Re-fetch to get populated fields for the real-time update
+    const savedTask = await Task.findById(task._id)
+      .populate("assignedTo", "name lastName profileImageURL")
+      .lean();
+
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskUpdated", { 
+        projectId: String(savedTask.projectId), 
+        task: { ...savedTask, id: savedTask._id } 
+      });
+    }
 
     res.status(200).json({
       status: "Success",
@@ -1399,6 +1490,12 @@ export const reviewTask = async (req, res, next) => {
 
     // Save the changes
     await task.save();
+
+    // Emit socket event for real-time update
+    const io = req.app.get("io");
+    if (io) {
+      io.emit("taskUpdated", { projectId: String(task.projectId), task });
+    }
 
     res.status(200).json({
       status: "Success",

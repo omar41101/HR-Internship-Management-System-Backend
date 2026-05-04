@@ -96,16 +96,32 @@ export const markDocumentRequestAsFulfilled = async (req, res, next) => {
   }
 };
 
-// ---- STILL THIS: ---- //
-
 // Upload a document to fulfill a document request
 export const uploadDocumentFulfillRequest = async (req, res, next) => {
   try {
-    const { requestId } = req.params;
+    const { id } = req.params;
 
     const result = await projectDocumentService.uploadDocumentForRequest(
-      requestId,
+      id,
       req.file,
+      req.user,
+    );
+
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reject a document request
+export const rejectDocumentRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { comment } = req.body;
+
+    const result = await documentRequestService.rejectDocumentRequest(
+      id,
+      comment,
       req.user,
     );
 
@@ -118,7 +134,7 @@ export const uploadDocumentFulfillRequest = async (req, res, next) => {
 // Consult a document related to the document request
 export const consultDocumentFulfillRequest = async (req, res, next) => {
   try {
-    const { documentId } = req.params;
+    const { id: documentId } = req.params;
 
     const result = await projectDocumentService.consultDocumentForRequest(
       documentId,
@@ -134,7 +150,7 @@ export const consultDocumentFulfillRequest = async (req, res, next) => {
 // Download a document related to the document request
 export const downloadDocumentFulfillRequest = async (req, res, next) => {
   try {
-    const { documentId } = req.params;
+    const { id: documentId } = req.params;
 
     await projectDocumentService.downloadDocumentForRequest(
       documentId,
@@ -149,7 +165,7 @@ export const downloadDocumentFulfillRequest = async (req, res, next) => {
 // Delete a document related to the document request
 export const deleteDocumentFulfillRequest = async (req, res, next) => {
   try {
-    const { documentId } = req.params;
+    const { id: documentId } = req.params;
 
     const result = await projectDocumentService.deleteDocumentForRequest(
       documentId,
@@ -164,18 +180,18 @@ export const deleteDocumentFulfillRequest = async (req, res, next) => {
 
 // Get all documents by request
 export const getDocumentsFulfillRequest = async (req, res, next) => {
-  try{
-    const { requestId } = req.params;
+  try {
+    const { id: requestId } = req.params;
 
-    const result = await getDocumentsByRequest(
+    const result = await projectDocumentService.getDocumentsByRequest(
       requestId,
       req.user,
-      req.query
+      req.query,
     );
 
     res.status(result.code).json(result);
-  }
-  catch(err){
+  } catch (err) {
     next(err);
   }
 };
+

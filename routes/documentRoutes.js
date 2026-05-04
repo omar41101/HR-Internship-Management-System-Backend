@@ -11,6 +11,7 @@ import {
   downloadAdminDocument,
   consultAdminDocument,
   deleteAdminDocument,
+  fulfillDocumentRequest,
 } from "../controllers/documentController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -521,6 +522,47 @@ router.delete(
   authenticate,
   authorize(["Admin"]),
   deleteAdminDocument,
+);
+
+// -------------------------------------------------------------- //
+// ----------------- DOCUMENT REQUESTS ROUTES ------------------- //
+// -------------------------------------------------------------- //
+
+// Route to upload a document to fulfill a document request
+/**
+ * @swagger
+ * /api/documents/document-requests/{id}/upload:
+ *   post:
+ *     summary: Upload a document to fulfill a document request
+ *     tags:
+ *        - Document Requests
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         description: Document request ID
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - file
+ *             properties:
+ *               file:
+ *                 type: string
+ *                 format: binary
+ */
+router.post(
+  "/document-requests/:id/upload",
+  authenticate,
+  upload("doc").single("file"),
+  fulfillDocumentRequest,
 );
 
 export default router;

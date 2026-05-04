@@ -40,11 +40,32 @@ const documentRequestSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["Pending", "Fulfilled"],
+      enum: ["Pending", "in_review", "Fulfilled"],
       default: "Pending",
+    },
+    fileURL: {
+      type: String,
+      default: null,
+    },
+    fileName: {
+      type: String,
+      default: null,
+    },
+    public_id: {
+      type: String,
+      default: null,
+    },
+    rejectionComment: {
+      type: String,
+      default: null,
     },
     fulfilledAt: {
       type: Date,
+      default: null,
+    },
+    fulfilledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       default: null,
     },
     requestedBy: {

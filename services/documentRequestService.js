@@ -13,6 +13,7 @@ import AppError from "../utils/AppError.js";
 import { getOne, getAll } from "./handlersFactory.js";
 import { validateDocumentRequestScope } from "../utils/documentRequestHelpers.js";
 import { isTeamMemberOrProductOwnerOrAdmin } from "../utils/projectHelpers.js";
+import { getIO } from "../socket.js";
 
 // Get all document requests for a project
 export const getAllDocumentRequests = async (projectId, queryParams, user) => {
@@ -42,6 +43,7 @@ export const getAllDocumentRequests = async (projectId, queryParams, user) => {
       { path: "requestedBy", select: "name email" },
       { path: "sprintId", select: "name number" },
       { path: "taskId", select: "title status" },
+      { path: "fulfilledBy", select: "name email" },
     ],
     null,
     ["title", "description"],
@@ -79,6 +81,7 @@ export const getDocumentRequestById = async (requestId, user) => {
     { path: "requestedBy", select: "name email" },
     { path: "sprintId", select: "name number" },
     { path: "taskId", select: "title status" },
+    { path: "fulfilledBy", select: "name email" },
   ])(requestId);
 };
 
@@ -138,6 +141,27 @@ export const createDocumentRequest = async (data, currentUser) => {
     dueDate: dueDate? dueDate : null,
     requestedBy: currentUser.id,
   });
+
+  // Populate for real-time frontend display
+  await request.populate([
+    { path: "requestedBy", select: "name email" },
+    { path: "sprintId", select: "name" },
+    { path: "taskId", select: "title" }
+  ]);
+
+  // Emit socket event for real-time update
+  try {
+    const io = getIO();
+    if (io) {
+      const projectRoom = `project:${request.projectId}`;
+      io.to(projectRoom).emit("documentRequestUpdated", {
+        projectId: String(request.projectId),
+        document: request
+      });
+    }
+  } catch (socketErr) {
+    console.error("[Socket] Failed to emit documentRequestUpdated (Create):", socketErr);
+  }
 
   return {
     status: "Success",
@@ -261,7 +285,7 @@ export const deleteDocumentRequest = async (requestId, user) => {
   };
 };
 
-// Mark a document request as fulfilled (Only the creator of the request can mark it as fulfilled)
+// Mark a document request as fulfilled (Approve)
 export const markDocumentRequestAsFulfilled = async (requestId, user) => {
   // Check the document request existence
   const request = await DocumentRequest.findById(requestId);
@@ -274,7 +298,7 @@ export const markDocumentRequestAsFulfilled = async (requestId, user) => {
     );
   }
 
-  // Authorization check: Only the creator of the document request can mark it as fulfilled
+  // Authorization check: Only the creator of the document request can approve/fulfill it
   if (request.requestedBy.toString() !== user.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_FULFILL_DOCUMENT_REQUEST.message,
@@ -284,7 +308,7 @@ export const markDocumentRequestAsFulfilled = async (requestId, user) => {
     );
   }
 
-  // Prevent the double fulfillment
+  // Prevent double fulfillment
   if (request.status === "Fulfilled") {
     throw new AppError(
       errors.DOCUMENT_REQUEST_FULLFILLED.message,
@@ -294,15 +318,104 @@ export const markDocumentRequestAsFulfilled = async (requestId, user) => {
     );
   }
 
-  // Update the document request status + save the changes
+  // Update status to Fulfilled
   request.status = "Fulfilled";
+  request.rejectionComment = null; // Clear any previous rejection comment
   request.fulfilledAt = new Date();
+  request.fulfilledBy = user.id;
+
+  console.log(`[DocumentRequestService] Approving request ${requestId}. Setting fulfilledBy to: ${user.id}`);
   await request.save();
+
+  // Populate for real-time frontend display
+  await request.populate([
+    { path: "requestedBy", select: "name email" },
+    { path: "fulfilledBy", select: "name email" },
+    { path: "sprintId", select: "name" },
+    { path: "taskId", select: "title" }
+  ]);
+
+  console.log(`[DocumentRequestService] Populated request fulfilledBy:`, request.fulfilledBy);
+
+  // Emit socket event for real-time update
+  try {
+    const io = getIO();
+    if (io) {
+      const projectRoom = `project:${request.projectId}`;
+      io.to(projectRoom).emit("documentRequestUpdated", {
+        projectId: String(request.projectId),
+        document: request
+      });
+    }
+  } catch (socketErr) {
+    console.error("[Socket] Failed to emit documentRequestUpdated (Approve):", socketErr);
+  }
 
   return {
     status: "Success",
     code: 200,
-    message: "Document request marked as fulfilled!",
+    message: "Document request approved and marked as fulfilled!",
+    data: request,
+  };
+};
+
+// Reject a document request
+export const rejectDocumentRequest = async (requestId, comment, user) => {
+  const request = await DocumentRequest.findById(requestId);
+  if (!request) {
+    throw new AppError(
+      errors.DOCUMENT_REQUEST_NOT_FOUND.message,
+      errors.DOCUMENT_REQUEST_NOT_FOUND.code,
+      errors.DOCUMENT_REQUEST_NOT_FOUND.errorCode,
+      errors.DOCUMENT_REQUEST_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Only the requester can reject
+  if (request.requestedBy.toString() !== user.id.toString()) {
+    throw new AppError(
+      errors.UNAUTHORIZED_TO_UPDATE_DOCUMENT_REQUEST.message,
+      errors.UNAUTHORIZED_TO_UPDATE_DOCUMENT_REQUEST.code,
+      errors.UNAUTHORIZED_TO_UPDATE_DOCUMENT_REQUEST.errorCode,
+      errors.UNAUTHORIZED_TO_UPDATE_DOCUMENT_REQUEST.suggestion,
+    );
+  }
+
+  // Reset status to Pending (which is 'requested' in frontend)
+  request.status = "Pending";
+  request.rejectionComment = comment;
+  request.fileURL = null; // Clear the uploader's file since it was rejected
+  request.fileName = null;
+  request.public_id = null;
+  
+  await request.save();
+
+  // Populate for real-time frontend display
+  await request.populate([
+    { path: "requestedBy", select: "name email" },
+    { path: "fulfilledBy", select: "name email" },
+    { path: "sprintId", select: "name" },
+    { path: "taskId", select: "title" }
+  ]);
+
+  // Emit socket event for real-time update
+  try {
+    const io = getIO();
+    if (io) {
+      const projectRoom = `project:${request.projectId}`;
+      io.to(projectRoom).emit("documentRequestUpdated", {
+        projectId: String(request.projectId),
+        document: request
+      });
+    }
+  } catch (socketErr) {
+    console.error("[Socket] Failed to emit documentRequestUpdated (Reject):", socketErr);
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Document request rejected",
     data: request,
   };
 };

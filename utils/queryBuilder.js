@@ -12,10 +12,10 @@ export const buildQuery = (Model, queryParams, searchFields = []) => {
   const excludedFields = ["page", "limit", "sort", "keyword"];
   excludedFields.forEach((el) => delete queryObj[el]);
 
-  // Advanced filtering (gte, lt, etc.)
+  // Advanced filtering (gte, lt, ne, etc.)
   let queryStr = JSON.stringify(queryObj);
   queryStr = queryStr.replace(
-    /\b(gt|gte|lt|lte|in)\b/g,
+    /\b(gt|gte|lt|lte|in|ne)\b/g,
     (match) => `$${match}`,
   );
 

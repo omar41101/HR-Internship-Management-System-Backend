@@ -1,28 +1,25 @@
 // Imports
 import express from "express";
 import { createServer } from "http";
-import { Server } from "socket.io";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
-import cors from "cors";
 import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
+import { initIO } from "./socket.js";
 import "./cron/resignationCron.js"; // To automatically update resignation statuses and deactivate users
 
 // Creation of an express app
 const app = express();
 
+import cors from "cors";
+app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173", methods: ["GET", "POST", "PUT", "PATCH", "DELETE"] }));
+
 // Create HTTP server and attach Socket.io (mangage websocket connections)
 const httpServer = createServer(app);
 
 // Activate Socket.io with CORS Settings
-export const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"],
-  },
-});
+export const io = initIO(httpServer);
 
 // Make io accessible from controllers via req.app.get('io')
 app.set("io", io);
@@ -56,6 +53,16 @@ import payrollConfigRoutes from "./routes/payrollConfigRoutes.js";
 io.on("connection", (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
 
+  socket.on("joinRoom", (room) => {
+    socket.join(room);
+    console.log(`[Socket] ${socket.id} joined room: ${room}`);
+  });
+
+  socket.on("leaveRoom", (room) => {
+    socket.leave(room);
+    console.log(`[Socket] ${socket.id} left room: ${room}`);
+  });
+
   socket.on("disconnect", () => {
     console.log(`[Socket.io] Client disconnected: ${socket.id}`);
   });
@@ -74,12 +81,6 @@ if (!process.env.FACE_ATTESTATION_SECRET) {
 
 app.use(express.json({ limit: "10mb" })); // Handle JSON payloads (max size 10mb)
 app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data sent from HTML forms
-
-app.use(cors({
-  origin: process.env.CLIENT_URL || "http://localhost:5173",
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  credentials: true
-}));
 
 // Swagger API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));

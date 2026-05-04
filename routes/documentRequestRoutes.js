@@ -6,6 +6,7 @@ import {
   editDocumentRequest,
   deleteDocumentRequest,
   markDocumentRequestAsFulfilled,
+  rejectDocumentRequest,
   uploadDocumentFulfillRequest,
   consultDocumentFulfillRequest,
   downloadDocumentFulfillRequest,
@@ -44,11 +45,18 @@ router.patch(
   markDocumentRequestAsFulfilled,
 );
 
+// Reject a document request
+router.post(
+  "/document-requests/:id/reject",
+  authenticate,
+  rejectDocumentRequest,
+);
+
 // Upload a document to fulfill a document request
 router.post(
   "/document-requests/:id/upload",
   authenticate,
-  upload("doc").single("documentHubDocument"),
+  upload("doc").single("file"),
   uploadDocumentFulfillRequest,
 );
 

@@ -21,20 +21,24 @@ export const isTeamMemberOrProductOwnerOrAdmin = async (
 ) => {
   const userId = user.id;
 
-  const isProductOwner =
-    project.productOwnerId.toString() === userId.toString();
+  // Owner ALWAYS allowed bypass
+  if (project.productOwnerId.toString() === userId.toString()) {
+    return;
+  }
 
-  const isAdmin = user.role === "Admin";
+  // Admin ALWAYS allowed bypass
+  if (user.role === "Admin") {
+    return;
+  }
 
   const membership = await TeamMember.findOne({
     userId,
     teamId: project.team_id,
   });
 
-  // Convert membership to boolean to check if the user is a team member of the project
-  const isTeamMember = !!membership;
+  console.log("AUTH TRACE - Membership Found:", !!membership);
 
-  if (!isProductOwner && !isAdmin && !isTeamMember) {
+  if (!membership) {
     throw new AppError(
       errorMessage.message,
       errorMessage.code,
@@ -64,13 +68,16 @@ export const buildProjectMatchFilter = async ({
   */
   if (role !== "Admin") {
     if (role === "Supervisor") {
+      if (!mongoose.Types.ObjectId.isValid(userId)) {
+        throw new AppError(commonErrors.INVALID_ID.message, commonErrors.INVALID_ID.code);
+      }
       match.productOwnerId = new mongoose.Types.ObjectId(userId);
     } else {
       const teams = await TeamMember.find({ userId }).select("teamId");
       const teamIds = teams.map((t) => t.teamId);
 
       match.team_id = {
-        $in: teamIds.map((id) => new mongoose.Types.ObjectId(id)),
+        $in: teamIds.filter(id => mongoose.Types.ObjectId.isValid(id)).map((id) => new mongoose.Types.ObjectId(id)),
       };
     }
   }
@@ -104,11 +111,17 @@ export const buildProjectMatchFilter = async ({
 
 // Build the match filter for accessing a specific project by ID
 export const buildProjectAccessMatch = async (projectId, userId, role) => {
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new AppError(commonErrors.INVALID_ID.message, commonErrors.INVALID_ID.code);
+  }
   const match = {
     _id: new mongoose.Types.ObjectId(projectId),
   };
 
   if (role === "Supervisor") {
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      throw new AppError(commonErrors.INVALID_ID.message, commonErrors.INVALID_ID.code);
+    }
     match.productOwnerId = new mongoose.Types.ObjectId(userId);
   }
 
@@ -125,7 +138,7 @@ export const buildProjectAccessMatch = async (projectId, userId, role) => {
     }
 
     match.team_id = {
-      $in: teams.map((t) => new mongoose.Types.ObjectId(t.teamId)),
+      $in: teams.filter(t => mongoose.Types.ObjectId.isValid(t.teamId)).map((t) => new mongoose.Types.ObjectId(t.teamId)),
     };
   }
 

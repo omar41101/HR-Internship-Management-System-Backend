@@ -14,5 +14,10 @@ export const transformUserFilters = async (queryParams) => {
     delete newQuery.department;
   }
 
+  if (newQuery.supervisorId) {
+    newQuery.supervisor_id = newQuery.supervisorId;
+    delete newQuery.supervisorId;
+  }
+
   return newQuery;
 };

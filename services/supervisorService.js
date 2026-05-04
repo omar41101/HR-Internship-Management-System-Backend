@@ -3,6 +3,9 @@ import User from "../models/User.js";
 import { getAll } from "./handlersFactory.js";
 import { resolveRoleId, resolveDepartmentId} from "../utils/userResolvers.js";
 
+// Sensitive fields that must never leave the backend
+const SENSITIVE_FIELDS = "-password -verificationCode -verificationCodeExpires -resetPasswordToken -resetPasswordExpires -loginAttempts -resendCount -resendDate -mustResetPassword";
+
 // Get all active supervisors. Query params example: page=1&keyword=omar
 export const getActiveSupervisors = async (queryParams) => {
   const supervisorRoleId = await resolveRoleId("Supervisor");
@@ -19,7 +22,7 @@ export const getActiveSupervisors = async (queryParams) => {
   }
 
   // Run the generic getAll function + Add the extra filters to get the list of active supervisors
-  return getAll(User)(finalQuery);
+  return getAll(User, null, SENSITIVE_FIELDS)(finalQuery);
 };
 
 // Get the 3 recent supervisors
@@ -34,5 +37,5 @@ export const getRecentSupervisors = async (queryParams) => {
   };
   
   // Run the generic getAll function + Add the extra filters to get the list of recent supervisors
-  return getAll(User)(finalQuery);
+  return getAll(User, null, SENSITIVE_FIELDS)(finalQuery);
 };
