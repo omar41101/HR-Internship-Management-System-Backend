@@ -38,11 +38,12 @@ const consumeFaceEnrollmentPrompt = (user) => {
 // Login Functionality
 export const login = async (req, res, next) => {
   try {
+
     const { email, password, identifier } = req.body;
+    console.log('[LOGIN-DEBUG] Raw email:', email, 'Raw password:', password, 'Identifier:', identifier);
     const trimmedEmail = (email || identifier || "").trim().toLowerCase();
     const trimmedPassword = (password || "").trim();
-
-    console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}`);
+    console.log(`[LOGIN-DEBUG] Login attempt for Email: ${trimmedEmail}, Password: ${trimmedPassword}`);
 
     // Check the User existence
     const user = await User.findOne({ email: trimmedEmail });

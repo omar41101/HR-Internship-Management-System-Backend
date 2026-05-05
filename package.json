@@ -12,7 +12,10 @@
     "seed:interns": "node scripts/seedInterns.js",
     "seed:supervisors": "node scripts/seedSupervisors.js",
     "seed:employees": "node scripts/seedEmployees.js",
-    "seed:all": "npm run seed && npm run seed:admin && npm run seed:interns && npm run seed:supervisors && npm run seed:employees"
+    "seed:projects": "node scripts/seedProjects.js",
+    "seed:all": "npm run seed && npm run seed:admin && npm run seed:interns && npm run seed:supervisors && npm run seed:employees && npm run seed:projects"
+    ,
+    "resetdb": "node scripts/resetDatabase.js"
   },
   "keywords": [],
   "author": "",
