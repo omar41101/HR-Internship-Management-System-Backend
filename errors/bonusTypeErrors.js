@@ -7,7 +7,7 @@ export const errors = {
   },
   BONUS_TYPE_CODE_EXISTS: {
     message: "A bonus type with this code already exists.",
-    code: 400,
+    code: 409,
     errorCode: "BONUS_TYPE_CODE_EXISTS",
     suggestion: "Please use a unique code for the bonus type.",
   },

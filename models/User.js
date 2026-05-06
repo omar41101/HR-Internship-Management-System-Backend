@@ -119,8 +119,9 @@ const userSchema = mongoose.Schema(
         required: true,
       },
       contractEndDate: {
+        // For Internship contracts, the end date of the contract. For CDI, this will be null 
         type: Date,
-        required: true,
+        default: null,
       },
     },
     phoneNumber: {

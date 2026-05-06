@@ -7,7 +7,7 @@ export const errors = {
   },
   PAYROLL_ALREADY_EXISTS: {
     message: "A payroll record for this employee and month already exists.",
-    code: 400,
+    code: 409,
     errorCode: "PAYROLL_ALREADY_EXISTS",
     suggestion: "Check if a payroll record for this employee and month already exists before creating a new one."
   },

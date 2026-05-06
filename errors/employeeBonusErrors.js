@@ -29,7 +29,7 @@ export const errors = {
   BONUS_ALREADY_EXISTS: {
     message:
       "An active bonus of the same type already exists for this employee in the same period.",
-    code: 400,
+    code: 409,
     errorCode: "BONUS_ALREADY_EXISTS",
     suggestion:
       "Check the employee's existing bonuses and ensure there are no overlapping active bonuses of the same type.",

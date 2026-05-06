@@ -37,7 +37,7 @@ export const errors = {
   ALLOWANCE_ALREADY_EXISTS: {
     message:
       "An active allowance of the same type already exists for this employee in the same period.",
-    code: 400,
+    code: 409,
     errorCode: "ALLOWANCE_ALREADY_EXISTS",
     suggestion:
       "Check the employee's existing allowances and ensure there are no overlapping active allowances of the same type.",

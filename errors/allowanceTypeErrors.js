@@ -7,7 +7,7 @@ export const errors = {
   },
   ALLOWANCE_TYPE_CODE_EXISTS: {
     message: "An allowance type with this code already exists.",
-    code: 400,
+    code: 409,
     errorCode: "ALLOWANCE_TYPE_CODE_EXISTS",
     suggestion: "Please use a unique code for the allowance type.",
   },
