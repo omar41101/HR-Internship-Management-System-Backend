@@ -44,6 +44,7 @@ export const resolveDepartmentId = async (department) => {
 
 // Resolve supervisor_email -> supervisor_id
 export const resolveSupervisorIdByEmail = async (email) => {
+  if (!email) return null;
   const supervisor = await User.findOne({ email: email });
   if (!supervisor) {
     throw new AppError(
@@ -55,4 +56,20 @@ export const resolveSupervisorIdByEmail = async (email) => {
   }
 
   return supervisor._id;
+};
+
+// Resolve supervisor_id -> validate existence
+export const resolveSupervisorId = async (id) => {
+  if (!id) return null;
+  const supervisorExists = await User.exists({ _id: id });
+  if (!supervisorExists) {
+    throw new AppError(
+      userErrors.SUPERVISOR_NOT_FOUND.message,
+      userErrors.SUPERVISOR_NOT_FOUND.code,
+      userErrors.SUPERVISOR_NOT_FOUND.errorCode,
+      userErrors.SUPERVISOR_NOT_FOUND.suggestion
+    );
+  }
+
+  return id;
 };

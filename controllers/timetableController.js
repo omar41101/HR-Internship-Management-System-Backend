@@ -203,7 +203,9 @@ export const getTimetableByUser = async (req, res, next) => {
     }
 
     // Check if the id (if supervisor) is the user's supervisor id
+    // BUT allow users to see their own timetable regardless of role
     if (
+      req.user.id !== userId &&
       req.user.role === "Supervisor" &&
       user.supervisor_id &&
       !user.supervisor_id.equals(new mongoose.Types.ObjectId(req.user.id))

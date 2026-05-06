@@ -28,7 +28,7 @@ export const getAllMeetingsOfProject = async (
   let filter = { projectId };
 
   // If NOT the Product Owner, restrict displaying the meetings to the attendees only
-  if (project.productOwnerId.toString() !== currentUser.id) {
+  if (project.productOwnerId?.toString() !== currentUser.id) {
     filter["attendees.userId"] = currentUser.id;
   }
 
@@ -75,10 +75,10 @@ export const getMeetingById = async (meetingId, currentUser) => {
 
   // Check if the user is the Product Owner or an attendee of the meeting
   const isProductOwner =
-    project.productOwnerId.toString() === currentUser.id;
+    project.productOwnerId?.toString() === currentUser.id;
 
   const isAttendee = meeting.attendees.some(
-    (att) => att.userId.toString() === currentUser.id
+    (att) => att.userId?.toString() === currentUser.id
   );
 
   // Authorization check
@@ -130,7 +130,7 @@ export const createMeeting = async (data, currentUser) => {
   }
 
   // Authorization check: Only Product Owner can create project meetings
-  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
+  if (project.productOwnerId?.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_CREATE_MEETING.message,
       errors.UNAUTHORIZED_TO_CREATE_MEETING.code,
@@ -195,7 +195,7 @@ export const createMeeting = async (data, currentUser) => {
     "userId",
   );
 
-  const validUserIds = teamMembers.map((m) => m.userId.toString());
+  const validUserIds = teamMembers.map((m) => m.userId?.toString());
 
   // Validate the attendees
   const invalidAttendees = attendees.filter(
@@ -272,7 +272,7 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
   }
 
   // Authorization check: Only Product Owner can update project meetings
-  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
+  if (project.productOwnerId?.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_UPDATE_MEETING.message,
       errors.UNAUTHORIZED_TO_UPDATE_MEETING.code,
@@ -371,7 +371,7 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
     const teamMembers = await TeamMember.find({ teamId: team._id }).select(
       "userId",
     );
-    const validUserIds = new Set(teamMembers.map((m) => m.userId.toString()));
+    const validUserIds = new Set(teamMembers.map((m) => m.userId?.toString()));
 
     // Validate the attendees
     for (const userId of attendees) {
@@ -411,7 +411,7 @@ export const updateMeeting = async (meetingId, data, currentUser) => {
     }
 
     // Add the meeting creator (product owner) to the attendees list if not already included
-    const attendeeUserIds = updatedAttendees.map(a => a.userId.toString());
+    const attendeeUserIds = updatedAttendees.map(a => a.userId?.toString());
     if (!attendeeUserIds.includes(currentUser.id.toString())) {
       updatedAttendees.push({
         userId: currentUser.id,
@@ -470,7 +470,7 @@ export const cancelMeeting = async (meetingId, currentUser) => {
   }
 
   // Authorization check: Only Product Owner can cancel project meetings
-  if (project.productOwnerId.toString() !== currentUser.id.toString()) {
+  if (project.productOwnerId?.toString() !== currentUser.id.toString()) {
     throw new AppError(
       errors.UNAUTHORIZED_TO_CANCEL_MEETING.message,
       errors.UNAUTHORIZED_TO_CANCEL_MEETING.code,
@@ -577,7 +577,7 @@ export const respondToMeeting = async (
 
   // Prevent the double response 
   const attendee = meeting.attendees.find(
-    (a) => a.userId.toString() === currentUser.id.toString()
+    (a) => a.userId?.toString() === currentUser.id.toString()
   );
   if (attendee.status !== "Pending") {
     throw new AppError(

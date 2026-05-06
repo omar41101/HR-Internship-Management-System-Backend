@@ -14,6 +14,7 @@ import {
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
 import { logAuditAction } from "../utils/logger.js";
+import { getIO } from "../socket.js";
 
 // --------------------------------------------------------- //
 // ------------------ HELPER FUNCTIONS --------------------- //
@@ -22,11 +23,12 @@ const buildLeaveRequestQuery = (user, queryParams) => {
   const { typeId, status, month, year } = queryParams;
 
   let roleFilter = {};
-  const allowedStatuses = getStatusesByRole(user.role);
+  const userRole = (user.role || "").toString().trim().toLowerCase();
+  const allowedStatuses = getStatusesByRole(userRole);
   const userId = user._id || user.id;
 
   // ROLE FILTER
-  if (user.role === "Supervisor") {
+  if (userRole === "supervisor") {
     roleFilter = {
       $or: [
         {
@@ -38,11 +40,11 @@ const buildLeaveRequestQuery = (user, queryParams) => {
         },
       ],
     };
-  } else if (user.role === "Admin") {
+  } else if (userRole === "admin") {
     roleFilter = {
       status: { $in: allowedStatuses },
     };
-  } else if (user.role === "Employee" || user.role === "Intern") {
+  } else if (userRole === "employee" || userRole === "intern") {
     roleFilter = {
       employeeId: userId,
     };
@@ -122,8 +124,8 @@ export const getAllLeaveRequests = async (req, res, next) => {
 
     // Fetch the paginated leave requests
     const leaveRequests = await LeaveRequest.find(query)
-      .populate("employeeId", "name email")
-      .populate("supervisorId", "name email")
+      .populate("employeeId", "name lastName email profileImageURL role")
+      .populate("supervisorId", "name lastName email profileImageURL")
       .populate("typeId", "name isPaid")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -150,8 +152,8 @@ export const getAllLeaveRequests = async (req, res, next) => {
 export const getLeaveStatuses = (req, res, next) => {
   try {
     const user = req.user;
-
-    const statuses = getStatusesByRole(user.role);
+    const userRole = (user.role || "").toString().trim().toLowerCase();
+    const statuses = getStatusesByRole(userRole);
 
     res.status(200).json({
       status: "Success",
@@ -172,8 +174,8 @@ export const getLeaveRequestById = async (req, res, next) => {
 
     // Get the leave request
     const leaveRequest = await LeaveRequest.findById(id)
-      .populate("employeeId", "name email")
-      .populate("supervisorId", "name email")
+      .populate("employeeId", "name lastName email profileImageURL role")
+      .populate("supervisorId", "name lastName email profileImageURL")
       .populate("typeId", "name isPaid");
 
     if (!leaveRequest) {
@@ -186,7 +188,8 @@ export const getLeaveRequestById = async (req, res, next) => {
     }
 
     // Authorization check (how much access the user has to this leave request)
-    if (user.role === "Employee" || user.role === "Intern") {
+    const userRole = (user.role || "").toString().trim().toLowerCase();
+    if (userRole === "employee" || userRole === "intern") {
       if (leaveRequest.employeeId._id.toString() !== user.id.toString()) {
         throw new AppError(
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.message,
@@ -195,7 +198,7 @@ export const getLeaveRequestById = async (req, res, next) => {
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion
         );
       }
-    } else if (user.role === "Supervisor") {
+    } else if (userRole === "supervisor") {
       const isOwnRequest = leaveRequest.employeeId._id.toString() === user.id.toString();
       const isAssignedToSupervisor =
         leaveRequest.supervisorId &&
@@ -209,7 +212,7 @@ export const getLeaveRequestById = async (req, res, next) => {
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion
         );
       }
-    } else if (user.role === "Admin") {
+    } else if (userRole === "admin") {
       // Admin can view any leave request
     } else {
       throw new AppError(
@@ -231,9 +234,13 @@ export const getLeaveRequestById = async (req, res, next) => {
   }
 };
 
+
+
+
 // Add a new leave request (Every authenticated user)
 export const addLeaveRequest = async (req, res, next) => {
   try {
+
     const user = req.user; // Get the user from the token
     const { typeId, startDate, endDate, reason } = req.body;
     let attachmentURL = "";
@@ -304,9 +311,10 @@ export const addLeaveRequest = async (req, res, next) => {
       );
     }
 
+    const userId = user.id || user._id;
     // Check overlapping leave requests
     const overlappingRequest = await LeaveRequest.findOne({
-      employeeId: user._id,
+      employeeId: userId,
       status: {
         $nin: ["Rejected by Supervisor", "Rejected by Admin"],
       },
@@ -351,13 +359,17 @@ export const addLeaveRequest = async (req, res, next) => {
       attachmentPublicId = result.public_id;
     }
 
-    // Determine the leave request's initial status based on the user's role
+    // Determine the leave request's initial status based on the user's role/hierarchy
+    const userRole = (req.user.role || "").toString().trim().toLowerCase();
     let supervisorId = null;
     let status;
 
-    if (user.role === "Employee" || user.role === "Intern") {
-      supervisorId = dbUser.supervisor_id;
-
+    if (userRole === "supervisor" || userRole === "admin") {
+      // Supervisors and admins bypass the supervisor approval step entirely
+      status = "Pending Admin Approval";
+      supervisorId = null;
+    } else if (userRole === "employee" || userRole === "intern") {
+      supervisorId = dbUser.supervisor_id || null;
       if (!supervisorId) {
         throw new AppError(
           userErrors.SUPERVISOR_NOT_FOUND.message,
@@ -366,10 +378,7 @@ export const addLeaveRequest = async (req, res, next) => {
           userErrors.SUPERVISOR_NOT_FOUND.suggestion,
         );
       }
-
       status = "Pending Supervisor Approval";
-    } else if (user.role === "Supervisor") {
-      status = "Pending Admin Approval";
     } else {
       throw new AppError(
         errors.UNAUTHORIZED_TO_SUBMIT_LEAVE_REQUEST.message,
@@ -392,6 +401,12 @@ export const addLeaveRequest = async (req, res, next) => {
       status,
       reviewedBy: null,
     });
+
+
+    try {
+      const io = getIO();
+      io.emit("leaveRequestCreated", { leaveRequest: newLeaveRequest });
+    } catch (e) { console.error("[Socket] emit failed:", e); }
 
     res.status(201).json({
       status: "Success",
@@ -584,15 +599,16 @@ export const cancelLeaveRequest = async (req, res, next) => {
       );
     }
 
-    // Determine if the leave request can be cancelled based on its status
-    let canCancel = false;
+    const userRole = (user.role || "").toString().trim().toLowerCase();
 
-    // Case 1: For an Employee / Intern
-    if (user.role === "Employee" || user.role === "Intern") {
+    // Determine if the user is authorized to cancel this request
+    let canCancel = false;
+    // Case 1: For an Employee or Intern
+    if (userRole === "employee" || userRole === "intern") {
       canCancel = leaveRequest.status === "Pending Supervisor Approval";
     }
     // Case 2: For a Supervisor
-    else if (user.role === "Supervisor") {
+    else if (userRole === "supervisor") {
       canCancel =
         leaveRequest.status === "Pending Admin Approval" &&
         !leaveRequest.reviewedBy;
@@ -641,12 +657,14 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
 
     let leaveRequest;
 
-    // SUPERVISOR FLOW
-    if (user.role === "Supervisor") {
+    const userRole = (user.role || "").toString().trim().toLowerCase();
+
+    // AUTHORIZATION CHECK
+    if (userRole === "supervisor") {
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
-        status: "Pending Supervisor Approval",
         supervisorId: user.id,
+        status: { $in: ["Pending Supervisor Approval", "Under Supervisor Review"] },
       });
 
       if (!leaveRequest) {
@@ -658,26 +676,53 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
         );
       }
 
-      // Update the status to "Under Supervisor Review"
-      leaveRequest.status = "Under Supervisor Review";
-      await leaveRequest.save();
+      // Update the status if it was pending
+      if (leaveRequest.status === "Pending Supervisor Approval") {
+        leaveRequest.status = "Under Supervisor Review";
+        await leaveRequest.save();
+      }
+
+      try {
+        const io = getIO();
+        io.emit("leaveRequestUpdated", { leaveRequest });
+      } catch (e) { console.error("[Socket] emit failed:", e); }
     }
 
     // ADMIN FLOW
-    else if (user.role === "Admin") {
-      leaveRequest = await LeaveRequest.findOneAndUpdate(
-        {
-          _id: id,
-          status: "Pending Admin Approval",
-          reviewedBy: null,
-        },
-        {
-          status: "Under Admin Review",
-          reviewedBy: user.id,
-          reviewedAt: new Date(),
-        },
-        { returnDocument: "after" },
-      );
+    else if (userRole === "admin") {
+      // Admins can take over ANY request that is not yet Approved/Rejected.
+      // They can take over from Pending Supervisor, Under Supervisor, or Pending Admin.
+      
+      // First, check if it's already under review by THIS admin
+      leaveRequest = await LeaveRequest.findOne({
+        _id: id,
+        status: "Under Admin Review",
+        reviewedBy: user.id,
+      });
+
+      if (!leaveRequest) {
+        // If not, transition from ANY "pending" or "under review" status to "Under Admin Review"
+        // This allows Admin to override Supervisor flow if needed.
+        leaveRequest = await LeaveRequest.findOneAndUpdate(
+          {
+            _id: id,
+            status: { 
+              $in: [
+                "Pending Supervisor Approval", 
+                "Under Supervisor Review", 
+                "Pending Admin Approval",
+                "Under Admin Review" // Allow taking over from another admin if needed
+              ] 
+            }
+          },
+          {
+            status: "Under Admin Review",
+            reviewedBy: user.id,
+            reviewedAt: new Date(),
+          },
+          { returnDocument: "after" },
+        );
+      }
 
       if (!leaveRequest) {
         throw new AppError(
@@ -687,6 +732,11 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
           errors.LEAVE_REQUEST_NOT_FOUND.suggestion
         );
       }
+
+      try {
+        const io = getIO();
+        io.emit("leaveRequestUpdated", { leaveRequest });
+      } catch (e) { console.error("[Socket] emit failed:", e); }
 
       // Log the action
       const employee = await User.findById(leaveRequest.employeeId);
@@ -745,8 +795,10 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
 
     let leaveRequest;
 
+    const userRole = (user.role || "").toString().trim().toLowerCase();
+
     // SUPERVISOR WORKFLOW
-    if (user.role === "Supervisor") {
+    if (userRole === "supervisor") {
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
         supervisorId: user.id,
@@ -767,13 +819,17 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
           ? "Pending Admin Approval"
           : "Rejected by Supervisor";
 
-      leaveRequest.comments = comments || "";
-
+      leaveRequest.comments = comments || leaveRequest.comments;
       await leaveRequest.save();
+
+      try {
+        const io = getIO();
+        io.emit("leaveRequestUpdated", { leaveRequest });
+      } catch (e) { console.error("[Socket] emit failed:", e); }
     }
 
     // ADMIN WORKFLOW
-    else if (user.role === "Admin") {
+    else if (userRole === "admin") {
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
         status: "Under Admin Review",
@@ -853,6 +909,12 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       leaveRequest.reviewedAt = new Date();
 
       await leaveRequest.save();
+
+      // Emit real-time update so the employee's KPI cards refresh immediately
+      try {
+        const io = getIO();
+        io.emit("leaveRequestUpdated", { leaveRequest });
+      } catch (e) { console.error("[Socket] emit failed:", e); }
 
       // AUDIT LOG
       await logAuditAction({

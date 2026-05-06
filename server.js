@@ -90,8 +90,10 @@ app.use(express.urlencoded({ limit: "10mb", extended: true })); // Parses data s
 // Swagger API Documentation
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Connect to MongoDB
-connectMongo();
+// Connect to MongoDB only if not in test environment (tests will manage their own DB)
+if (process.env.NODE_ENV !== "test") {
+  connectMongo();
+}
 
 // Activate routes
 app.use('/api', authRoutes);

@@ -8,11 +8,16 @@ const SENSITIVE_FIELDS = "-password -verificationCode -verificationCodeExpires -
 
 // Get all active supervisors. Query params example: page=1&keyword=omar
 export const getActiveSupervisors = async (queryParams) => {
-  const supervisorRoleId = await resolveRoleId("Supervisor");
+  // Find the role IDs for all roles that can be assigned as a supervisor (excluding Admin)
+  const roles = await import("../models/UserRole.js").then((m) => m.default.find({
+    name: { $in: [/^HR$/i, /^Supervisor$/i] },
+  }));
+  const roleIds = roles.map((r) => r._id);
+
   const finalQuery = {
     ...queryParams,
     status: "Active",
-    role_id: supervisorRoleId,
+    role_id: { in: roleIds },
   };
 
   // Resolve the department name - Id if we applied a department filter

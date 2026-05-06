@@ -103,9 +103,21 @@ export const getProjectTeamMembers = async (queryParams, teamId, user) => {
   // Get the task stats for each team member
   const statMembers = await Promise.all(
     members.map(async (member) => {
+      // Safety check: if user was deleted but remains in TeamMember collection
+      if (!member.userId) {
+        return {
+          _id: member._id,
+          user: { name: "Deleted", lastName: "User" },
+          userId: null,
+          role: member.role,
+          isActiveInProject: member.isActiveInProject,
+          stats: { tasksByStatus: { totalTasks: 0, backlog: 0, todo: 0, inProgress: 0, review: 0, done: 0, completionRate: 0 } },
+        };
+      }
+
       const stats = await getUserTaskStats(member.userId._id, project._id);
 
-      const userObj = member.userId ? member.userId.toObject() : {};
+      const userObj = member.userId.toObject();
       if (userObj.role_id) {
         userObj.role = userObj.role_id.name;
       }

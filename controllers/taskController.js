@@ -156,13 +156,13 @@ export const getProjectTasks = async (req, res, next) => {
       filter.status = status;
     }
 
-    // Prepare the project tasks
-    let query = Task.find(filter)
+    // Prepare the project tasks (apply pagination via .skip + .limit)
+    const tasks = await Task.find(filter)
       .populate("assignedTo", "name lastName profileImageURL role")
       .populate("sprintId", "number name goal status")
-      .sort({ createdAt: -1 });
-
-    const tasks = await query;
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
 
     // Count the total number of tasks
     const totalTasks = await Task.countDocuments(filter);
