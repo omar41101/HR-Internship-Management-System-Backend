@@ -229,34 +229,6 @@ const userSchema = mongoose.Schema(
         default: "DT",
       },
     },
-    allowances: [
-      {
-        allowanceTypeId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "AllowanceType",
-        },
-        name: {
-          type: String,
-        },
-        amount: {
-          type: Number,
-        },
-      },
-    ],
-    bonuses: [
-      {
-        bonusTypeId: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "BonusType",
-        },
-        name: {
-          type: String,
-        },
-        amount: {
-          type: Number,
-        },
-      },
-    ],
   },
   { timestamps: true },
 );

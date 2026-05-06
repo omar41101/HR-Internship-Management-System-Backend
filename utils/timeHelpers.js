@@ -54,3 +54,11 @@ export const getDatesBetween = (start, end) => {
 
   return dates;
 };
+
+// Parse a date string and return a Date object, or null if invalid
+export const parseDate = (value) => {
+  if (!value) return null; // handles null, undefined, ""
+
+  const date = new Date(value);
+  return isNaN(date.getTime()) ? null : date;
+};

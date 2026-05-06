@@ -3,7 +3,11 @@ import * as payrollConfigService from "../services/payrollConfigService.js";
 // Create a new payroll configuration for a specific year
 export const createPayrollConfig = async (req, res, next) => {
   try {
-    const result = await payrollConfigService.createPayrollConfig(req.body);
+    const result = await payrollConfigService.createPayrollConfig(
+      req.body,
+      req.user,
+      req.ip,
+    );
     res.status(result.code).json(result);
   } catch (err) {
     next(err);
@@ -37,12 +41,14 @@ export const getActivePayrollConfig = async (req, res, next) => {
 // Create a new version of the payroll configuration for a specific year
 export const createNewVersion = async (req, res, next) => {
   try {
-    const { year } = req.params;
-    const result = await payrollConfigService.createNewVersion(year, req.body);
+    const result = await payrollConfigService.createNewVersion(
+      req.body,
+      req.user,
+      req.ip,
+    );
 
     res.status(result.code).json(result);
-  }
-    catch (err) {
+  } catch (err) {
     next(err);
   }
 };
@@ -51,7 +57,11 @@ export const createNewVersion = async (req, res, next) => {
 export const toggleActivation = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const result = await payrollConfigService.togglePayrollConfigActivation(id);
+    const result = await payrollConfigService.togglePayrollConfigActivation(
+      id,
+      req.user,
+      req.ip,
+    );
     res.status(result.code).json(result);
   } catch (err) {
     next(err);

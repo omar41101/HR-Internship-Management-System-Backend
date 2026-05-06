@@ -37,7 +37,7 @@ router.get(
 
 // Create a new version of the payroll configuration for a specific year
 router.post(
-  "/payroll-config/new-version/:year",
+  "/payroll-config/new-version",
   authenticate,
   authorize(["Admin"]),
   createNewVersion,

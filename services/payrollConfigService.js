@@ -2,11 +2,13 @@ import PayrollConfig from "../models/PayrollConfig.js";
 import { createOne, getAll, getOne } from "./handlersFactory.js";
 import { errors } from "../errors/payrollConfigErrors.js";
 import AppError from "../utils/AppError.js";
+import { logAuditAction } from "../utils/logger.js";
+import { validatePayrollConfig } from "../validators/payrollConfigValidators.js";
 
 const createPayrollConfigFactory = createOne(PayrollConfig);
 
 // Create a new payroll configuration for a specific year
-export const createPayrollConfig = async (data) => {
+export const createPayrollConfig = async (data, user, ip) => {
   // Check if there's already an active configuration for the specified year
   const existingActive = await PayrollConfig.findOne({
     year: data.year,
@@ -21,11 +23,25 @@ export const createPayrollConfig = async (data) => {
     );
   }
 
+  validatePayrollConfig(data);
+
   // Create a config
   const config = await createPayrollConfigFactory({
     ...data,
     isActive: true,
   });
+
+  // Create the audit log for this action
+  await logAuditAction({
+    adminId: user.id,
+    action: "CREATE_PAYROLL_CONFIG",
+    targetType: "PayrollConfig",
+    targetId: config.data._id,
+    targetName: `${config.data.year}`,
+    details: config,
+    ipAddress: ip,
+  });
+
   return config;
 };
 
@@ -55,22 +71,35 @@ export const getActivePayrollConfig = async (year) => {
 };
 
 // Create a new version of the current payroll configuration for a specific year
-export const createNewVersion = async (year, newConfig) => {
+export const createNewVersion = async (newConfig, user, ip) => {
+  validatePayrollConfig(newConfig);
+  
   // Deactivate the current active config
-  await PayrollConfig.updateMany({ year, isActive: true }, { isActive: false });
+  await PayrollConfig.updateMany({ year: newConfig.year, isActive: true }, { isActive: false });
 
   // create new version
   const config = await createOne(PayrollConfig)({
     ...newConfig,
-    year,
+    year: newConfig.year,
     isActive: true,
+  });
+
+  // Create the audit log for this action
+  await logAuditAction({
+    adminId: user.id,
+    action: "CREATE_NEW_PAYROLL_CONFIG_VERSION",
+    targetType: "PayrollConfig",
+    targetId: config.data._id,
+    targetName: `${config.data.year}`,
+    details: config,
+    ipAddress: ip,
   });
 
   return config;
 };
 
 // Toggle the activation status of a payroll configuration
-export const togglePayrollConfigActivation = async (id) => {
+export const togglePayrollConfigActivation = async (id, user, ip) => {
   // Check the payroll config existence
   const config = await PayrollConfig.findById(id);
   if (!config)
@@ -86,6 +115,17 @@ export const togglePayrollConfigActivation = async (id) => {
 
   config.isActive = !config.isActive;
   await config.save();
+
+  // Create the audit log for this action
+  await logAuditAction({
+    adminId: user.id,
+    action: "TOGGLE_PAYROLL_CONFIG_ACTIVATION",
+    targetType: "PayrollConfig",
+    targetId: config._id,
+    targetName: `${config.year}`,
+    details: config,
+    ipAddress: ip,
+  });
 
   return {
     status: "Success",

@@ -227,6 +227,35 @@ const payrollSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    paidBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    paidAt: {
+      type: Date,
+      default: null,
+    },
+    recalculationRequired: {
+      // Flag to indicate if the payroll needs to be recalculated due to changes in attendance, shifts, bonuses/allowances
+      type: Boolean,
+      default: false,
+    },
+    recalculationReason: {
+      // Reason for recalculation (e.g., "Attendance Change", "Bonus Update", etc.)
+      type: String,
+      default: null,
+    },
+    recomputedAt: {
+      // Timestamp of the last recomputation
+      type: Date,
+      default: null,
+    },
+    recomputedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   { timestamps: true },
 );

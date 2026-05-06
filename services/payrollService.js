@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import Payroll from "../models/Payroll.js";
 import PayrollConfig from "../models/PayrollConfig.js";
@@ -18,187 +19,325 @@ import {
   getHourlyRate,
   buildAllowancesSnapshot,
   buildBonusesSnapshot,
+  canAccessPayroll,
+  computePayroll,
 } from "../utils/payrollHelpers.js";
-import { all } from "axios";
+import { getOne, getAll } from "./handlersFactory.js";
+import { logAuditAction } from "../utils/logger.js";
 
 // Payroll calculation for an employee for a given month and year
 export const calculatePayroll = async (employeeId, month, year, payload) => {
   // Check the employee existence and status
   const user = await User.findById(employeeId);
-  if (!user)
+  if (!user) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
       commonErrors.USER_NOT_FOUND.errorCode,
       commonErrors.USER_NOT_FOUND.suggestion,
     );
+  }
 
-  // Validate the user status (Not Inactive or Blocked)
   validateUserStatus(user);
 
-  // Check if a payroll record for this employee and month already exists
+  // Prevent duplicate payroll for the same employee and month
   const existing = await Payroll.findOne({ employeeId, month, year });
-  if (existing)
+  if (existing) {
     throw new AppError(
       errors.PAYROLL_ALREADY_EXISTS.message,
       errors.PAYROLL_ALREADY_EXISTS.code,
       errors.PAYROLL_ALREADY_EXISTS.errorCode,
       errors.PAYROLL_ALREADY_EXISTS.suggestion,
     );
+  }
 
-  // Get the current payroll configuration for the specified year
-  const config = await PayrollConfig.findOne({ year, isActive: true });
-  if (!config)
+  // Get the active config
+  const configDoc = await PayrollConfig.findOne({ year, isActive: true });
+  if (!configDoc) {
     throw new AppError(
       payrollConfigErrors.PAYROLL_CONFIG_NOT_FOUND.message,
       payrollConfigErrors.PAYROLL_CONFIG_NOT_FOUND.code,
       payrollConfigErrors.PAYROLL_CONFIG_NOT_FOUND.errorCode,
       payrollConfigErrors.PAYROLL_CONFIG_NOT_FOUND.suggestion,
     );
+  }
 
-  // Get the base (prorated if necessary) salary for the employee for the specified month and year
-  const { proratedSalary: baseSalary, workedDays } =
-    await calculateProratedSalary(employeeId, month, year, user);
+  // Compute the payroll
+  const computed = await computePayroll(user, month, year, payload, configDoc);
 
-  if (baseSalary <= 0)
-    throw new AppError(
-      errors.INVALID_BASE_SALARY.message,
-      errors.INVALID_BASE_SALARY.code,
-      errors.INVALID_BASE_SALARY.errorCode,
-      errors.INVALID_BASE_SALARY.suggestion,
-    );
-
-  // Get the hourly rate
-  const hourlyRate = getHourlyRate(
-    baseSalary,
-    config.payroll.standardMonthlyHours,
-  );
-
-  // Get the allowances snapshot for the employee
-  const {
-    snapshot: allowancesSnapshot,
-    taxable: taxableAllowances,
-    nonTaxable: nonTaxableAllowances,
-  } = await buildAllowancesSnapshot(user);
-
-  // Get the bonuses snapshot for the employee
-  const systemBonuses = user.bonuses || [];
-  const manualBonuses = payload.bonuses || [];
-
-  const allBonuses = [...systemBonuses, ...manualBonuses];
-  const { snapshot: bonusesSnapshot, total: totalBonuses } =
-    await buildBonusesSnapshot(allBonuses);
-
-  // Calculate overtime compensation
-  const { amount: overtimeAmount, hours: overtimeHours } =
-    await calculateOvertime(
-      employeeId,
-      month,
-      year,
-      baseSalary,
-      config,
-      hourlyRate,
-    );
-
-  // Calculate deductions for absences, late arrivals, and unpaid leave
-  const absences = await calculateAbsences(
-    employeeId,
-    month,
-    year,
-    baseSalary,
-    config,
-    hourlyRate,
-  );
-
-  const lateArrivals = await calculateLateDeduction(
-    employeeId,
-    month,
-    year,
-    baseSalary,
-    config,
-    hourlyRate,
-  );
-
-  const unpaidLeave = await calculateUnpaidLeaveDeduction(
-    employeeId,
-    month,
-    year,
-    baseSalary,
-    config,
-    hourlyRate,
-  );
-
-  // Calculate the gross salary
-  const grossSalary = round(
-    baseSalary + totalBonuses + overtimeAmount + taxableAllowances,
-  );
-
-  // Calculate CNSS contribution
-  const cnssBase = Math.min(grossSalary, config.cnss.ceiling);
-  const cnss = round(cnssBase * config.cnss.rate);
-
-  const taxableIncome = grossSalary - cnss;
-
-  const irpp = calculateIRPPBreakdown(taxableIncome, config, user);
-
-  const netTaxableIncome = taxableIncome - irpp.monthlyTax;
-
-  const css = round(calculateCSS(netTaxableIncome, config));
-
-  // Calculate the total deductions
-  const totalDeductions =
-    cnss + irpp.monthlyTax + css + absences + lateArrivals + unpaidLeave;
-
-  // Calculate the net salary
-  const netSalary = round(grossSalary - totalDeductions + nonTaxableAllowances);
-
-  // Create the payroll record in the database
+  // Create payroll
   const payroll = await Payroll.create({
     employeeId,
     month,
     year,
-    baseSalary,
-    hourlyRate,
-    workedDays,
-    earnings: {
-      bonuses: bonusesSnapshot,
-      allowances: allowancesSnapshot,
-      overtime: {
-        amount: overtimeAmount,
-        hours: overtimeHours,
-      },
-      totals: {
-        bonuses: totalBonuses,
-        allowancesTaxable: taxableAllowances,
-        allowancesNonTaxable: nonTaxableAllowances,
-      },
-      total: grossSalary,
-    },
-    family: irpp.family,
-    cnssBase,
-    taxableIncome,
-    netTaxableIncome,
-    fraisProfessionnels: irpp.fraisPro,
-    deductions: {
-      cnss,
-      css,
-      irpp: irpp.monthlyTax,
-      absences,
-      lateArrivals,
-      unpaidLeave,
-      total: totalDeductions,
-    },
-    grossSalary,
-    netSalary,
+
+    ...computed,
+
     configSnapshot: {
       year,
-      cnss: config.cnss,
-      css: config.css,
-      irpp: config.irpp,
-      standardMonthlyHours: config.payroll.standardMonthlyHours,
+      cnss: configDoc.cnss,
+      css: configDoc.css,
+      irpp: configDoc.irpp,
+      standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
     },
+
     status: "draft",
   });
 
-  return payroll;
+  return {
+    status: "Success",
+    code: 201,
+    message: "Payroll calculated successfully!",
+    data: payroll,
+  };
+};
+
+// Get a payroll record by ID
+export const getPayrollById = async (id, user) => {
+  // Get the payroll record with the employee details populated
+  const result = await getOne(Payroll, errors.PAYROLL_NOT_FOUND, {
+    path: "employeeId",
+    select: "name lastName email position",
+  })(id);
+
+  const payroll = result.data;
+
+  // Check if the requester is an admin or the owner of the payroll record
+  canAccessPayroll(user, payroll.employeeId);
+
+  return result;
+};
+
+// Get all payroll records
+export const getAllPayrolls = getAll(Payroll, {
+  path: "employeeId",
+  select: "name lastName email position",
+});
+
+// Get an employee's payroll history
+export const getEmployeePayrolls = async (user, queryParams) => {
+  const isAdmin = user.role === "Admin";
+
+  let finalQuery = {
+    ...queryParams,
+    status: { in: ["validated", "paid"] }, // We don't show payrolls until validated by the admin
+  };
+
+  // Enforce only the employee's own payroll records
+  if (!isAdmin) {
+    finalQuery.employeeId = user.id;
+  }
+
+  return await getAll(Payroll, {
+    path: "employeeId",
+    select: "name lastName email position",
+  })(finalQuery);
+};
+
+// Validate a payroll (Admin only)
+export const validatePayroll = async (payrollId, user, ip) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const payroll = await Payroll.findOneAndUpdate(
+      {
+        _id: payrollId,
+        status: "draft",
+      },
+      {
+        $set: {
+          status: "validated",
+          validatedBy: user.id,
+          validatedAt: new Date(),
+        },
+      },
+      {
+        returnDocument: "after",
+        session,
+      },
+    );
+
+    if (!payroll) {
+      throw new AppError(
+        errors.PAYROLL_NOT_FOUND.message,
+        errors.PAYROLL_NOT_FOUND.code,
+        errors.PAYROLL_NOT_FOUND.errorCode,
+        errors.PAYROLL_NOT_FOUND.suggestion,
+      );
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Get the employee details for the audit log
+    await payroll.populate({
+      path: "employeeId",
+      select: "name lastName",
+    });
+
+    const employee = payroll.employeeId;
+
+    // Create the audit log for this action
+    await logAuditAction({
+      adminId: user.id,
+      action: "VALIDATE_PAYROLL",
+      targetType: "Payroll",
+      targetId: payroll.employeeId,
+      targetName: `${employee.name} ${employee.lastName}`,
+      details: payroll,
+      ipAddress: ip,
+    });
+
+    return {
+      status: "Success",
+      code: 200,
+      message: "Payroll validated successfully!",
+      data: payroll,
+    };
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+};
+
+// Mark a payroll as paid (Admin only)
+export const markPayrollAsPaid = async (payrollId, user, ip) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const payroll = await Payroll.findOneAndUpdate(
+      {
+        _id: payrollId,
+        status: "validated",
+      },
+      {
+        $set: {
+          status: "paid",
+          paidBy: user.id,
+          paidAt: new Date(),
+        },
+      },
+      {
+        returnDocument: "after",
+        session,
+      },
+    );
+
+    if (!payroll) {
+      throw new AppError(
+        errors.PAYROLL_NOT_FOUND.message,
+        errors.PAYROLL_NOT_FOUND.code,
+        errors.PAYROLL_NOT_FOUND.errorCode,
+        errors.PAYROLL_NOT_FOUND.suggestion,
+      );
+    }
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // Get the employee details for the audit log
+    await payroll.populate({
+      path: "employeeId",
+      select: "name lastName",
+    });
+
+    const employee = payroll.employeeId;
+
+    // Create the audit log for this action
+    await logAuditAction({
+      adminId: user.id,
+      action: "MARK_PAYROLL_AS_PAID",
+      targetType: "Payroll",
+      targetId: payroll.employeeId,
+      targetName: `${employee.name} ${employee.lastName}`,
+      details: payroll,
+      ipAddress: ip,
+    });
+
+    return {
+      status: "Success",
+      code: 200,
+      message: "Payroll marked as paid successfully!",
+      data: payroll,
+    };
+  } catch (err) {
+    await session.abortTransaction();
+    session.endSession();
+    throw err;
+  }
+};
+
+// Recompute a payroll (Admin only)
+export const recomputePayroll = async (payrollId, user, ip) => {
+  const payroll = await Payroll.findById(payrollId);
+  if (!payroll) {
+    throw new AppError(
+      errors.PAYROLL_NOT_FOUND.message,
+      errors.PAYROLL_NOT_FOUND.code,
+      errors.PAYROLL_NOT_FOUND.errorCode,
+      errors.PAYROLL_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Only draft payrolls can be recomputed
+  if (payroll.status !== "draft") {
+    throw new AppError(
+      errors.PAYROLL_NOT_DRAFT.message,
+      errors.PAYROLL_NOT_DRAFT.code,
+      errors.PAYROLL_NOT_DRAFT.errorCode,
+      errors.PAYROLL_NOT_DRAFT.suggestion,
+    );
+  }
+
+  const employee = await User.findById(payroll.employeeId);
+  if (!employee) {
+    throw new AppError(
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
+    );
+  }
+
+  const config = payroll.configSnapshot;
+
+  // Recompute the payroll
+  const recomputed = await computePayroll(
+    employee,
+    payroll.month,
+    payroll.year,
+    config,
+  );
+
+  // Merge result safely
+  Object.assign(payroll, recomputed);
+
+  // Reset flags after recompute
+  payroll.recalculationRequired = false;
+  payroll.recalculationReason = null;
+  payroll.recomputedAt = new Date();
+  payroll.recomputedBy = user.id;
+
+  await payroll.save();
+
+  // Create the audit log for this action
+  await logAuditAction({
+    adminId: user.id,
+    action: "RECOMPUTE_PAYROLL",
+    targetType: "Payroll",
+    targetId: payroll.employeeId,
+    targetName: `${employee.name} ${employee.lastName}`,
+    details: payroll,
+    ipAddress: ip,
+  });
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Payroll recomputed successfully!",
+    data: payroll,
+  };
 };

@@ -1,3 +1,4 @@
+import Payroll from "../models/Payroll.js";
 import Resignation from "../models/Resignation.js";
 import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
@@ -595,4 +596,197 @@ export const calculateCSS = (netTaxableMonthly, config) => {
   const annualCSS = annualNetTaxable * config.css.rate;
 
   return annualCSS / 12;
+};
+
+// Check if it's an admin or owner of the payroll record
+export const canAccessPayroll = (user, employeeId) => {
+  const isAdmin = user.role === "Admin";
+  const isOwner = employeeId.toString() === user.id.toString();
+
+  if (!isAdmin && !isOwner) {
+    throw new AppError(
+      errors.UNAUTHORIZED_PAYROLL_ACCESS.message,
+      errors.UNAUTHORIZED_PAYROLL_ACCESS.code,
+      errors.UNAUTHORIZED_PAYROLL_ACCESS.errorCode,
+      errors.UNAUTHORIZED_PAYROLL_ACCESS.suggestion,
+    );
+  }
+};
+
+// Mark payroll as dirty for recalculation when there are changes that affect the payroll (e.g., attendance changes)
+export const markPayrollDirty = async (employeeId, date = new Date(), message = "Changes require payroll recalculation") => {
+  const month = date.getMonth() + 1;
+  const year = date.getFullYear();
+
+  await Payroll.updateMany(
+    { employeeId, month, year, status: { $in: ["draft", "validated"] } },
+    {
+      $set: {
+        recalculationRequired: true,
+        recalculationMessage: message,
+      },
+    }
+  );
+};
+
+
+// STILL WORK TO DO
+
+// Compute the payroll: Engine of the payroll calculation
+export const computePayroll = async (user, month, year, config) => {
+  // Calculate the prorated salary and get the number of worked days in the month
+  const { proratedSalary: baseSalary, workedDays } =
+    await calculateProratedSalary(user._id, month, year, user);
+
+  if (workedDays <= 0) {
+    throw new AppError(
+      errors.INVALID_WORKED_DAYS.message,
+      errors.INVALID_WORKED_DAYS.code,
+      errors.INVALID_WORKED_DAYS.errorCode,
+      errors.INVALID_WORKED_DAYS.suggestion,
+    );
+  }
+
+  if (baseSalary <= 0) {
+    throw new AppError(
+      errors.INVALID_BASE_SALARY.message,
+      errors.INVALID_BASE_SALARY.code,
+      errors.INVALID_BASE_SALARY.errorCode,
+      errors.INVALID_BASE_SALARY.suggestion,
+    );
+  }
+
+  // Calculate the hourly rate
+  const hourlyRate = getHourlyRate(
+    baseSalary,
+    config.payroll.standardMonthlyHours
+  );
+
+  // Calculate allowances snapshot and totals
+  const {
+    snapshot: allowancesSnapshot,
+    taxable: taxableAllowances,
+    nonTaxable: nonTaxableAllowances,
+  } = await buildAllowancesSnapshot(user);
+
+  // Calculate bonuses snapshot and total
+  const systemBonuses = user.bonuses || [];
+
+  const { snapshot: bonusesSnapshot, total: totalBonuses } =
+    await buildBonusesSnapshot(systemBonuses);
+
+  // Calculate overtime compensation based on attendances and timetables
+  const { amount: overtimeAmount, hours: overtimeHours } =
+    await calculateOvertime(
+      user._id,
+      month,
+      year,
+      baseSalary,
+      config,
+      hourlyRate
+    );
+
+  // Calculate deductions for absences, late arrivals, and unpaid leaves
+  const absences = await calculateAbsences(
+    user._id,
+    month,
+    year,
+    baseSalary,
+    config,
+    hourlyRate
+  );
+
+  const lateArrivals = await calculateLateDeduction(
+    user._id,
+    month,
+    year,
+    baseSalary,
+    config,
+    hourlyRate
+  );
+
+  const unpaidLeave = await calculateUnpaidLeaveDeduction(
+    user._id,
+    month,
+    year,
+    baseSalary,
+    config,
+    hourlyRate
+  );
+
+  // Calculate the gross salary
+  const grossSalary = round(
+    baseSalary + totalBonuses + overtimeAmount + taxableAllowances
+  );
+
+  // Calculate the CNSS contribution based on the gross salary (capped at the CNSS ceiling)
+  const cnssBase = Math.min(grossSalary, config.cnss.ceiling);
+  const cnss = round(cnssBase * config.cnss.rate);
+
+  // Calculate the taxable income for IRPP
+  const taxableIncome = grossSalary - cnss;
+
+  // Calculate the IRPP tax based on the taxable income and get the family deductions and frais professionnels
+  const irpp = calculateIRPPMonthly(taxableIncome, config, user);
+
+  const netTaxableIncome = taxableIncome - irpp.monthlyTax;
+
+  // Calculate the CSS contribution based on the net taxable income
+  const css = round(calculateCSS(netTaxableIncome, config));
+
+  // Calculate the total deductions
+  const totalDeductions =
+    cnss +
+    irpp.monthlyTax +
+    css +
+    absences +
+    lateArrivals +
+    unpaidLeave;
+
+  // Calculate the net salary
+  const netSalary = round(
+    grossSalary - totalDeductions + nonTaxableAllowances
+  );
+
+  return {
+    baseSalary,
+    hourlyRate,
+    workedDays,
+
+    earnings: {
+      bonuses: bonusesSnapshot,
+      allowances: allowancesSnapshot,
+      overtime: {
+        amount: overtimeAmount,
+        hours: overtimeHours,
+      },
+      totals: {
+        bonuses: totalBonuses,
+        allowancesTaxable,
+        allowancesNonTaxable,
+      },
+      total:
+        totalBonuses + taxableAllowances + overtimeAmount,
+    },
+
+    family: irpp.family,
+
+    cnssBase,
+    taxableIncome,
+    netTaxableIncome,
+    fraisProfessionnels: irpp.fraisPro,
+
+    deductions: {
+      cnss,
+      css,
+      irpp: irpp.monthlyTax,
+      absences,
+      lateArrivals,
+      unpaidLeave,
+      total: totalDeductions,
+    },
+
+    grossSalary,
+    netSalary,
+  };
 };
