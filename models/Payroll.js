@@ -209,8 +209,10 @@ const payrollSchema = new mongoose.Schema(
           },
         },
       },
-      standardMonthlyHours: {
-        type: Number,
+      payroll: {
+        standardMonthlyHours: {
+          type: Number,
+        },
       },
     },
     status: {

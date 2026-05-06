@@ -10,13 +10,47 @@ export const getMonthRange = (year, month) => ({
 
 // Get the difference in hours between two time strings (HH:MM)
 export const getHoursDifference = (start, end) => {
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
+  // 1. Validate input
+  if (!start || !end || typeof start !== "string" || typeof end !== "string") {
+    return 0;
+  }
+
+  const startParts = start.split(":");
+  const endParts = end.split(":");
+
+  // 2. Validate format
+  if (startParts.length !== 2 || endParts.length !== 2) {
+    return 0;
+  }
+
+  const [sh, sm] = startParts.map(Number);
+  const [eh, em] = endParts.map(Number);
+
+  // 3. Validate numbers
+  if ([sh, sm, eh, em].some((v) => isNaN(v))) {
+    return 0;
+  }
 
   const startMinutes = sh * 60 + sm;
   const endMinutes = eh * 60 + em;
 
-  return (endMinutes - startMinutes) / 60;
+  const diff = endMinutes - startMinutes;
+
+  // 4. Prevent negative values
+  return diff > 0 ? diff / 60 : 0;
+};
+
+// Transform a time string in 12-hour format (e.g., "02:30 PM") to an object with hours and minutes in 24-hour format
+export const normalizeTime = (timeStr) => {
+  if (!timeStr) return null;
+
+  const [time, modifier] = timeStr.split(" ");
+  let [hours, minutes] = time.split(":").map(Number);
+
+  if (modifier === "PM" && hours !== 12) hours += 12;
+  if (modifier === "AM" && hours === 12) hours = 0;
+
+  return { h: hours, m: minutes };
 };
 
 // Get the week number of the year for a given date 
@@ -57,7 +91,7 @@ export const getDatesBetween = (start, end) => {
 
 // Parse a date string and return a Date object, or null if invalid
 export const parseDate = (value) => {
-  if (!value) return null; // handles null, undefined, ""
+  if (!value) return null; // Handles null, undefined, ""
 
   const date = new Date(value);
   return isNaN(date.getTime()) ? null : date;

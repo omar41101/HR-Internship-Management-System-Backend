@@ -26,7 +26,7 @@ import { getOne, getAll } from "./handlersFactory.js";
 import { logAuditAction } from "../utils/logger.js";
 
 // Payroll calculation for an employee for a given month and year
-export const calculatePayroll = async (employeeId, month, year, payload) => {
+export const calculatePayroll = async (employeeId, month, year) => {
   // Check the employee existence and status
   const user = await User.findById(employeeId);
   if (!user) {
@@ -63,7 +63,7 @@ export const calculatePayroll = async (employeeId, month, year, payload) => {
   }
 
   // Compute the payroll
-  const computed = await computePayroll(user, month, year, payload, configDoc);
+  const computed = await computePayroll(user, month, year, configDoc);
 
   // Create payroll
   const payroll = await Payroll.create({
@@ -78,7 +78,9 @@ export const calculatePayroll = async (employeeId, month, year, payload) => {
       cnss: configDoc.cnss,
       css: configDoc.css,
       irpp: configDoc.irpp,
-      standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
+      payroll: {
+        standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
+      }
     },
 
     status: "draft",
@@ -313,11 +315,11 @@ export const recomputePayroll = async (payrollId, user, ip) => {
   );
 
   // Merge result safely
-  Object.assign(payroll, recomputed);
+  payroll.set(recomputed);
 
   // Reset flags after recompute
   payroll.recalculationRequired = false;
-  payroll.recalculationReason = null;
+  payroll.recalculationReason = payroll.recalculationReason || "Manual recompute";
   payroll.recomputedAt = new Date();
   payroll.recomputedBy = user.id;
 
@@ -328,7 +330,7 @@ export const recomputePayroll = async (payrollId, user, ip) => {
     adminId: user.id,
     action: "RECOMPUTE_PAYROLL",
     targetType: "Payroll",
-    targetId: payroll.employeeId,
+    targetId: payroll._id,
     targetName: `${employee.name} ${employee.lastName}`,
     details: payroll,
     ipAddress: ip,

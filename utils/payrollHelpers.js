@@ -7,6 +7,8 @@ import LeaveRequest from "../models/LeaveRequest.js";
 import LeaveType from "../models/LeaveType.js";
 import AllowanceType from "../models/AllowanceType.js";
 import BonusType from "../models/BonusType.js";
+import EmployeeAllowance from "../models/EmployeeAllowance.js";
+import EmployeeBonus from "../models/EmployeeBonus.js";
 import AppError from "./AppError.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors } from "../errors/payrollErrors.js";
@@ -15,6 +17,7 @@ import {
   getHoursDifference,
   getWeekNumber,
   getDatesBetween,
+  normalizeTime,
 } from "./timeHelpers.js";
 
 // Get the hourly rate based on the base salary
@@ -28,7 +31,7 @@ export const getHourlyRate = (baseSalary, standardMonthlyHours) => {
     );
   }
 
-  return baseSalary / standardMonthlyHours;
+  return round(baseSalary / standardMonthlyHours);
 };
 
 // Helper function to build a map of timetables by date
@@ -151,27 +154,20 @@ const calculateWeeklyOvertime = (weeks, baseSalary, config, hourlyRate) => {
 };
 
 // Calculate the total deduction for late arrivals in a given month
-const calculateLateHours = (
-  checkInTime,
-  expectedStartTime,
-  gracePeriod = 5,
-) => {
+const calculateLateHours = (checkInTime, expectedStartTime, gracePeriod = 5) => {
   if (!checkInTime || !expectedStartTime) return 0;
 
-  const [inH, inM] = checkInTime.split(":").map(Number);
-  const [startH, startM] = expectedStartTime.split(":").map(Number);
+  const inT = normalizeTime(checkInTime);
+  const startT = normalizeTime(expectedStartTime);
 
-  const checkInMinutes = inH * 60 + inM;
-  const startMinutes = startH * 60 + startM;
+  if (!inT || !startT) return 0;
 
-  let lateMinutes = checkInMinutes - startMinutes;
+  const checkInMinutes = inT.h * 60 + inT.m;
+  const startMinutes = startT.h * 60 + startT.m;
 
-  // Apply grace period
-  lateMinutes -= gracePeriod;
+  const lateMinutes = checkInMinutes - startMinutes - gracePeriod;
 
-  if (lateMinutes <= 0) return 0;
-
-  return Math.ceil(lateMinutes / 60);
+  return lateMinutes > 0 ? lateMinutes / 60 : 0;
 };
 
 // Helper function to calculate the family deduction snapshot for IRPP calculation
@@ -227,10 +223,8 @@ const calculateFamilySnapshot = (user, config) => {
 
 // Function to round numbers to 3 decimal places (For currency calculations in Tunisia - millimes)
 export const round = (value) => {
-  return Math.round(value * 1000) / 1000; // Tunisia → millimes
+  return Math.round(value * 1000) / 1000; // Round to 3 decimal places
 };
-
-// ------------------------------------------------------------------------------------------------------------------------- //
 
 // Calculate the prorated salary for an employee
 export const calculateProratedSalary = async (
@@ -258,7 +252,6 @@ export const calculateProratedSalary = async (
     Math.min(
       monthEnd,
       resignation?.lastWorkingDate || monthEnd,
-      user.employment.contractEndDate,
     ),
   );
 
@@ -286,27 +279,29 @@ export const calculateProratedSalary = async (
 };
 
 // Build the allowances snapshot for the payroll record
-export const buildAllowancesSnapshot = async (user) => {
-  const allowanceTypeIds = user.allowances?.map((a) => a.allowanceTypeId) || [];
+export const buildAllowancesSnapshot = async (userId, month, year) => {
+  const payrollDate = new Date(Date.UTC(year, month - 1, 1));
 
-  // Fetch the allowance types to get their details
-  const allowanceTypes = await AllowanceType.find({
-    _id: { $in: allowanceTypeIds },
-  });
-
-  // Create a map of allowance types for faster lookup
-  const allowanceMap = new Map();
-  allowanceTypes.forEach((a) => allowanceMap.set(a._id.toString(), a));
+  // Get active allowances for that period
+  const employeeAllowances = await EmployeeAllowance.find({
+    userId,
+    isActive: true,
+    effectiveFrom: { $lte: payrollDate },
+    $or: [
+      { effectiveTo: null },
+      { effectiveTo: { $gte: payrollDate } },
+    ],
+  }).populate("allowanceTypeId");
 
   let snapshot = [];
   let taxable = 0;
   let nonTaxable = 0;
 
-  for (const ua of user.allowances || []) {
-    const type = allowanceMap.get(ua.allowanceTypeId.toString());
-    if (!type) continue;
+  for (const ea of employeeAllowances) {
+    const type = ea.allowanceTypeId;
+    if (!type || !type.active) continue;
 
-    const amount = ua.amount ?? type.defaultAmount;
+    const amount = ea.amount ?? type.defaultAmount;
 
     snapshot.push({
       code: type.code,
@@ -327,25 +322,27 @@ export const buildAllowancesSnapshot = async (user) => {
 };
 
 // Build the bonuses snapshot for the payroll record
-export const buildBonusesSnapshot = async (bonusPayload = []) => {
-  const bonusTypeIds = bonusPayload.map((b) => b.bonusTypeId);
+export const buildBonusesSnapshot = async (userId, month, year) => {
+  const payrollDate = new Date(Date.UTC(year, month - 1, 1));
 
-  // Fetch the bonus types to get their details
-  const bonusTypes = await BonusType.find({
-    _id: { $in: bonusTypeIds },
-  });
-
-  const bonusMap = new Map();
-  bonusTypes.forEach((bt) => bonusMap.set(bt._id.toString(), bt));
+  const employeeBonuses = await EmployeeBonus.find({
+    userId,
+    isActive: true,
+    effectiveFrom: { $lte: payrollDate },
+    $or: [
+      { effectiveTo: null },
+      { effectiveTo: { $gte: payrollDate } },
+    ],
+  }).populate("bonusTypeId");
 
   let snapshot = [];
   let total = 0;
 
-  for (const b of bonusPayload) {
-    const type = bonusMap.get(b.bonusTypeId.toString());
-    if (!type) continue;
+  for (const eb of employeeBonuses) {
+    const type = eb.bonusTypeId;
+    if (!type || !type.active) continue;
 
-    const amount = b.amount;
+    const amount = eb.amount ?? type.defaultAmount;
 
     snapshot.push({
       code: type.code,
@@ -478,7 +475,7 @@ export const calculateLateDeduction = async (
     }
   }
 
-  return round(totalLateHours * hourlyRate);
+  return round(totalLateHours * hourlyRate || 0);
 };
 
 // Calculate the unpaid leave deduction for an employee based on the number of leave days taken in a month
@@ -629,14 +626,13 @@ export const markPayrollDirty = async (employeeId, date = new Date(), message = 
   );
 };
 
-
-// STILL WORK TO DO
-
 // Compute the payroll: Engine of the payroll calculation
 export const computePayroll = async (user, month, year, config) => {
   // Calculate the prorated salary and get the number of worked days in the month
   const { proratedSalary: baseSalary, workedDays } =
     await calculateProratedSalary(user._id, month, year, user);
+  
+  console.log("baseSalary:", baseSalary);
 
   if (workedDays <= 0) {
     throw new AppError(
@@ -662,18 +658,22 @@ export const computePayroll = async (user, month, year, config) => {
     config.payroll.standardMonthlyHours
   );
 
+  console.log("hourlyRate:", hourlyRate);
+
   // Calculate allowances snapshot and totals
   const {
     snapshot: allowancesSnapshot,
     taxable: taxableAllowances,
     nonTaxable: nonTaxableAllowances,
-  } = await buildAllowancesSnapshot(user);
+  } = await buildAllowancesSnapshot(user._id, month, year);
 
-  // Calculate bonuses snapshot and total
-  const systemBonuses = user.bonuses || [];
+  console.log("taxableAllowances:", taxableAllowances);
+  console.log("nonTaxableAllowances:", nonTaxableAllowances);
 
   const { snapshot: bonusesSnapshot, total: totalBonuses } =
-    await buildBonusesSnapshot(systemBonuses);
+    await buildBonusesSnapshot(user._id, month, year);
+  
+  console.log("totalBonuses:", totalBonuses);
 
   // Calculate overtime compensation based on attendances and timetables
   const { amount: overtimeAmount, hours: overtimeHours } =
@@ -685,6 +685,8 @@ export const computePayroll = async (user, month, year, config) => {
       config,
       hourlyRate
     );
+  console.log("overtimeAmount:", overtimeAmount);
+  console.log("overtimeHours:", overtimeHours);
 
   // Calculate deductions for absences, late arrivals, and unpaid leaves
   const absences = await calculateAbsences(
@@ -696,6 +698,8 @@ export const computePayroll = async (user, month, year, config) => {
     hourlyRate
   );
 
+  console.log("absences:", absences);
+
   const lateArrivals = await calculateLateDeduction(
     user._id,
     month,
@@ -704,6 +708,7 @@ export const computePayroll = async (user, month, year, config) => {
     config,
     hourlyRate
   );
+  console.log("lateArrivals:", lateArrivals);
 
   const unpaidLeave = await calculateUnpaidLeaveDeduction(
     user._id,
@@ -714,10 +719,14 @@ export const computePayroll = async (user, month, year, config) => {
     hourlyRate
   );
 
+  console.log("unpaidLeave:", unpaidLeave);
+
   // Calculate the gross salary
   const grossSalary = round(
     baseSalary + totalBonuses + overtimeAmount + taxableAllowances
   );
+
+  console.log("grossSalary:", grossSalary);
 
   // Calculate the CNSS contribution based on the gross salary (capped at the CNSS ceiling)
   const cnssBase = Math.min(grossSalary, config.cnss.ceiling);
@@ -762,8 +771,8 @@ export const computePayroll = async (user, month, year, config) => {
       },
       totals: {
         bonuses: totalBonuses,
-        allowancesTaxable,
-        allowancesNonTaxable,
+        taxableAllowances,
+        nonTaxableAllowances,
       },
       total:
         totalBonuses + taxableAllowances + overtimeAmount,

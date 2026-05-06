@@ -48,14 +48,9 @@ cron.schedule("10 0 1 * *", async () => {
 
         // Compute payroll snapshot
         const computed = await calculatePayroll(
-          user,
+          user._id,
           month,
           year,
-          {
-            bonuses: [],
-            allowances: [],
-            overtimeOverride: null,
-          },
         );
 
         // Create payroll draft

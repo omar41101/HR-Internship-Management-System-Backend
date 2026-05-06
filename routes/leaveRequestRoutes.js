@@ -1,20 +1,13 @@
 import express from "express";
-import fs from "fs";
-const DEBUG_LOG = "C:\\Users\\malek\\.gemini\\antigravity\\brain\\9ec44466-998c-4568-b511-8f0d74675ae6\\debug_leave.log";
-const log = (msg) => {
-  const timestamp = new Date().toISOString();
-  fs.appendFileSync(DEBUG_LOG, `[${timestamp}] ${msg}\n`);
-};
-log("LeaveRequest Routes Loaded");
 import {
-    getAllLeaveRequests,
-    getLeaveRequestById,
-    addLeaveRequest,
-    updateLeaveRequest,
-    cancelLeaveRequest,
-    markLeaveRequestUnderReview,
-    approveOrRejectLeaveRequest,
-    getLeaveStatuses,
+  getAllLeaveRequests,
+  getLeaveRequestById,
+  addLeaveRequest,
+  updateLeaveRequest,
+  cancelLeaveRequest,
+  markLeaveRequestUnderReview,
+  approveOrRejectLeaveRequest,
+  getLeaveStatuses,
 } from "../controllers/leaveRequestController.js";
 import { upload } from "../middleware/upload.js";
 import authenticate from "../middleware/authenticate.js";
@@ -71,7 +64,12 @@ const router = express.Router();
  *       500:
  *         description: Server error
  */
-router.post("/leave-requests", authenticate, upload("doc").single("attachment"), addLeaveRequest); 
+router.post(
+  "/leave-requests",
+  authenticate,
+  upload("doc").single("attachment"),
+  addLeaveRequest,
+);
 
 // Route to get leave request statuses based on user role (Every authenticated user)
 /**
@@ -80,7 +78,7 @@ router.post("/leave-requests", authenticate, upload("doc").single("attachment"),
  *   get:
  *     tags:
  *       - Leave Requests
- *     summary: Get leave request statuses based on user 
+ *     summary: Get leave request statuses based on user
  *     description: It allows any authenticated user to get the list of leave request statuses based on their role.
  *     security:
  *       - bearerAuth: []
@@ -104,7 +102,7 @@ router.get("/leave-statuses", authenticate, getLeaveStatuses);
  *     tags:
  *       - Leave Requests
  *     summary: Get all leave requests with pagination (based on user role)
- *     description: It allows any authenticated user to get a paginated list of leave requests. 
+ *     description: It allows any authenticated user to get a paginated list of leave requests.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -124,7 +122,7 @@ router.get("/leave-statuses", authenticate, getLeaveStatuses);
  *           type: string
  *         description: Filter by leave type ID
  *       - in: query
- *         name: status 
+ *         name: status
  *         schema:
  *           type: string
  *         description: Filter by leave request status
@@ -174,7 +172,7 @@ router.get("/leave-requests", authenticate, getAllLeaveRequests);
  *       401:
  *         description: Invalid/missing token
  *       403:
- *         description: Unauthorized 
+ *         description: Unauthorized
  *       404:
  *         description: Leave request not found
  *       500:
@@ -214,7 +212,11 @@ router.get("/leave-requests/:id", authenticate, getLeaveRequestById);
  *       500:
  *         description: Server error
  */
-router.patch("/leave-requests/mark-under-review/:id", authenticate, markLeaveRequestUnderReview);
+router.patch(
+  "/leave-requests/mark-under-review/:id",
+  authenticate,
+  markLeaveRequestUnderReview,
+);
 
 // Route to approve or reject a leave request (Supervisor/Admin)
 /**
@@ -259,7 +261,11 @@ router.patch("/leave-requests/mark-under-review/:id", authenticate, markLeaveReq
  *       500:
  *         description: Server error
  */
-router.patch("/leave-requests/approve-reject/:id", authenticate, approveOrRejectLeaveRequest);
+router.patch(
+  "/leave-requests/approve-reject/:id",
+  authenticate,
+  approveOrRejectLeaveRequest,
+);
 
 // Route to update a leave request (The user himself)
 /**
@@ -311,7 +317,13 @@ router.patch("/leave-requests/approve-reject/:id", authenticate, approveOrReject
  *       500:
  *         description: Server error
  */
-router.patch("/leave-requests/:id", authenticate, upload("doc").single("attachment"), updateLeaveRequest);
+router.patch(
+  "/leave-requests/:id",
+  authenticate,
+  upload("doc").single("attachment"),
+  updateLeaveRequest,
+);
+
 // Route to cancel a leave request (The user himself)
 /**
  * @swagger
