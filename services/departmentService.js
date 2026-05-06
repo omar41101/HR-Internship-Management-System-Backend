@@ -7,9 +7,9 @@ import { getOne, getAll, createOne, updateOne, deleteOne } from "./handlersFacto
 // Get all departments
 export const getDepartments = async (queryParams) => {
   const finalQuery = {
+    sort: "name",
+    limit: 100,
     ...queryParams,
-    limit: 5,
-    sort: "-createdAt",
   };
   return await getAll(Department)(finalQuery);
 };

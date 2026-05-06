@@ -7,9 +7,9 @@ import { getOne, getAll, createOne, updateOne, deleteOne } from "./handlersFacto
 // Get all user roles
 export const getUserRoles = async (queryParams) => {
   const finalQuery = {
+    sort: "name",
+    limit: 100,
     ...queryParams,
-    limit: 4,
-    sort: "-createdAt",
   };
   return await getAll(UserRole)(finalQuery);
 };

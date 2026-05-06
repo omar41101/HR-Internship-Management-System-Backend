@@ -24,6 +24,7 @@ import {
   resolveRoleId,
   resolveDepartmentId,
   resolveSupervisorIdByEmail,
+  resolveSupervisorId,
 } from "../utils/userResolvers.js";
 import { sendEmail } from "../utils/sendEmail.js";
 import { logAuditAction } from "../utils/logger.js";
@@ -80,6 +81,7 @@ export const addUserService = async (data, currentUser, ip) => {
     role,
     department,
     supervisor_email, // Pass the supervisor email instead of the full name for avoiding duplicate issues
+    supervisor_id,
     profileImageURL,
     contractJoinDate,
     contractEndDate,
@@ -145,8 +147,15 @@ export const addUserService = async (data, currentUser, ip) => {
 
   // Resolve role, department and supervisor
   const roleId = await resolveRoleId(role);
-  const supervisorId = await resolveSupervisorIdByEmail(trimmedSupervisorEmail);
   const departmentId = await resolveDepartmentId(department);
+
+  // Supervisor resolution: prefer ID if provided, otherwise resolve email
+  let resolvedSupervisorId = null;
+  if (supervisor_id) {
+    resolvedSupervisorId = await resolveSupervisorId(supervisor_id);
+  } else if (trimmedSupervisorEmail) {
+    resolvedSupervisorId = await resolveSupervisorIdByEmail(trimmedSupervisorEmail);
+  }
 
   // Password + OTP Code generation
   const password = generateRandomCode();
@@ -189,7 +198,7 @@ export const addUserService = async (data, currentUser, ip) => {
     isAvailable,
     role_id: roleId,
     department_id: departmentId,
-    supervisor_id: supervisorId,
+    supervisor_id: resolvedSupervisorId,
     profileImageURL: finalProfileImageURL,
     employment: {
       contractJoinDate,
@@ -197,12 +206,28 @@ export const addUserService = async (data, currentUser, ip) => {
     },
   });
 
-  // Initialize the leave balances for the user based on the active leave types
+  // Initialize the leave balances for the user based on role
   const leaveTypes = await LeaveType.find({ status: "Active" });
-  const leaveBalances = leaveTypes.map((type) => ({
-    typeId: type._id,
-    remainingDays: type.defaultDays,
-  }));
+
+  // Intern-specific leave policy
+  const INTERN_ALLOWED = ["Annual Leave", "Sick Leave", "Personal"];
+  const INTERN_DEFAULTS = {
+    "Annual Leave": 13,
+    "Sick Leave": 8,
+    "Personal": 3,
+  };
+
+  const leaveBalances = role === "Intern"
+    ? leaveTypes
+        .filter((type) => INTERN_ALLOWED.includes(type.name))
+        .map((type) => ({
+          typeId: type._id,
+          remainingDays: INTERN_DEFAULTS[type.name] ?? type.defaultDays,
+        }))
+    : leaveTypes.map((type) => ({
+        typeId: type._id,
+        remainingDays: type.defaultDays,
+      }));
 
   user.leaveBalances = leaveBalances;
   await user.save();
@@ -416,26 +441,18 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   }
 
   // Check the supervisor validity
-  if ("supervisor_email" in updateData) {
-    if (!updateData.supervisor_email) {
-      updateData.supervisor_id = null;
-    } else {
-      const supervisor = await resolveSupervisorIdByEmail(
-        updateData.supervisor_email,
-      );
-      if (!supervisor) {
-        throw new AppError(
-          errors.SUPERVISOR_NOT_FOUND.message,
-          errors.SUPERVISOR_NOT_FOUND.code,
-          errors.SUPERVISOR_NOT_FOUND.errorCode,
-          errors.SUPERVISOR_NOT_FOUND.suggestion,
-        );
-      }
-
-      updateData.supervisor_id = supervisor._id;
-    }
-
+  if (updateData.supervisor_id) {
+    await resolveSupervisorId(updateData.supervisor_id);
+  } else if (updateData.supervisor_email) {
+    const supervisorId = await resolveSupervisorIdByEmail(
+      updateData.supervisor_email,
+    );
+    updateData.supervisor_id = supervisorId;
     delete updateData.supervisor_email;
+  } else if ("supervisor_email" in updateData || "supervisor_id" in updateData) {
+    // Explicitly clearing the supervisor
+    updateData.supervisor_id = null;
+    if ("supervisor_email" in updateData) delete updateData.supervisor_email;
   }
 
   // Update the Status of the user

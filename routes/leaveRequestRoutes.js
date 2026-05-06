@@ -1,4 +1,11 @@
 import express from "express";
+import fs from "fs";
+const DEBUG_LOG = "C:\\Users\\malek\\.gemini\\antigravity\\brain\\9ec44466-998c-4568-b511-8f0d74675ae6\\debug_leave.log";
+const log = (msg) => {
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync(DEBUG_LOG, `[${timestamp}] ${msg}\n`);
+};
+log("LeaveRequest Routes Loaded");
 import {
     getAllLeaveRequests,
     getLeaveRequestById,
@@ -175,92 +182,6 @@ router.get("/leave-requests", authenticate, getAllLeaveRequests);
  */
 router.get("/leave-requests/:id", authenticate, getLeaveRequestById);
 
-// Route to update a leave request (The user himself)
-/**
- * @swagger
- * /api/leave-requests/{id}:
- *   patch:
- *     tags:
- *       - Leave Requests
- *     summary: Update a leave request (only by the owner while only pending)
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Leave request ID
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               typeId:
- *                 type: string
- *               startDate:
- *                 type: string
- *                 format: date
- *               endDate:
- *                 type: string
- *                 format: date
- *               reason:
- *                 type: string
- *               attachmentURL:
- *                 type: string
- *     responses:
- *       200:
- *         description: Leave request updated successfully
- *       400:
- *         description: Validation error | leave request cannot be updated
- *       401:
- *         description: Invalid/missing token
- *       403:
- *         description: Unauthorized
- *       404:
- *         description: Leave request not found
- *       500:
- *         description: Server error
- */
-router.patch("/leave-requests/:id", authenticate, upload("doc").single("attachment"), updateLeaveRequest);
-
-// Route to cancel a leave request (The user himself)
-/**
- * @swagger
- * /api/leave-requests/{id}:
- *   delete:
- *     tags:
- *       - Leave Requests
- *     summary: Cancel a leave request (only by the owner while pending)
- *     description: It allows the owner of a leave request to cancel it while it's still pending (not marked as reviewed, approved or rejected yet).
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema:
- *           type: string
- *         description: Leave request ID
- *     responses:
- *       200:
- *         description: Leave request cancelled successfully
- *       400:
- *         description: Leave request cannot be cancelled
- *       401:
- *         description: Invalid/missing token
- *       403:
- *         description: Unauthorized
- *       404:
- *         description: Leave request not found
- *       500:
- *         description: Server error
- */
-router.delete("/leave-requests/:id", authenticate, cancelLeaveRequest);
-
 // Route to mark a leave request as under review (Supervisor/Admin)
 /**
  * @swagger
@@ -339,5 +260,90 @@ router.patch("/leave-requests/mark-under-review/:id", authenticate, markLeaveReq
  *         description: Server error
  */
 router.patch("/leave-requests/approve-reject/:id", authenticate, approveOrRejectLeaveRequest);
+
+// Route to update a leave request (The user himself)
+/**
+ * @swagger
+ * /api/leave-requests/{id}:
+ *   patch:
+ *     tags:
+ *       - Leave Requests
+ *     summary: Update a leave request (only by the owner while only pending)
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Leave request ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               typeId:
+ *                 type: string
+ *               startDate:
+ *                 type: string
+ *                 format: date
+ *               endDate:
+ *                 type: string
+ *                 format: date
+ *               reason:
+ *                 type: string
+ *               attachmentURL:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Leave request updated successfully
+ *       400:
+ *         description: Validation error | leave request cannot be updated
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Leave request not found
+ *       500:
+ *         description: Server error
+ */
+router.patch("/leave-requests/:id", authenticate, upload("doc").single("attachment"), updateLeaveRequest);
+// Route to cancel a leave request (The user himself)
+/**
+ * @swagger
+ * /api/leave-requests/{id}:
+ *   delete:
+ *     tags:
+ *       - Leave Requests
+ *     summary: Cancel a leave request (only by the owner while pending)
+ *     description: It allows the owner of a leave request to cancel it while it's still pending (not marked as reviewed, approved or rejected yet).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Leave request ID
+ *     responses:
+ *       200:
+ *         description: Leave request cancelled successfully
+ *       400:
+ *         description: Leave request cannot be cancelled
+ *       401:
+ *         description: Invalid/missing token
+ *       403:
+ *         description: Unauthorized
+ *       404:
+ *         description: Leave request not found
+ *       500:
+ *         description: Server error
+ */
+router.delete("/leave-requests/:id", authenticate, cancelLeaveRequest);
 
 export default router;

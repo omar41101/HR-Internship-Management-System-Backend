@@ -56,38 +56,6 @@ router.get(
   getAllUsers
 );
 
-// Route to get user by ID 
-/**
- * @swagger
- * /api/users/{id}:
- *   get:
- *     tags:
- *       - Users
- *     summary: Get a user by ID (Admin, the user himself, his supervisor and all his collegues in the same project)
- *     description: Allows the requester to retrieve the details of user by Id.
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - name: id
- *         in: path
- *         required: true
- *         description: User ID
- *         schema:
- *           type: string
- *     responses:
- *       200:
- *         description: Returns the user data
- *       404:
- *         description: User not found
- *       500:
- *         description: Server error
- */
-router.get(
-  "/users/:id",
-  authenticate,
-  getUserById
-);
-
 
 // Route to Add user (Admin Only)
 /**
@@ -267,6 +235,38 @@ router.get(
   authenticate, 
   authorize(["Admin"]), 
   getRecentSupervisorsController
+);
+
+// Route to get user by ID 
+/**
+ * @swagger
+ * /api/users/{id}:
+ *   get:
+ *     tags:
+ *       - Users
+ *     summary: Get a user by ID (Admin, the user himself, his supervisor and all his collegues in the same project)
+ *     description: Allows the requester to retrieve the details of user by Id.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         description: User ID
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Returns the user data
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+router.get(
+  "/users/:id",
+  authenticate,
+  getUserById
 );
 
 // Route to toggle user status

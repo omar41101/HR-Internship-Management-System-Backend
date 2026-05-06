@@ -1,6 +1,7 @@
-// Helper function to get leave request statuses based on user role
 export const getStatusesByRole = (role) => {
-  if (role === "Admin") {
+  const normalizedRole = (role || "").toString().trim().toLowerCase();
+
+  if (normalizedRole === "admin") {
     return [
       "Pending Admin Approval",
       "Under Admin Review",
@@ -9,7 +10,7 @@ export const getStatusesByRole = (role) => {
     ];
   }
 
-  if (role === "Supervisor" || role === "Employee" || role === "Intern") {
+  if (normalizedRole === "supervisor" || normalizedRole === "employee" || normalizedRole === "intern") {
     return [
       "Pending Supervisor Approval",
       "Under Supervisor Review",
