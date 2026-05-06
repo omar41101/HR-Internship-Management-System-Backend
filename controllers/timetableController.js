@@ -116,6 +116,8 @@ export const addTimetableEntry = async (req, res, next) => {
 
     io.emit("timetableUpdated", { userId });
 
+    await markPayrollDirty(userId, new Date(), "Timetable entry created");
+
     res.status(201).json({
       status: "Success",
       code: 201,
@@ -174,6 +176,8 @@ export const updateTimetableEntry = async (req, res, next) => {
     );
 
     io.emit("timetableUpdated", { userId });
+
+    await markPayrollDirty(userId, new Date(), "Timetable entry updated");
 
     res.status(200).json({
       status: "Success",
@@ -393,6 +397,8 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId });
 
+    await markPayrollDirty(userId, new Date(), "Bulk timetable update");
+
     res.status(200).json({
       status: "Success",
       code: 200,
@@ -439,6 +445,8 @@ export const deleteTimetableEntry = async (req, res, next) => {
 
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId });
+
+    await markPayrollDirty(userId, new Date(), "Timetable entry deleted");
 
     res.status(200).json({
       status: "Success",
@@ -487,6 +495,8 @@ export const clearMonthTimetable = async (req, res, next) => {
 
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId });
+
+    await markPayrollDirty(userId, new Date(), "Monthly timetable cleared");
 
     res.status(200).json({
       status: "Success",

@@ -72,6 +72,66 @@ const formatAuditLog = (log) => {
     case "UPDATE_DOCUMENT_TYPE":
       description = `Updated Document Type ${log.target_name || ""}`;
       break;
+    case "REQUEST_CLARIFICATION":
+      description = `Requested Clarification on Resignation of ${log.target_name || ""}`;
+      break;
+    case "APPROVE_RESIGNATION":
+      description = `Approved Resignation of ${log.target_name || ""}`;
+      break;
+    case "VALIDATE_PAYROLL":
+      description = `Validated Payroll for ${log.target_name || ""}`;
+      break;
+    case "MARK_PAYROLL_AS_PAID":
+      description = `Marked Payroll as Paid for ${log.target_name || ""}`;
+      break;
+    case "RECOMPUTE_PAYROLL":
+      description = `Recomputed Payroll for ${log.target_name || ""}`;
+      break;
+    case "ASSIGN_ALLOWANCE":
+      description = `Assigned Allowance to ${log.target_name || ""}`;
+      break;
+    case "TOGGLE_ALLOWANCE_ACTIVATION":
+      description = `Toggled Allowance Activation for ${log.target_name || ""}`;
+      break;
+    case "UPDATE_ALLOWANCE":
+      description = `Updated Allowance for ${log.target_name || ""}`;
+      break;
+    case "ASSIGN_BONUS":
+      description = `Assigned Bonus to ${log.target_name || ""}`;
+      break;
+    case "TOGGLE_BONUS_ACTIVATION":
+      description = `Toggled Bonus Activation for ${log.target_name || ""}`;
+      break;
+    case "UPDATE_BONUS":
+      description = `Updated Bonus for ${log.target_name || ""}`;
+      break;
+    case "CREATE_ALLOWANCE_TYPE":
+      description = `Created Allowance Type ${log.target_name || ""}`;
+      break;
+    case "TOGGLE_ALLOWANCE_TYPE_ACTIVATION":
+      description = `Toggled Activation for Allowance Type ${log.target_name || ""}`;
+      break;
+    case "UPDATE_ALLOWANCE_TYPE":
+      description = `Updated Allowance Type ${log.target_name || ""}`;
+      break;
+    case "CREATE_BONUS_TYPE":
+      description = `Created Bonus Type ${log.target_name || ""}`;
+      break;
+    case "TOGGLE_BONUS_TYPE_ACTIVATION":
+      description = `Toggled Activation for Bonus Type ${log.target_name || ""}`;
+      break;
+    case "UPDATE_BONUS_TYPE":
+      description = `Updated Bonus Type ${log.target_name || ""}`;
+      break;
+    case "CREATE_PAYROLL_CONFIG":
+      description = `Created Payroll Configuration for ${log.target_name || ""}`;
+      break;
+    case "TOGGLE_PAYROLL_CONFIG_ACTIVATION":
+      description = `Toggled Activation for Payroll Configuration of ${log.target_name || ""}`;
+      break;
+    case "CREATE_NEW_PAYROLL_CONFIG_VERSION":
+      description = `Created New Version of Payroll Configuration for ${log.target_name || ""}`;
+      break;
     default:
       description = `Performed ${log.action} on ${log.target_type || "Target"}`;
   }
@@ -114,8 +174,7 @@ export const getRecentAuditLogs = async (req, res, next) => {
       message: "Recent audit logs retrieved successfully!",
       data: formattedLogs,
     });
-  }
-  catch (error) {
+  } catch (error) {
     next(error);
   }
 };
@@ -123,18 +182,11 @@ export const getRecentAuditLogs = async (req, res, next) => {
 // Get all audit logs with pagination and filters
 export const getAllAuditLogs = async (req, res, next) => {
   try {
-    const {
-      page = 1,
-      search,
-      admin,
-      action,
-      startDate,
-      endDate,
-    } = req.query;
+    const { page = 1, search, admin, action, startDate, endDate } = req.query;
 
     const parsedPage = Math.max(parseInt(page) || 1, 1);
     const limit = 20;
-    
+
     // Calculate how many documents to skip based on the current page and limit
     const skip = (parsedPage - 1) * limit;
 
@@ -155,9 +207,9 @@ export const getAllAuditLogs = async (req, res, next) => {
     // Date Range
     if (startDate || endDate) {
       query.createdAt = {};
-      
+
       if (startDate) query.createdAt.$gte = new Date(startDate);
-      
+
       if (endDate) {
         const end = new Date(endDate);
         end.setHours(23, 59, 59, 999);
@@ -182,8 +234,8 @@ export const getAllAuditLogs = async (req, res, next) => {
         .limit(limit)
         .populate("admin_id", "name lastName email")
         .lean(),
-      
-        AuditLog.countDocuments(query),
+
+      AuditLog.countDocuments(query),
     ]);
 
     // Format similarly to recent logs
@@ -198,9 +250,25 @@ export const getAllAuditLogs = async (req, res, next) => {
         totalPages: Math.ceil(total / limit),
         limitPerPage: limit,
         totalCount: total,
-      }
+      },
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// Get all actions
+export const getAllActions = async (req, res, next) => {
+  try {
+    const actions = AuditLog.schema.path("action").enumValues;
+
+    res.status(200).json({
+      status: "Success",
+      code: 200,
+      message: "Audit log actions retrieved successfully!",
+      data: actions,
+    });
+  } catch (err) {
+    next(err);
   }
 };

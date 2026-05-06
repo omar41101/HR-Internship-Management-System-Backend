@@ -5,9 +5,10 @@ import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./swagger.js";
 import dotenv from "dotenv";
 import connectMongo from "./config/db.js";
-import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 import { initIO } from "./socket.js";
+import "./cron/attendanceCron.js"; // To calculate the attendance stats automatically
 import "./cron/resignationCron.js"; // To automatically update resignation statuses and deactivate users
+import "./cron/payrollCron.js"; // To automatically generate payrolls every month
 
 // Creation of an express app
 const app = express();
@@ -46,6 +47,12 @@ import meetingRoutes from "./routes/meetingRoutes.js";
 import documentRequestRoutes from "./routes/documentRequestRoutes.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
 import resignationRoutes from "./routes/resignationRoutes.js";
+import payrollRoutes from "./routes/payrollRoutes.js";
+import payrollConfigRoutes from "./routes/payrollConfigRoutes.js";
+import allowanceTypeRoutes from "./routes/allowanceTypeRoutes.js";
+import bonusTypeRoutes from "./routes/bonusTypeRoutes.js";
+import employeeAllowanceRoutes from "./routes/employeeAllowanceRoutes.js";
+import employeeBonusRoutes from "./routes/employeeBonusRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -110,6 +117,12 @@ app.use('/api', meetingRoutes);
 app.use('/api', documentRequestRoutes);
 app.use('/api', dashboardRoutes);
 app.use('/api', resignationRoutes);
+app.use('/api', payrollRoutes);
+app.use('/api', payrollConfigRoutes);
+app.use('/api', allowanceTypeRoutes);
+app.use('/api', bonusTypeRoutes);
+app.use('/api', employeeAllowanceRoutes);
+app.use('/api', employeeBonusRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

@@ -2,6 +2,7 @@ import express from "express";
 import {
   getRecentAuditLogs,
   getAllAuditLogs,
+  getAllActions,
 } from "../controllers/auditLogController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -170,5 +171,13 @@ router.get(
  *         description: Server Error
  */
 router.get("/audit-logs", authenticate, authorize(["Admin"]), getAllAuditLogs);
+
+// Route to get all possible actions (Admin Only)
+router.get(
+  "/audit-logs/actions",
+  authenticate,
+  authorize(["Admin"]),
+  getAllActions,
+);
 
 export default router;

@@ -107,15 +107,21 @@ const userSchema = mongoose.Schema(
       required: true,
       default: Date.now,
     },
-    employment: { 
+    employment: {
       // Employment contract details
+      contractType: {
+        type: String,
+        enum: ["CDI", "INTERNSHIP"],
+        required: true,
+      },
       contractJoinDate: {
         type: Date,
         required: true,
       },
       contractEndDate: {
+        // For Internship contracts, the end date of the contract. For CDI, this will be null 
         type: Date,
-        required: true,
+        default: null,
       },
     },
     phoneNumber: {
@@ -125,10 +131,6 @@ const userSchema = mongoose.Schema(
     position: {
       type: String,
       required: true,
-    },
-    bonus: {
-      type: Number,
-      min: 0,
     },
     profileImageURL: {
       type: String,
@@ -158,14 +160,31 @@ const userSchema = mongoose.Schema(
       enum: ["Married", "Not Married"],
       default: "Not Married",
     },
-    hasChildren: {
+    isHeadOfFamily: {
+      // Whether the employee is considered the head of the family for tax deduction purposes (e.g., for IRPP family deduction in Tunisia)
       type: Boolean,
       default: false,
     },
-    nbOfChildren: {
-      type: Number,
-      default: 0,
-    },
+    children: [
+      {
+        dateOfBirth: {
+          type: Date,
+          required: true,
+        },
+        isStudent: {
+          type: Boolean,
+          default: false,
+        },
+        hasScholarship: {
+          type: Boolean,
+          default: false,
+        },
+        isDisabled: {
+          type: Boolean,
+          default: false,
+        },
+      },
+    ],
     projectsCount: {
       // Number of active projects the user is currently involved in
       type: Number,
@@ -198,10 +217,21 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    salary: {
+      // Base salary for the payroll calculations
+      base: {
+        // Base salary amount: Fixed monthly salary of the employee
+        type: Number,
+        default: 0,
+        min: 0,
+      },
+      currency: {
+        type: String,
+        default: "DT",
+      },
+    },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
 // Index for the ID number uniqueness

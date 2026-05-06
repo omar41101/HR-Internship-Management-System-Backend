@@ -4,6 +4,7 @@ import { errors } from "../../errors/projectErrors.js";
 import { errors as commonErrors } from "../../errors/commonErrors.js";
 import AppError from "../../utils/AppError.js";
 import { isTeamMemberOrProductOwnerOrAdmin } from "../../utils/projectHelpers.js";
+import { getMonthRange } from "../../utils/timeHelpers.js";
 
 // Get a precise project overview (Stats about sprints, tasks, velocity, etc.)
 export const getProjectOverview = async (projectId, currentUser) => {
@@ -313,16 +314,13 @@ export const getProjectOverview = async (projectId, currentUser) => {
 
 // Get project summary per month (Number of projects created each month, completed projects, active projects, etc.)
 export const getProjectSummaryPerMonth = async () => {
-  // ----- WHEN WE APPROACH THE ATTENDANCE SECTION, WE'LL IMPORT THESE FROM A HELPER FUNCTION ---- //
-  const startOfMonth = new Date();
+  const now = new Date();
+  const { startOfMonth, endOfMonth } = getMonthRange(now.getFullYear(), now.getMonth() + 1);
+  
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
-
-  const endOfMonth = new Date();
-  endOfMonth.setMonth(endOfMonth.getMonth() + 1);
   endOfMonth.setDate(0);
   endOfMonth.setHours(23, 59, 59, 999);
-  // --------------------------------------------------------------------------------------------- //
 
   const result = await Project.aggregate([
     {

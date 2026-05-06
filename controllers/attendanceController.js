@@ -4,7 +4,6 @@ import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
 import UserRole from "../models/UserRole.js";
 import crypto from "crypto";
-
 import { buildDateFilter } from "../utils/dateFilter.js";
 import {
   exportCSV,
@@ -13,6 +12,7 @@ import {
   getPeriodLabel,
 } from "../utils/exportHelpers.js";
 import { exportAttendanceStats } from "../services/attendanceExportService.js";
+import { markPayrollDirty } from "../utils/payrollHelpers.js";
 
 // The company location (For the location check-in)
 const COMPANY_LOCATION = {
@@ -278,6 +278,8 @@ export const checkIn = async (req, res, next) => {
         sort: { date: -1, updatedAt: -1 },
       },
     );
+
+    await markPayrollDirty(userId, now, "Check-in recorded");
 
     // Emit (Sends a message) real-time event to all connected clients
     req.app?.get("io")?.emit("attendanceUpdated", {
@@ -639,6 +641,9 @@ export const updateAttendance = async (req, res, next) => {
       });
     }
 
+    // Mark related payroll as dirty for recalculation
+    await markPayrollDirty(attendance.userId, attendance.date, "Attendance updated");
+
     // Emit real-time event for admin updates too
     req.app?.get("io")?.emit("attendanceUpdated", {
       action: "adminUpdate",
@@ -689,6 +694,8 @@ export const checkOut = async (req, res, next) => {
         message: "No attendance record found for today. Did you check in?",
       });
     }
+
+    await markPayrollDirty(userId, now, "Check-out recorded");
 
     // Emit real-time event to all connected clients
     req.app?.get("io")?.emit("attendanceUpdated", {
