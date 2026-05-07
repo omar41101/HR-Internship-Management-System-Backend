@@ -85,6 +85,7 @@ export const addUserService = async (data, currentUser, ip) => {
     profileImageURL,
     contractJoinDate,
     contractEndDate,
+    contractType,
   } = data;
 
   const trimmedEmail = (email || "").trim().toLowerCase();
@@ -202,7 +203,8 @@ export const addUserService = async (data, currentUser, ip) => {
     profileImageURL: finalProfileImageURL,
     employment: {
       contractJoinDate,
-      contractEndDate
+      contractEndDate,
+      contractType: contractType || "CDI",
     },
   });
 
@@ -459,6 +461,10 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   if (updateData.isActive !== undefined) {
     updateData.status = updateData.isActive ? "Active" : "Inactive";
     delete updateData.isActive;
+  }
+
+  if (updateData.contractType) {
+    updateData["employment.contractType"] = updateData.contractType;
   }
 
   // Update the user

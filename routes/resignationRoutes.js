@@ -1,6 +1,7 @@
 import express from "express";
 import {
   getResignationById,
+  getMyResignation,
   getAllResignations,
   getResignationStatuses,
   submitResignation,
@@ -9,6 +10,7 @@ import {
   requestClarification,
   respondToClarification,
   approveResignation,
+  startExitProcess,
 } from "../controllers/resignationController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -24,6 +26,13 @@ router.get(
   authenticate,
   authorize(["Admin"]),
   getResignationKPIs,
+);
+
+// Get the current user's own resignation request
+router.get(
+  "/resignations/my",
+  authenticate,
+  getMyResignation,
 );
 
 // Get a single resignation request by ID
@@ -74,6 +83,14 @@ router.patch(
   authenticate,
   authorize(["Admin"]),
   approveResignation,
+);
+
+// Start the exit process (Admin only)
+router.patch(
+  "/resignations/:id/start-exit",
+  authenticate,
+  authorize(["Admin"]),
+  startExitProcess,
 );
 
 export default router;

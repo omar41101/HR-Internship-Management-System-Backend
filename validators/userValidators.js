@@ -115,6 +115,7 @@ export const validateUserData = (data) => {
     placeOfBirth,
     contractJoinDate,
     contractEndDate,
+    contractType,
   } = data;
 
   // Validate the input fields
@@ -299,6 +300,15 @@ export const validateUserData = (data) => {
         );
       }
     }
+  }
+
+  if (contractType && !["CDI", "INTERNSHIP"].includes(contractType)) {
+    throw new AppError(
+      "Invalid Contract Type",
+      400,
+      "INVALID_CONTRACT_TYPE",
+      "Contract Type must be 'CDI' or 'INTERNSHIP'."
+    );
   }
 };
 

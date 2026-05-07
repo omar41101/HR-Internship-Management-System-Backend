@@ -107,3 +107,148 @@ export const getAdminDashboard = async (user) => {
     },
   };
 };
+
+// Get Dashboard data for Individual Users (Employee/Intern)
+export const getDashboardStats = async (user) => {
+  const userId = user.id || user._id;
+
+  // Fetch all tasks for the user
+  const tasks = await Task.find({ assignedTo: userId });
+
+  const now = new Date();
+  
+  // Calculate Monday of the current week
+  const currentDay = now.getDay();
+  const diffToMonday = currentDay === 0 ? -6 : 1 - currentDay; // If Sunday, go back 6 days, else back to Monday
+  const monday = new Date(now);
+  monday.setDate(now.getDate() + diffToMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  let tasksThisWeekCount = 0;
+  
+  const overdueCounts = { todo: 0, inProgress: 0, stuck: 0 };
+  let completedCount = 0;
+  const totalTasks = tasks.length;
+  
+  // For weekly productivity: days of the week (0=Mon, 1=Tue, ..., 6=Sun)
+  const completedThisWeekByDay = [0, 0, 0, 0, 0, 0, 0];
+  
+  const statusCounts = { todo: 0, inProgress: 0, done: 0, stuck: 0 };
+  
+  // Avg completion time: last 6 weeks
+  const msInDay = 24 * 60 * 60 * 1000;
+  const msInWeek = 7 * msInDay;
+  const weekStartDates = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(monday.getTime() - (i * msInWeek));
+    weekStartDates.push(d);
+  }
+  const weeklyCompletionStats = Array.from({ length: 6 }, () => ({ totalDays: 0, count: 0 }));
+
+  tasks.forEach((t) => {
+    const s = (t.status || "").toLowerCase();
+    
+    // Status normalization for counts
+    if (s === "done" || s === "approved") {
+      statusCounts.done++;
+      completedCount++;
+      
+      // Tasks this week logic
+      if (t.completedAt) {
+        const compAt = new Date(t.completedAt);
+        if (compAt >= monday && compAt <= now) {
+          tasksThisWeekCount++;
+          // For weekly productivity
+          // Sunday is 0 in JS, so normalize: Mon=0, Tue=1, ..., Sun=6
+          const jsDay = compAt.getDay();
+          const normDay = jsDay === 0 ? 6 : jsDay - 1;
+          completedThisWeekByDay[normDay]++;
+        }
+        
+        // For Avg Completion Time
+        if (t.createdAt) {
+          const compTime = compAt.getTime();
+          // Find which week it belongs to
+          for (let i = 0; i < 6; i++) {
+            const wStart = weekStartDates[i].getTime();
+            const wEnd = wStart + msInWeek - 1;
+            if (compTime >= wStart && compTime <= wEnd) {
+              const daysDiff = (compTime - new Date(t.createdAt).getTime()) / msInDay;
+              weeklyCompletionStats[i].totalDays += daysDiff;
+              weeklyCompletionStats[i].count++;
+              break;
+            }
+          }
+        }
+      }
+    } else if (s === "to do" || s === "todo" || s === "backlog") {
+      statusCounts.todo++;
+    } else if (s === "in progress" || s === "in_progress") {
+      statusCounts.inProgress++;
+    } else if (s === "review" || s === "blocked" || s === "stuck") {
+      statusCounts.stuck++;
+    } else {
+      statusCounts.todo++;
+    }
+    
+    // Overdue logic
+    if (t.dueDate) {
+      const due = new Date(t.dueDate);
+      if (due < now && s !== "done" && s !== "approved") {
+        if (s === "to do" || s === "todo" || s === "backlog") overdueCounts.todo++;
+        else if (s === "in progress" || s === "in_progress") overdueCounts.inProgress++;
+        else overdueCounts.stuck++;
+      }
+    }
+  });
+
+  const overdueByStatus = [
+    { status: "todo", count: overdueCounts.todo },
+    { status: "inProgress", count: overdueCounts.inProgress },
+    { status: "stuck", count: overdueCounts.stuck }
+  ];
+  
+  // Calculate weekly productivity bands
+  // Bands: low (0-3), medium (4-6), high (7+)
+  let low = 0, medium = 0, high = 0;
+  // Only calculate up to current day (if today is Wed (2), we look at 0, 1, 2)
+  const daysPassed = currentDay === 0 ? 7 : currentDay;
+  for (let i = 0; i < daysPassed; i++) {
+    const c = completedThisWeekByDay[i];
+    if (c <= 3) low++;
+    else if (c <= 6) medium++;
+    else high++;
+  }
+  
+  let lowPct = 0, medPct = 0, highPct = 0;
+  if (daysPassed > 0) {
+    lowPct = Math.round((low / daysPassed) * 100);
+    medPct = Math.round((medium / daysPassed) * 100);
+    highPct = 100 - lowPct - medPct;
+  }
+  const weeklyProductivity = [lowPct, medPct, highPct];
+  
+  const tasksByStatus = [
+    { name: "Todo", amount: statusCounts.todo },
+    { name: "In Progress", amount: statusCounts.inProgress },
+    { name: "Done", amount: statusCounts.done },
+    { name: "Stuck", amount: statusCounts.stuck }
+  ];
+  
+  const avgCompletionTime = weeklyCompletionStats.map((stat, idx) => {
+    return {
+      week: `Week ${idx + 1}`,
+      avgDays: stat.count > 0 ? parseFloat((stat.totalDays / stat.count).toFixed(1)) : 0
+    };
+  });
+
+  return {
+    tasksThisWeek: tasksThisWeekCount,
+    tasksThisWeekGoal: 10,
+    overdueByStatus,
+    completionRate: { completed: completedCount, total: totalTasks },
+    weeklyProductivity,
+    tasksByStatus,
+    avgCompletionTime
+  };
+};

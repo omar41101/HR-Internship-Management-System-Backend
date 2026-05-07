@@ -113,6 +113,7 @@ const userSchema = mongoose.Schema(
         type: String,
         enum: ["CDI", "INTERNSHIP"],
         required: true,
+        default: "CDI",
       },
       contractJoinDate: {
         type: Date,
