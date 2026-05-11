@@ -19,6 +19,7 @@ import {
   getDatesBetween,
   normalizeTime,
 } from "./timeHelpers.js";
+import ExcelJS from "exceljs";
 
 // Get the hourly rate based on the base salary
 export const getHourlyRate = (baseSalary, standardMonthlyHours) => {
@@ -798,4 +799,187 @@ export const computePayroll = async (user, month, year, config) => {
     grossSalary,
     netSalary,
   };
+};
+
+// Export payroll to excel
+export const generatePayrollExcel = async (payroll) => {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Payslip");
+
+  // Formatting helpers
+  const addSectionTitle = (title) => {
+    const row = worksheet.addRow([title]);
+    row.getCell(1).font = { bold: true, size: 14 };
+    row.getCell(1).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "89D2DC" },
+    };
+    row.getCell(2).fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "89D2DC" },
+    };
+    worksheet.mergeCells(`A${row.number}:C${row.number}`);
+    row.getCell(1).alignment = { horizontal: "center" };
+    worksheet.addRow([]);
+  };
+
+  const addKeyValue = (label, value) => {
+    const row = worksheet.addRow([label, value]);
+    row.getCell(1).font = { bold: true };
+  };
+
+  const addBorders = () => {
+    const borderStyle = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+
+    worksheet.eachRow({ includeEmpty: true }, (row) => {
+      [1, 2, 3].forEach((colNumber) => {
+        row.getCell(colNumber).border = borderStyle;
+      });
+    });
+  };
+
+  const round = (value) => Number((value || 0).toFixed(3));
+
+  // Add the Header
+  addSectionTitle("General Information");
+
+  const employee = payroll.employeeId;
+
+  addKeyValue("Employee", `${employee.name} ${employee.lastName}`);
+  addKeyValue("Email", employee.email);
+  addKeyValue("Position", employee.position);
+  addKeyValue("Period", `${payroll.month}/${payroll.year}`);
+  addKeyValue("Status", payroll.status);
+  addKeyValue("Currency", payroll.currency || "DT");
+
+  worksheet.addRow([]);
+
+  // Add Salary Information
+  addSectionTitle("Salary Information");
+
+  addKeyValue("Base Salary", round(payroll.baseSalary));
+  addKeyValue("Hourly Rate", round(payroll.hourlyRate));
+  addKeyValue("Worked Days", payroll.workedDays || 0);
+  addKeyValue("Gross Salary", round(payroll.grossSalary));
+  addKeyValue("Net Salary", round(payroll.netSalary));
+
+  worksheet.addRow([]);
+
+  // Add Earnings
+  addSectionTitle("Earnings");
+
+  addKeyValue("Bonuses Total", round(payroll.earnings?.totals?.bonuses));
+  addKeyValue(
+    "Taxable Allowances",
+    round(payroll.earnings?.totals?.allowancesTaxable),
+  );
+  addKeyValue(
+    "Non-Taxable Allowances",
+    round(payroll.earnings?.totals?.allowancesNonTaxable),
+  );
+  addKeyValue("Overtime Hours", round(payroll.earnings?.overtime?.hours));
+  addKeyValue("Overtime Amount", round(payroll.earnings?.overtime?.amount));
+  addKeyValue("Total Earnings", round(payroll.earnings?.total));
+
+  // Add Detailed Bonuses
+  if (payroll.earnings?.bonuses?.length) {
+    worksheet.addRow([]);
+    const bonusHeaderRow = worksheet.addRow([
+      "Bonus Name",
+      "Amount",
+      "Taxable",
+    ]);
+    bonusHeaderRow.font = { bold: true };
+
+    payroll.earnings.bonuses.forEach((bonus) => {
+      worksheet.addRow([
+        bonus.name,
+        round(bonus.amount),
+        bonus.isTaxable ? "Yes" : "No",
+      ]);
+    });
+  }
+
+  // Add Detailed Allowances
+  if (payroll.earnings?.allowances?.length) {
+    worksheet.addRow([]);
+    const allowanceHeaderRow = worksheet.addRow([
+      "Allowance Name",
+      "Amount",
+      "Taxable",
+    ]);
+    allowanceHeaderRow.font = { bold: true };
+
+    payroll.earnings.allowances.forEach((allowance) => {
+      worksheet.addRow([
+        allowance.name,
+        round(allowance.amount),
+        allowance.isTaxable ? "Yes" : "No",
+      ]);
+    });
+  }
+
+  worksheet.addRow([]);
+
+  // Add Family Deductions
+  addSectionTitle("Family Deductions");
+
+  addKeyValue("Spouse Deduction", round(payroll.family?.spouse?.amount));
+  addKeyValue("Children Deduction", round(payroll.family?.total));
+
+  worksheet.addRow([]);
+
+  // Add Tax Information
+  addSectionTitle("Tax Information");
+
+  addKeyValue("CNSS Base", round(payroll.cnssBase));
+  addKeyValue("Taxable Income", round(payroll.taxableIncome));
+  addKeyValue("Net Taxable Income", round(payroll.netTaxableIncome));
+  addKeyValue("Frais Professionnels", round(payroll.fraisProfessionnels));
+
+  worksheet.addRow([]);
+
+  // Add Deductions
+  addSectionTitle("Deductions");
+
+  addKeyValue("CNSS", round(payroll.deductions?.cnss));
+  addKeyValue("CSS", round(payroll.deductions?.css));
+  addKeyValue("IRPP", round(payroll.deductions?.irpp));
+  addKeyValue("Absences", round(payroll.deductions?.absences));
+  addKeyValue("Late Arrivals", round(payroll.deductions?.lateArrivals));
+  addKeyValue("Unpaid Leave", round(payroll.deductions?.unpaidLeave));
+  addKeyValue("Total Deductions", round(payroll.deductions?.total));
+
+  worksheet.addRow([]);
+
+  // Add Audit Information
+  addSectionTitle("Payroll Audit Information and status");
+
+  addKeyValue("Validated At", payroll.validatedAt || "-");
+  addKeyValue("Paid At", payroll.paidAt || "-");
+  addKeyValue("Recomputed At", payroll.recomputedAt || "-");
+
+  // Auto-size the columns
+  worksheet.columns.forEach((column) => {
+    let maxLength = 10;
+
+    column.eachCell({ includeEmpty: true }, (cell) => {
+      const value = cell.value ? cell.value.toString() : "";
+      maxLength = Math.max(maxLength, value.length + 2);
+    });
+
+    column.width = maxLength;
+  });
+  worksheet.addRow([]);
+
+  addBorders();
+
+  return await workbook.xlsx.writeBuffer();
 };

@@ -21,6 +21,7 @@ import {
   buildBonusesSnapshot,
   canAccessPayroll,
   computePayroll,
+  generatePayrollExcel,
 } from "../utils/payrollHelpers.js";
 import { getOne, getAll } from "./handlersFactory.js";
 import { logAuditAction } from "../utils/logger.js";
@@ -341,5 +342,50 @@ export const recomputePayroll = async (payrollId, user, ip) => {
     code: 200,
     message: "Payroll recomputed successfully!",
     data: payroll,
+  };
+};
+
+// Export payroll to Excel (Admin only)
+export const exportPayrollToExcel = async (payrollId, currentUser, res) => {
+  // Retrieve payroll with employee information
+  const payroll = await Payroll.findById(payrollId).populate({
+    path: "employeeId",
+    select: "name lastName email position",
+  });
+
+  if (!payroll) {
+    throw new AppError(
+      errors.PAYROLL_NOT_FOUND.message,
+      errors.PAYROLL_NOT_FOUND.code,
+      errors.PAYROLL_NOT_FOUND.errorCode,
+      errors.PAYROLL_NOT_FOUND.suggestion,
+    );
+  }
+
+  // Ensure user has access
+  canAccessPayroll(currentUser, payroll.employeeId);
+
+  // Generate Excel buffer
+  const buffer = await generatePayrollExcel(payroll);
+
+  // Create the personnalised filename
+  const employee = payroll.employeeId;
+  const safeName = `${employee.name}_${employee.lastName}`.replace(/\s+/g, "_");
+  const filename = `Payslip_${safeName}_${payroll.month}_${payroll.year}.xlsx`;
+
+  // Send file
+  res.setHeader(
+    "Content-Type",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  );
+
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+
+  res.send(buffer);
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Payroll exported to Excel successfully!",
   };
 };

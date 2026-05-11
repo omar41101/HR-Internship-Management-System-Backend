@@ -108,3 +108,12 @@ export const getPayrollKPIs = async (req, res, next) => {
     next(err);
   }
 };
+
+// Export payroll to Excel
+export const exportPayrollToExcel = async (req, res, next) => {
+  try {
+    const result = await payrollService.exportPayrollToExcel(req.params.id, req.user, res);
+  } catch (err) {
+    next(err);
+  }
+};

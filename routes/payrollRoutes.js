@@ -8,6 +8,7 @@ import {
   markPayrollAsPaid,
   recomputePayroll,
   getPayrollKPIs,
+  exportPayrollToExcel,
 } from "../controllers/payrollController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
@@ -61,6 +62,13 @@ router.post(
   authenticate,
   authorize(["Admin"]),
   recomputePayroll,
+);
+
+// Route to export a payroll to Excel
+router.get(
+  "/payrolls/:id/export/excel",
+  authenticate,
+  exportPayrollToExcel,
 );
 
 export default router;
