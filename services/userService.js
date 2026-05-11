@@ -29,9 +29,7 @@ import {
 import { sendEmail } from "../utils/sendEmail.js";
 import { logAuditAction } from "../utils/logger.js";
 import { buildQuery } from "../utils/queryBuilder.js";
-
-// Sensitive fields that must never leave the backend
-const SENSITIVE_FIELDS = "-password -verificationCode -verificationCodeExpires -resetPasswordToken -resetPasswordExpires -loginAttempts -resendCount -resendDate -mustResetPassword";
+import { SENSITIVE_FIELDS } from "../constants/userConstants.js";
 
 // Get a single user by Id
 export const getUser = getOne(User, commonErrors.USER_NOT_FOUND, [
@@ -264,8 +262,7 @@ export const addUserService = async (data, currentUser, ip) => {
     status: "Success",
     code: 201,
     message: "User created successfully!",
-    // Sanitize: strip all sensitive fields before returning to client
-    result: {
+    data: {
       _id: user._id,
       name: user.name,
       lastName: user.lastName,

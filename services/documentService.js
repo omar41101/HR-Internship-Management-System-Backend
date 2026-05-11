@@ -375,23 +375,25 @@ export const generateDocumentService = async ({
   uploadedBy,
   ip,
 }) => {
-  // Generate the PDF template buffer (buffer = the file in memory before uploading it to Cloudinary)
-  const pdfBuffer = await generateDocumentCore(templateName, data);
+  // Check the user existence
+  if (!data.userId) {
+    throw new AppError(
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
+    );
+  }
 
-  // Create the personnalised filename
-  const safeName = slugify(data.full_name ? data.full_name : "");
-  const timestamp = new Date(Date.now())
-    .toLocaleDateString("fr-FR")
-    .replace(/\//g, "-");
-  const fileName = `${templateName}-${safeName}-${timestamp}.pdf`;
-
-  // Create the virtual file object: Transform the buffer into a multer file-like object that can be processed by the uploadDocumentCore function
-  const virtualFile = {
-    buffer: pdfBuffer,
-    originalname: fileName,
-    mimetype: "application/pdf",
-    size: pdfBuffer.length,
-  };
+  const user = await User.findById(data.userId);
+  if (!user) {
+    throw new AppError(
+      commonErrors.USER_NOT_FOUND.message,
+      commonErrors.USER_NOT_FOUND.code,
+      commonErrors.USER_NOT_FOUND.errorCode,
+      commonErrors.USER_NOT_FOUND.suggestion,
+    );
+  }
 
   // Validate the document type existence
   const documentTypeName = TEMPLATE_DOCUMENT_TYPES[templateName];
@@ -415,25 +417,23 @@ export const generateDocumentService = async ({
     );
   }
 
-  // Check the user existence
-  if (!data.userId) {
-    throw new AppError(
-      commonErrors.USER_NOT_FOUND.message,
-      commonErrors.USER_NOT_FOUND.code,
-      commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion,
-    );
-  }
+  // Generate the PDF template buffer (buffer = the file in memory before uploading it to Cloudinary)
+  const pdfBuffer = await generateDocumentCore(templateName, data);
 
-  const user = await User.findById(data.userId);
-  if (!user) {
-    throw new AppError(
-      commonErrors.USER_NOT_FOUND.message,
-      commonErrors.USER_NOT_FOUND.code,
-      commonErrors.USER_NOT_FOUND.errorCode,
-      commonErrors.USER_NOT_FOUND.suggestion,
-    );
-  }
+  // Create the personnalised filename
+  const safeName = slugify(data.full_name ? data.full_name : "");
+  const timestamp = new Date(Date.now())
+    .toLocaleDateString("fr-FR")
+    .replace(/\//g, "-");
+  const fileName = `${templateName}-${safeName}-${timestamp}.pdf`;
+
+  // Create the virtual file object: Transform the buffer into a multer file-like object that can be processed by the uploadDocumentCore function
+  const virtualFile = {
+    buffer: pdfBuffer,
+    originalname: fileName,
+    mimetype: "application/pdf",
+    size: pdfBuffer.length,
+  };
 
   const folderName =
     documentTypeName === "Report" ? "payslips" : "generated_docs";
@@ -475,12 +475,16 @@ export const generateDocumentService = async ({
     status: "Success",
     code: 201,
     message: "Document generated successfully!",
-    data: document,
+    data: document.fileURL,
   };
 };
 
 // Send the generated document by email to user
-export const sendGeneratedDocumentByEmailService = async ({ documentId, currentUser, ip }) => {
+export const sendGeneratedDocumentByEmailService = async ({
+  documentId,
+  currentUser,
+  ip,
+}) => {
   // Check the document existence
   const document = await Document.findById(documentId);
   if (!document) {
@@ -492,7 +496,7 @@ export const sendGeneratedDocumentByEmailService = async ({ documentId, currentU
     );
   }
 
-  // Get the user object to retrieve the email
+  // Get the user to retrieve the email
   const user = await User.findById(document.user_id);
   if (!user) {
     throw new AppError(
@@ -509,7 +513,7 @@ export const sendGeneratedDocumentByEmailService = async ({ documentId, currentU
   // Send email with attachment
   await sendEmail({
     to: user.email,
-    subject: `Your generated document: ${document.title}`,
+    subject: `Generated Document Sent`,
     type: "document",
     name: `${user.name}`,
     documentTitle: document.title,
@@ -575,7 +579,7 @@ export const fulfillDocumentRequestService = async (id, file, userId) => {
       documentRequestErrors.DOCUMENT_REQUEST_ALREADY_FULFILLED.suggestion,
     );
   }
-  
+
   // Upload the document to Cloudinary
   const fileData = await uploadDocumentCore(
     file,
