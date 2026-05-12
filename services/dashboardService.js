@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import Project from "../models/Project.js";
 import Task from "../models/Task.js";
+import { getAdminDashboardAlertStats } from "./analytics/alertStatsService.js";
 
 // Get Dashboard data for supervisors
 export const getSupervisorDashboard = async (user) => {
@@ -64,15 +65,6 @@ export const getSupervisorDashboard = async (user) => {
     };
   });
 
-  // Late vs On-Time (Dummy weekly distribution for now, but based on real totals)
-  // In a real app, you'd group by week. Here we provide a 4-week snapshot.
-  const lateVsOnTime = [
-    { week: "Week 1", onTime: 12, late: 2 },
-    { week: "Week 2", onTime: 15, late: 1 },
-    { week: "Week 3", onTime: 10, late: 4 },
-    { week: "Week 4", onTime: 18, late: 0 },
-  ];
-
   return {
     status: "Success",
     code: 200,
@@ -82,16 +74,18 @@ export const getSupervisorDashboard = async (user) => {
       tasksOverview,
       activities,
       completionByUser,
-      lateVsOnTime
     },
   };
 };
 
 // Get Dashboard data for Admins
 export const getAdminDashboard = async (user) => {
-  // Admin still gets global stats for now
+  // Project global stats
   const totalProjects = await Project.countDocuments();
   const completedProjects = await Project.countDocuments({ status: "Completed" });
+
+  // Get monthly and daily alert KPIs for the Admin dashboard
+  const alertStats = await getAdminDashboardAlertStats();
   
   return {
     status: "Success",
@@ -104,6 +98,7 @@ export const getAdminDashboard = async (user) => {
         activeProjects: await Project.countDocuments({ status: "Active" }),
         completionRate: totalProjects === 0 ? 0 : Math.round((completedProjects / totalProjects) * 100)
       },
+      alertStats,
     },
   };
 };

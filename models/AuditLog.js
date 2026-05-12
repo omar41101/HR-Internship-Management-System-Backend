@@ -59,6 +59,9 @@ const auditLogSchema = mongoose.Schema(
         "SEND_GENERATED_DOCUMENT_BY_EMAIL",
         "CREATE_DOCUMENT_TYPE",
         "UPDATE_DOCUMENT_TYPE",
+        "MARK_ALERT_UNDER_REVIEW",
+        "RESOLVE_ALERT",
+        "DISMISS_ALERT",
       ],
     },
     target_type: {
@@ -79,6 +82,7 @@ const auditLogSchema = mongoose.Schema(
         "BonusType",
         "PayrollConfig",
         "Document",
+        "Alert",
       ],
     },
     target_id: {

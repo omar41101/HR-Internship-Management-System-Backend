@@ -53,6 +53,7 @@ import allowanceTypeRoutes from "./routes/allowanceTypeRoutes.js";
 import bonusTypeRoutes from "./routes/bonusTypeRoutes.js";
 import employeeAllowanceRoutes from "./routes/employeeAllowanceRoutes.js";
 import employeeBonusRoutes from "./routes/employeeBonusRoutes.js";
+import alertRoutes from "./routes/alertRoutes.js";
 
 // Socket.io connection handler
 io.on("connection", (socket) => {
@@ -123,6 +124,7 @@ app.use('/api', allowanceTypeRoutes);
 app.use('/api', bonusTypeRoutes);
 app.use('/api', employeeAllowanceRoutes);
 app.use('/api', employeeBonusRoutes);
+app.use('/api', alertRoutes);
 
 // GLOBAL ERROR HANDLER
 app.use(errorHandler);

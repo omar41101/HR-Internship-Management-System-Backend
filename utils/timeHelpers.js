@@ -5,7 +5,7 @@
 // Get the start and end dates of a given month and year
 export const getMonthRange = (year, month) => ({
   monthStart: new Date(year, month - 1, 1),
-  monthEnd: new Date(year, month, 0),
+  monthEnd: new Date(year, month, 1),
 });
 
 // Get the difference in hours between two time strings (HH:MM)
@@ -96,3 +96,15 @@ export const parseDate = (value) => {
   const date = new Date(value);
   return isNaN(date.getTime()) ? null : date;
 };
+
+// Get the start of today
+export const getStartAndEndOfToday = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  return { start: today, end: tomorrow };
+};
+

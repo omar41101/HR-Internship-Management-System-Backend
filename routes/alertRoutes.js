@@ -5,14 +5,27 @@ import {
   getAlertById,
   updateAlert,
   deleteAlert,
-} from "../services/alertService.js";
+  getAlerts,
+  markAlertUnderReview,
+  resolveAlert,
+  dismissAlert,
+  getAlertKPIs,
+} from "../controllers/alertController.js";
 import authenticate from "../middleware/authenticate.js";
 import authorize from "../middleware/authorize.js";
 import { upload } from "../middleware/upload.js";
 
 const router = express.Router();
 
-// Create a new alert
+// Route to get admin alert KPIs
+router.get(
+  "/alerts/kpis",
+  authenticate,
+  authorize(["Admin"]),
+  getAlertKPIs,
+);
+
+// Route to create a new alert
 router.post(
   "/alerts",
   authenticate,
@@ -21,25 +34,53 @@ router.post(
   createAlert,
 );
 
-// Get all alerts for the current user
+// Route to get all alerts for the current user
 router.get("/alerts/me", authenticate, getMyAlerts);
 
-// Get an alert by Id
-router.get("/alerts/:id", authenticate, getAlertById);
+// Route to get an alert by Id
+router.get("/alert/:id", authenticate, getAlertById);
 
-// Update an alert
+// Route to update an alert
 router.patch(
   "/alerts/:id",
   authenticate,
   upload("doc").single("attachment"),
   updateAlert,
 );
-  
-// Delete an alert
-router.delete(
-  "/alerts/:id",
+
+// Route to delete an alert
+router.delete("/alerts/:id", authenticate, deleteAlert);
+
+// Route to get all alerts (for supervisors and Admins)
+router.get(
+  "/alerts",
   authenticate,
-  deleteAlert,
+  authorize(["Supervisor", "Admin"]),
+  getAlerts,
 );
 
+// Route to mark an alert as UNDER_REVIEW (for supervisors and Admins)
+router.patch(
+  "/alerts/:id/under-review",
+  authenticate,
+  authorize(["Supervisor", "Admin"]),
+  markAlertUnderReview,
+);
+  
+// Route to resolve an alert (for supervisors and Admins)
+router.patch(
+  "/alerts/:id/resolve",
+  authenticate,
+  authorize(["Supervisor", "Admin"]),
+  resolveAlert,
+);
+
+// Route to dismiss an alert (for supervisors and Admins)
+router.patch(
+  "/alerts/:id/dismiss",
+  authenticate,
+  authorize(["Supervisor", "Admin"]),
+  dismissAlert,
+);
+  
 export default router;

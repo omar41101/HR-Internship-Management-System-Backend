@@ -45,13 +45,26 @@ export const errors = {
     code: 403,
     errorCode: "FORBIDDEN_ACTION",
     suggestion:
-      "Only the sender can update this alert.",
+      "Only the authorized user(s) can perform this action.",
   },
   INVALID_STATUS: {
-    message: "Only NEW alerts can be updated.",
+    message: "Only NEW alerts can be updated or deleted.",
     code: 400,
     errorCode: "INVALID_STATUS",
     suggestion:
-      "You cannot modify an alert after it enters review.",
+      "You cannot modify nor delete an alert after it enters review.",
+  },
+  INVALID_STATUS_TRANSITION: {
+    message: "Invalid status transition.",
+    code: 400,
+    errorCode: "INVALID_STATUS_TRANSITION",
+    suggestion:
+      "Only alerts in NEW status can be moved to UNDER_REVIEW. Please ensure the alert is in the correct status before updating.",
+  },
+  MISSING_RESOLUTION_NOTE: {
+    message: "Resolution note is required for this action.",
+    code: 400,
+    errorCode: "MISSING_RESOLUTION_NOTE",
+    suggestion: "A resolution note is required to dismiss this alert.",
   },
 };

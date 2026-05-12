@@ -147,6 +147,15 @@ const formatAuditLog = (log) => {
     case "PROCESS_FINAL_SETTLEMENT":
       description = `Processed Final Settlement for ${log.target_name || ""}`;
       break;
+    case "MARK_ALERT_UNDER_REVIEW":
+      description = `Marked Alert of ${log.target_name || ""} as Under Review`;
+      break;
+    case "RESOLVE_ALERT":
+      description = `Resolved Alert of ${log.target_name || ""}`;
+      break;
+    case "DISMISS_ALERT":
+      description = `Dismissed Alert of ${log.target_name || ""}`;
+      break;
     default:
       description = `Performed ${log.action} on ${log.target_type || "Target"}`;
   }

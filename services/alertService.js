@@ -8,12 +8,13 @@ import {
   validateAlertType,
   validateDescLength,
   validateRecipientType,
+  validateAlertActionAccess,
 } from "../validators/alertValidators.js";
 import {
   uploadDocToCloudinary,
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
-import { resolveId } from "../utils/idResolver.js";
+import { logAuditAction } from "../utils/logger.js"; // For the admin audit logs
 
 // Create a new alert
 export const createAlert = async (payload, currentUser, file) => {
@@ -60,8 +61,8 @@ export const createAlert = async (payload, currentUser, file) => {
   );
 
   // Validate the subject and description length
-  validateDescLength(payload.subject, 10);
-  validateDescLength(payload.description, 15);
+  validateDescLength(payload.subject, 200);
+  validateDescLength(payload.description, 600);
 
   // Determine recipient automatically (Supervisor or Admin)
   let recipientId = null;
@@ -87,6 +88,7 @@ export const createAlert = async (payload, currentUser, file) => {
       file.originalname,
       "hrcom/alert_docs",
     );
+
     attachmentURL = result.secure_url;
     attachmentPublicId = result.public_id;
   }
@@ -116,11 +118,16 @@ export const getMyAlerts = async (queryParams, userId) => {
     senderId: userId,
   };
 
-  return await getAll(Alert, [
-    { path: "senderId", select: "name lastName email" },
-    { path: "recipientId", select: "name lastName email" },
-    { path: "handledBy", select: "name lastName email" },
-  ]);
+  return await getAll(
+    Alert,
+    [
+      { path: "senderId", select: "name lastName email" },
+      { path: "recipientId", select: "name lastName email" },
+      { path: "handledBy", select: "name lastName email" },
+    ],
+    null,
+    ["subject", "description"],
+  )(filters);
 };
 
 // Get an alert by Id
@@ -131,7 +138,6 @@ export const getAlertById = async (alertId, user) => {
     { path: "recipientId", select: "name lastName email" },
     { path: "handledBy", select: "name lastName email" },
   ]);
-
   if (!alert) {
     throw new AppError(
       errors.ALERT_NOT_FOUND.message,
@@ -180,45 +186,50 @@ export const updateAlert = async (alertId, payload, user, file) => {
   // Only the alert sender can update
   if (alert.senderId.toString() !== user.id.toString()) {
     throw new AppError(
-      errors.FORBIDDEN_ACTION.message,
+      "You are not allowed to update this alert.",
       errors.FORBIDDEN_ACTION.code,
       errors.FORBIDDEN_ACTION.errorCode,
-      errors.FORBIDDEN_ACTION.suggestion,
+      "Only the sender can update this alert.",
     );
   }
 
   // Only NEW alerts can be updated
   if (alert.status !== "NEW") {
     throw new AppError(
-      errors.INVALID_STATUS.message,
+      "Only new alerts can be updated.",
       errors.INVALID_STATUS.code,
       errors.INVALID_STATUS.errorCode,
-      errors.INVALID_STATUS.suggestion,
+      "You cannot update an alert after it enters review.",
     );
   }
 
   // Validate the alertType value if it's being updated
-  if (payload.alertType) {
+  if (payload.alertType !== undefined) {
     validateAlertType(
       payload.alertType,
       Alert.schema.path("alertType").enumValues,
     );
+
+    alert.alertType = payload.alertType.toUpperCase();
   }
 
   // Validate the recipientType value if it's being updated
-  if (payload.recipientType) {
+  if (payload.recipientType !== undefined) {
     validateRecipientType(
       payload.recipientType,
       Alert.schema.path("recipientType").enumValues,
     );
+
+    alert.recipientType = payload.recipientType.toUpperCase();
   }
 
   // Validate the subject and description length if they are being updated
-  if (payload.subject) validateDescLength(payload.subject, 200);
-  if (payload.description) validateDescLength(payload.description, 600);
+  if (payload.subject !== undefined) validateDescLength(payload.subject, 200);
+  if (payload.description !== undefined)
+    validateDescLength(payload.description, 600);
 
   // If recipientType is being updated, we need to determine the new recipientId
-  if (payload.recipientType) {
+  if (payload.recipientType !== undefined) {
     if (payload.recipientType.toUpperCase() === "SUPERVISOR") {
       // The sender must have a supervisor assigned
       const sender = await User.findById(user.id);
@@ -240,7 +251,7 @@ export const updateAlert = async (alertId, payload, user, file) => {
   if (file) {
     // Delete the old file if it exists
     if (alert.attachmentPublicId) {
-      await deleteFromCloudinary(alert.attachmentPublicId);
+      await deleteFromCloudinary(alert.attachmentPublicId, "raw");
     }
 
     // Upload the new file to cloudinary
@@ -252,7 +263,10 @@ export const updateAlert = async (alertId, payload, user, file) => {
 
     alert.attachmentURL = uploaded.secure_url;
     alert.attachmentPublicId = uploaded.public_id;
-  } else if (payload.removeAttachment === true) {
+  } else if (
+    payload.removeAttachment !== undefined &&
+    Boolean(payload.removeAttachment) === true
+  ) {
     if (alert.attachmentPublicId) {
       await deleteFromCloudinary(alert.attachmentPublicId, "raw");
     }
@@ -262,8 +276,9 @@ export const updateAlert = async (alertId, payload, user, file) => {
   }
 
   // Update allowed fields only
-  if (payload.subject) alert.subject = payload.subject;
-  if (payload.description) alert.description = payload.description;
+  if (payload.subject !== undefined) alert.subject = payload.subject;
+  if (payload.description !== undefined)
+    alert.description = payload.description;
   if (payload.isAnonymous !== undefined)
     alert.isAnonymous = payload.isAnonymous;
 
@@ -287,33 +302,33 @@ export const deleteAlert = async (alertId, user) => {
       errors.ALERT_NOT_FOUND.message,
       errors.ALERT_NOT_FOUND.code,
       errors.ALERT_NOT_FOUND.errorCode,
-      errors.ALERT_NOT_FOUND.suggestion
+      errors.ALERT_NOT_FOUND.suggestion,
     );
   }
 
   // Only the sender can delete
   if (alert.senderId.toString() !== user.id.toString()) {
     throw new AppError(
-      errors.FORBIDDEN_ACTION.message,
+      "You are not allowed to delete this alert.",
       errors.FORBIDDEN_ACTION.code,
       errors.FORBIDDEN_ACTION.errorCode,
-      errors.FORBIDDEN_ACTION.suggestion
+      "Only the sender can delete this alert.",
     );
   }
 
   // Only the NEW alerts can be deleted
   if (alert.status !== "NEW") {
     throw new AppError(
-      errors.INVALID_STATUS.message,
+      "Only new alerts can be deleted.",
       errors.INVALID_STATUS.code,
       errors.INVALID_STATUS.errorCode,
-      errors.INVALID_STATUS.suggestion
+      "You cannot delete an alert after it enters review.",
     );
   }
 
   // Delete the attachment if it exists
   if (alert.attachmentPublicId) {
-    await deleteFromCloudinary(alert.attachmentPublicId);
+    await deleteFromCloudinary(alert.attachmentPublicId, "raw");
   }
 
   await Alert.findByIdAndDelete(alertId);
@@ -322,5 +337,250 @@ export const deleteAlert = async (alertId, user) => {
     status: "Success",
     code: 200,
     message: "Alert deleted successfully",
+  };
+};
+
+// Get all alerts
+export const getAlerts = async (queryParams, currentUser) => {
+  const filter = {};
+
+  // Supervisors can only see alerts addressed to them from their team members
+  if (currentUser.role === "Supervisor") {
+    filter.recipientType = "SUPERVISOR";
+    filter.recipientId = currentUser.id;
+  }
+
+  // Administrators / HR can only see alerts addressed to HR Department
+  if (currentUser.role === "Admin") {
+    filter.recipientType = "HR_DEPARTMENT";
+  }
+
+  const mergedQueryParams = {
+    ...queryParams,
+    ...filter,
+  };
+
+  const result = await getAll(
+    Alert,
+    [
+      { path: "senderId", select: "name lastName email" },
+      { path: "recipientId", select: "name lastName email" },
+      { path: "handledBy", select: "name lastName email" },
+    ],
+    null,
+    ["subject", "description"],
+  )(mergedQueryParams);
+
+  // Deal with the anonymous alerts: If an alert is marked as anonymous, we keep the sender identity from the recipient
+  result.data = result.data.map((alert) => {
+    // Copy the alert object to avoid mutating the original Mongoose document
+    const alertObject = alert.toObject();
+
+    if (alertObject.isAnonymous) {
+      alertObject.senderId = null;
+    }
+
+    return alertObject;
+  });
+
+  result.message = "Alerts retrieved successfully!";
+  return result;
+};
+
+// Mark an alert as under review
+export const markAlertUnderReview = async (alertId, currentUser, ip) => {
+  // Check the alert existence
+  const alert = await Alert.findById(alertId).populate(
+    "senderId",
+    "name lastName",
+  );
+  if (!alert) {
+    throw new AppError(
+      errors.ALERT_NOT_FOUND.message,
+      errors.ALERT_NOT_FOUND.code,
+      errors.ALERT_NOT_FOUND.errorCode,
+      errors.ALERT_NOT_FOUND.suggestion,
+    );
+  }
+
+  // ACCESS CONTROL
+  validateAlertActionAccess(currentUser, alert);
+
+  // Only alerts in NEW status can be moved to UNDER_REVIEW
+  if (alert.status !== "NEW") {
+    throw new AppError(
+      errors.INVALID_STATUS_TRANSITION.message,
+      errors.INVALID_STATUS_TRANSITION.code,
+      errors.INVALID_STATUS_TRANSITION.errorCode,
+      errors.INVALID_STATUS_TRANSITION.suggestion,
+    );
+  }
+
+  // Update the alert status
+  alert.status = "UNDER_REVIEW";
+  alert.handledBy = currentUser.id;
+
+  await alert.save();
+
+  if (currentUser.role === "Admin") {
+    // Create the audit log for this action
+    try {
+      await logAuditAction({
+        adminId: currentUser.id,
+        action: "MARK_ALERT_UNDER_REVIEW",
+        targetType: "Alert",
+        targetId: alert._id,
+        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        ipAddress: ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Alert marked as under review successfully!",
+    data: alert,
+  };
+};
+
+// Resolve an alert
+export const resolveAlert = async (
+  alertId,
+  payload, // { resolutionNote }
+  currentUser,
+  ip,
+) => {
+  // Check the alert existence
+  const alert = await Alert.findById(alertId).populate(
+    "senderId",
+    "name lastName",
+  );
+
+  if (!alert) {
+    throw new AppError(
+      errors.ALERT_NOT_FOUND.message,
+      errors.ALERT_NOT_FOUND.code,
+      errors.ALERT_NOT_FOUND.errorCode,
+      errors.ALERT_NOT_FOUND.suggestion,
+    );
+  }
+
+  // ACCESS CONTROL
+  validateAlertActionAccess(currentUser, alert);
+
+  // Only alerts already under review can be resolved
+  if (alert.status !== "UNDER_REVIEW") {
+    throw new AppError(
+      errors.INVALID_STATUS_TRANSITION.message,
+      errors.INVALID_STATUS_TRANSITION.code,
+      errors.INVALID_STATUS_TRANSITION.errorCode,
+      "Only alerts under review can be resolved.",
+    );
+  }
+
+  if (payload?.resolutionNote) {
+    validateDescLength(payload.resolutionNote, 400);
+    alert.resolutionNote = payload.resolutionNote;
+  }
+
+  alert.status = "RESOLVED";
+  alert.resolvedAt = new Date();
+  alert.handledBy = currentUser.id;
+
+  await alert.save();
+
+  // Create an audit log for this action
+  if (currentUser.role === "Admin") {
+    try {
+      await logAuditAction({
+        adminId: currentUser.id,
+        action: "RESOLVE_ALERT",
+        targetType: "Alert",
+        targetId: alert._id,
+        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        ipAddress: ip,
+      });
+    } catch (logErr) {
+      console.log("[AUDIT-LOG-ERROR]", logErr.message);
+    }
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Alert resolved successfully!",
+    data: alert,
+  };
+};
+
+// Dismiss an alert
+export const dismissAlert = async (alertId, payload, currentUser, ip) => {
+  // Check alert existence
+  const alert = await Alert.findById(alertId).populate("senderId", "name lastName");
+  if (!alert) {
+    throw new AppError(
+      errors.ALERT_NOT_FOUND.message,
+      errors.ALERT_NOT_FOUND.code,
+      errors.ALERT_NOT_FOUND.errorCode,
+      errors.ALERT_NOT_FOUND.suggestion,
+    );
+  }
+
+  // ACCESS CONTROL
+  validateAlertActionAccess(currentUser, alert);
+
+  // Only alerts already under review can be dismissed
+  if (alert.status !== "UNDER_REVIEW") {
+    throw new AppError(
+      errors.INVALID_STATUS_TRANSITION.message,
+      errors.INVALID_STATUS_TRANSITION.code,
+      errors.INVALID_STATUS_TRANSITION.errorCode,
+      "Only alerts under review can be dismissed.",
+    );
+  }
+
+  // Check the resolution note existence (required for dismissal)
+  if (!payload.resolutionNote) {
+    throw new AppError(
+      errors.MISSING_RESOLUTION_NOTE.message,
+      errors.MISSING_RESOLUTION_NOTE.code,
+      errors.MISSING_RESOLUTION_NOTE.errorCode,
+      errors.MISSING_RESOLUTION_NOTE.suggestion,
+    );
+  }
+  else if (payload.resolutionNote) {
+    validateDescLength(payload.resolutionNote, 400);
+    alert.resolutionNote = payload.resolutionNote;
+  }
+
+  alert.status = "DISMISSED";
+  alert.handledBy = currentUser.id;
+
+  await alert.save();
+
+  // Create the audit log for this action
+  if (currentUser.role === "Admin") {
+    try {
+      await logAuditAction({
+        adminId: currentUser.id,
+        action: "DISMISS_ALERT",
+        targetType: "Alert",
+        targetId: alert._id,
+        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        ipAddress: ip,
+      });
+    } catch (err) {
+      console.log("[AUDIT-LOG-ERROR]", err.message);
+    }
+  }
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "Alert dismissed successfully!",
+    data: alert,
   };
 };
