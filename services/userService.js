@@ -455,6 +455,13 @@ export const updateUserService = async (id, updateData, currentUser, ip) => {
   // Update the Status of the user
   if (updateData.isActive !== undefined) {
     updateData.status = updateData.isActive ? "Active" : "Inactive";
+
+    // In case the admin unblocked or un-inactivated the user, we reset the login attempts to 0
+    if (updateData.isActive) {
+      existingUser.loginAttempts = 0;
+      await existingUser.save();
+    }
+
     delete updateData.isActive;
   }
 

@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import UserRole from "../models/UserRole.js";
+import Alert from "../models/Alert.js";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { sendEmail } from "../utils/sendEmail.js";
@@ -40,9 +41,21 @@ export const loginService = async ({ email, password }) => {
   if (!isMatch) {
     user.loginAttempts += 1;
 
-    if (user.loginAttempts >= 3) {
+    if (user.loginAttempts > 3) {
       user.status = "Blocked";
       await user.save();
+
+      // Create an alert to be sent to HR Admin about the blocked account
+      await Alert.create({
+        senderId: null,
+        isSystemGenerated: true,
+        recipientType: "HR_DEPARTMENT",
+        recipientId: null,
+        alertType: "TECHNICAL",
+        subject: `Account Blocked: ${user.name} ${user.lastName}`,
+        description: `The account with email ${user.email} has been blocked after 3 unsuccessful login attempts. Please review the account status and take necessary actions.`,
+      });
+
       throw new AppError(
         errors.ACCOUNT_BLOCKED.message,
         errors.ACCOUNT_BLOCKED.code,
@@ -316,7 +329,7 @@ export const requestPasswordResetService = async ({ email }) => {
     status: "Success",
     code: 200,
     message: "Password reset link sent successfully!",
-  }
+  };
 };
 
 // Forget the password service
