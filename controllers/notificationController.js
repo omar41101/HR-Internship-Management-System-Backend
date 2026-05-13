@@ -64,13 +64,26 @@ export const getAllNotifications = async (req, res, next) => {
   }
 };
 
+// Get the 3 recent notifications of the current user
+export const getRecentNotifications = async (req, res, next) => {
+  try {
+    const currentUser = req.user;
+    const result =
+      await notificationService.getRecentNotifications(currentUser);
+
+    res.status(result.code).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Get unread notification count for the current user
 export const getUnreadNotificationCount = async (req, res, next) => {
   try {
     const currentUser = req.user;
     const result =
       await notificationService.getUnreadNotificationCount(currentUser);
-    
+
     res.status(result.code).json(result);
   } catch (err) {
     next(err);

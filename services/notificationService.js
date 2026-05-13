@@ -119,6 +119,23 @@ export const getAllNotifications = async (currentUser, queryParams) => {
   ])(filter);
 };
 
+// Get the 3 most recent notifications of the current user
+export const getRecentNotifications = async (currentUser) => {
+  const notifications = await Notification.find({
+    recipientId: currentUser.id,
+  })
+    .sort({ createdAt: -1 })
+    .limit(3)
+    .populate("recipientId", "name lastName email");
+
+  return {
+    status: "Success",
+    code: 200,
+    message: "3 Recent notifications retrieved successfully!",
+    data: notifications,
+  };
+};
+
 // Get unread notification count for the current user (Fallback function for the unread notification count)
 export const getUnreadNotificationCount = async (currentUser) => {
   const count = await Notification.countDocuments({

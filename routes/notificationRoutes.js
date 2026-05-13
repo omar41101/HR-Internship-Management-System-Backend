@@ -5,6 +5,7 @@ import {
   deleteNotification,
   getAllNotifications,
   getUnreadNotificationCount,
+  getRecentNotifications,
 } from "../controllers/notificationController.js";
 import authenticate from "../middleware/authenticate.js";
 
@@ -23,6 +24,9 @@ router.patch(
   authenticate,
   markAllNotificationsAsRead,
 );
+
+// Get the 3 recent notifications
+router.get("/notifications/recent", authenticate, getRecentNotifications);
 
 // Delete a single notification
 router.delete(
