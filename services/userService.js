@@ -955,16 +955,20 @@ export const uploadProfileImageService = async (
     currentUser.role === "Admin" &&
     currentUser.id.toString() !== user._id.toString()
   ) {
-    await createNotification({
-      recipientId: user._id,
-      type: "ACCOUNT",
-      title: "Profile Picture Updated",
-      message: "Your profile picture has been updated by HR.",
-      data: {
-        entityType: "USER",
-        entityId: user._id,
-      },
-    });
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "ACCOUNT",
+        title: "Profile Picture Updated",
+        message: "Your profile picture has been updated by HR.",
+        data: {
+          entityType: "USER",
+          entityId: user._id,
+        },
+      });
+    } catch (err) {
+      console.log("Profile picture update notification failed:", err.message);
+    }
   }
 
   // Audit log
@@ -1022,16 +1026,20 @@ export const removeProfileImageService = async (userId, currentUser, ip) => {
     currentUser.role === "Admin" &&
     currentUser.id.toString() !== user._id.toString()
   ) {
-    await createNotification({
-      recipientId: user._id,
-      type: "ACCOUNT",
-      title: "Profile Picture Removed",
-      message: "Your profile picture has been removed by HR.",
-      data: {
-        entityType: "USER",
-        entityId: user._id,
-      },
-    });
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "ACCOUNT",
+        title: "Profile Picture Removed",
+        message: "Your profile picture has been removed by HR.",
+        data: {
+          entityType: "USER",
+          entityId: user._id,
+        },
+      });
+    } catch (err) {
+      console.log("Profile picture removal notification failed:", err.message);
+    }
   }
 
   // Audit log

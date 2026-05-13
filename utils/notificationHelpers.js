@@ -40,3 +40,28 @@ export const createNotificationForAdmins = async ({
   }
 };
 
+// Notify all active admins except the user who performed the action
+export const createNotificationForAdminsExcept = async ({
+  excludedUserId,
+  type,
+  title,
+  message,
+  data = {},
+}) => {
+  const admins = await getAdminUsers();
+
+  const filteredAdmins = admins.filter(
+    (admin) =>
+      admin._id.toString() !== excludedUserId?.toString()
+  );
+
+  for (const admin of filteredAdmins) {
+    await createNotification({
+      recipientId: admin._id,
+      type,
+      title,
+      message,
+      data,
+    });
+  }
+};
