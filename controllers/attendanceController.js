@@ -15,6 +15,7 @@ import { exportAttendanceStats } from "../services/attendanceExportService.js";
 import { markPayrollDirty } from "../utils/payrollHelpers.js";
 import { createNotification } from "../services/notificationService.js";
 import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
+import { resolveId } from "../utils/idResolver.js";
 
 // The company location (For the location check-in)
 const COMPANY_LOCATION = {
@@ -387,8 +388,6 @@ export const getMyStatus = async (req, res, next) => {
     next(error);
   }
 };
-
-import { resolveId } from "../utils/idResolver.js";
 
 // Get attendance records (Admin/Supervisor)
 export const getAttendance = async (req, res, next) => {

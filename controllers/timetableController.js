@@ -4,7 +4,9 @@ import AppError from "../utils/AppError.js";
 import mongoose from "mongoose";
 import { io } from "../server.js";
 import { resolveId } from "../utils/idResolver.js";
-
+import { createNotification } from "../services/notificationService.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
+import { markPayrollDirty } from "../utils/payrollHelpers.js";
 // -------------------------------------------------------------------- //
 // --------------------- TIMETABLE SHIFT RULES ------------------------ //
 // -------------------------------------------------------------------- //
@@ -48,7 +50,10 @@ export const addTimetableEntry = async (req, res, next) => {
     }
 
     // Check the user existence
-    const user = await User.findOne(resolveId(userId));
+    const user = await User.findOne(resolveId(userId)).populate(
+      "role_id",
+      "name",
+    );
     if (!user) throw new AppError("User not found!", 404);
 
     const actualUserId = user._id;
@@ -77,6 +82,49 @@ export const addTimetableEntry = async (req, res, next) => {
       console.log("[ADD-TIMETABLE-ENTRY] Day Off created!");
 
       io.emit("timetableUpdated", { userId: actualUserId });
+
+      if (user.role_id.name === "Employee") {
+        await markPayrollDirty(
+          actualUserId,
+          new Date(),
+          "Day off entry created",
+        );
+      }
+
+      // Send notification to the user about the day off adding
+      try {
+        await createNotification({
+          recipientId: user._id,
+          type: "TIMETABLE",
+          title: "A day off has been added in your timetable",
+          message: `A day off has been added in your timetable at ${shift.date.toDateString()}.`,
+          data: {
+            entityType: "TIMETABLE",
+            entityId: shift._id,
+          },
+        });
+      } catch (error) {
+        console.log("Day off adding notification failed:", error.message);
+      }
+
+      // Notify all admins except the one who added the day off entry
+      try {
+        await createNotificationForAdminsExcept({
+          excludedUserId: req.user.id,
+          type: "TIMETABLE",
+          title: `A day off has been added in ${user.name} ${user.lastName}'s timetable`,
+          message: `A day off for ${user.name} ${user.lastName} on ${shift.date.toDateString()} has been added.`,
+          data: {
+            entityType: "TIMETABLE",
+            entityId: shift._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send notification for day off adding to admins:",
+          err,
+        );
+      }
 
       return res.status(201).json({
         status: "Success",
@@ -119,7 +167,48 @@ export const addTimetableEntry = async (req, res, next) => {
 
     io.emit("timetableUpdated", { userId: actualUserId });
 
-    await markPayrollDirty(actualUserId, new Date(), "Timetable entry created");
+    if (user.role_id.name === "Employee") {
+      await markPayrollDirty(
+        actualUserId,
+        new Date(),
+        "Timetable entry created",
+      );
+    }
+
+    // Send notification to the user about the timetable shift adding
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "TIMETABLE",
+        title: "A shift has been added in your timetable",
+        message: `A shift in your timetable at ${shift.date.toDateString()} has been added.`,
+        data: {
+          entityType: "TIMETABLE",
+          entityId: shift._id,
+        },
+      });
+    } catch (error) {
+      console.log("Shift adding notification failed:", error.message);
+    }
+
+    // Notify all admins except the one who added the timetable shift entry
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: req.user.id,
+        type: "TIMETABLE",
+        title: `A shift has been added in ${user.name} ${user.lastName}'s timetable`,
+        message: `A shift for ${user.name} ${user.lastName} on ${shift.date.toDateString()} has been added.`,
+        data: {
+          entityType: "TIMETABLE",
+          entityId: shift._id,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for shift adding to admins:",
+        err,
+      );
+    }
 
     res.status(201).json({
       status: "Success",
@@ -155,7 +244,10 @@ export const updateTimetableEntry = async (req, res, next) => {
     }
 
     // Check the user existance
-    const user = await User.findOne(resolveId(userId));
+    const user = await User.findOne(resolveId(userId)).populate(
+      "role_id",
+      "name",
+    );
     if (!user) {
       throw new AppError("User not found", 404);
     }
@@ -181,7 +273,48 @@ export const updateTimetableEntry = async (req, res, next) => {
 
     io.emit("timetableUpdated", { userId: actualUserId });
 
-    await markPayrollDirty(actualUserId, new Date(), "Timetable entry updated");
+    // Send notification to the user about the timetable shift updating
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "TIMETABLE",
+        title: "A shift has been updated in your timetable",
+        message: `A shift in your timetable at ${shift.date.toDateString()} has been updated.`,
+        data: {
+          entityType: "TIMETABLE",
+          entityId: shift._id,
+        },
+      });
+    } catch (error) {
+      console.log("Shift updating notification failed:", error.message);
+    }
+
+    // Notify all admins except the one who updated the timetable shift entry
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: req.user.id,
+        type: "TIMETABLE",
+        title: `A shift has been updated in ${user.name} ${user.lastName}'s timetable`,
+        message: `A shift for ${user.name} ${user.lastName} on ${shift.date.toDateString()} has been updated.`,
+        data: {
+          entityType: "TIMETABLE",
+          entityId: shift._id,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for shift updating to admins:",
+        err,
+      );
+    }
+
+    if (user.role_id.name === "Employee") {
+      await markPayrollDirty(
+        actualUserId,
+        new Date(),
+        "Timetable entry updated",
+      );
+    }
 
     res.status(200).json({
       status: "Success",
@@ -267,7 +400,9 @@ export const getAllTimetables = async (req, res, next) => {
     const queryYear = year ? Number(year) : now.getUTCFullYear();
 
     const startDate = new Date(Date.UTC(queryYear, queryMonth - 1, 1));
-    const endDate = new Date(Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999));
+    const endDate = new Date(
+      Date.UTC(queryYear, queryMonth, 0, 23, 59, 59, 999),
+    );
 
     const filter = {
       date: { $gte: startDate, $lte: endDate },
@@ -275,7 +410,9 @@ export const getAllTimetables = async (req, res, next) => {
 
     // If Supervisor, only get timetables for users they supervise
     if (req.user.role === "Supervisor") {
-      const supervisees = await User.find({ supervisor_id: req.user.id }).select("_id");
+      const supervisees = await User.find({
+        supervisor_id: req.user.id,
+      }).select("_id");
       const superviseeIds = supervisees.map((u) => u._id);
       filter.userId = { $in: superviseeIds };
     }
@@ -318,7 +455,10 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
     }
 
     // Check the user existence
-    const user = await User.findOne(resolveId(userId));
+    const user = await User.findOne(resolveId(userId)).populate(
+      "role_id",
+      "name",
+    );
     if (!user) {
       throw new AppError("User not found", 404);
     }
@@ -335,7 +475,7 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
 
       // Prepare the common shift data
       let shiftData = {
-        userId,
+        userId: actualUserId,
         date: dateStr,
         type,
         color,
@@ -403,7 +543,44 @@ export const bulkUpdateTimetableEntries = async (req, res, next) => {
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId: actualUserId });
 
-    await markPayrollDirty(actualUserId, new Date(), "Bulk timetable update");
+    if (user.role_id.name === "Employee") {
+      await markPayrollDirty(actualUserId, new Date(), "Bulk timetable update");
+    }
+
+    // Send notification to the user about the timetable shifts updating
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "TIMETABLE",
+        title: `${updatedShifts.length} shifts have been updated in your timetable`,
+        message: `${updatedShifts.length} shifts in your timetable at ${dates.join(", ")} have been updated.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (error) {
+      console.log("Shifts updating notification failed:", error.message);
+    }
+
+    // Notify all admins except the one who added/updates the timetable shifts
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: req.user.id,
+        type: "TIMETABLE",
+        title: `${updatedShifts.length} shifts have been updated in ${user.name} ${user.lastName}'s timetable`,
+        message: `${updatedShifts.length} shifts for ${user.name} ${user.lastName} on ${dates.join(", ")} have been updated.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for shift updating to admins:",
+        err,
+      );
+    }
 
     res.status(200).json({
       status: "Success",
@@ -426,7 +603,10 @@ export const deleteTimetableEntry = async (req, res, next) => {
     }
 
     // Check the user existance
-    const user = await User.findOne(resolveId(userId));
+    const user = await User.findOne(resolveId(userId)).populate(
+      "role_id",
+      "name",
+    );
     if (!user) {
       throw new AppError("User not found", 404);
     }
@@ -448,12 +628,57 @@ export const deleteTimetableEntry = async (req, res, next) => {
       );
     }
 
-    await Timetable.findOneAndDelete({ userId: actualUserId, date: normalizedDate, type });
+    const deletedEntry = await Timetable.findOneAndDelete({
+      userId: actualUserId,
+      date: normalizedDate,
+      type,
+    });
 
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId: actualUserId });
 
-    await markPayrollDirty(actualUserId, new Date(), "Timetable entry deleted");
+    if (user.role_id.name === "Employee") {
+      await markPayrollDirty(
+        actualUserId,
+        new Date(),
+        "Timetable entry deleted",
+      );
+    }
+
+    // Send notification to the user about the timetable shift deleting
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "TIMETABLE",
+        title: `Shift has been deleted in your timetable`,
+        message: `A shift has been deleted from your timetable at ${deletedEntry.date.toDateString()}.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (error) {
+      console.log("Shifts deleting notification failed:", error.message);
+    }
+
+    // Notify all admins except the one who deleted the timetable shift entry
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: req.user.id,
+        type: "TIMETABLE",
+        title: `A shift has been deleted from ${user.name} ${user.lastName}'s timetable`,
+        message: `A shift for ${user.name} ${user.lastName} on ${deletedEntry.date.toDateString()} has been deleted.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for shift deleting to admins:",
+        err,
+      );
+    }
 
     res.status(200).json({
       status: "Success",
@@ -485,7 +710,10 @@ export const clearMonthTimetable = async (req, res, next) => {
     }
 
     // Check the user existence
-    const user = await User.findOne(resolveId(userId));
+    const user = await User.findOne(resolveId(userId)).populate(
+      "role_id",
+      "name",
+    );
     if (!user) {
       throw new AppError("User not found", 404);
     }
@@ -504,7 +732,51 @@ export const clearMonthTimetable = async (req, res, next) => {
     // Notify user of schedule change
     io.emit("timetableUpdated", { userId: actualUserId });
 
-    await markPayrollDirty(actualUserId, new Date(), "Monthly timetable cleared");
+    if (user.role_id.name === "Employee") {
+      await markPayrollDirty(
+        actualUserId,
+        new Date(),
+        "Monthly timetable cleared",
+      );
+    }
+
+    // Send notification to the user about the timetable month clearing
+    try {
+      await createNotification({
+        recipientId: user._id,
+        type: "TIMETABLE",
+        title: `Monthly timetable has been cleared`,
+        message: `Your timetable for ${startDate.toLocaleString("default", { month: "long" })} has been cleared.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (error) {
+      console.log(
+        "Monthly timetable clearing notification failed:",
+        error.message,
+      );
+    }
+
+    // Notify all admins except the one who cleared the monthly timetable
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: req.user.id,
+        type: "TIMETABLE",
+        title: `Monthly timetable cleared for ${user.name} ${user.lastName}`,
+        message: `The timetable for ${user.name} ${user.lastName} for ${startDate.toLocaleString("default", { month: "long" })} has been cleared.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for monthly timetable clearing to admins:",
+        err,
+      );
+    }
 
     res.status(200).json({
       status: "Success",
