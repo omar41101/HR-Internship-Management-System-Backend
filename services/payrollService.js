@@ -6,7 +6,6 @@ import { errors } from "../errors/payrollErrors.js";
 import { errors as commonErrors } from "../errors/commonErrors.js";
 import { errors as payrollConfigErrors } from "../errors/payrollConfigErrors.js";
 import AppError from "../utils/AppError.js";
-import { validateUserStatus } from "../validators/authValidators.js";
 import {
   calculateProratedSalary,
   calculateOvertime,
@@ -83,7 +82,7 @@ export const calculatePayroll = async (employeeId, month, year) => {
       irpp: configDoc.irpp,
       payroll: {
         standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
-      },
+      }
     },
 
     status: "draft",

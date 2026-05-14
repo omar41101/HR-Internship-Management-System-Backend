@@ -19,6 +19,8 @@ const notificationSchema = new mongoose.Schema(
         "DOCUMENT_TYPE",
         "PERSONAL_DOCUMENT",
         "ADMINISTRATIVE_DOCUMENT",
+        "ATTENDANCE",
+        "TIMETABLE",
       ],
       required: true,
     },

@@ -4,9 +4,6 @@ import Attendance from "../models/Attendance.js";
 import Timetable from "../models/Timetable.js";
 import SpecialShift from "../models/SpecialShift.js";
 import LeaveRequest from "../models/LeaveRequest.js";
-import LeaveType from "../models/LeaveType.js";
-import AllowanceType from "../models/AllowanceType.js";
-import BonusType from "../models/BonusType.js";
 import EmployeeAllowance from "../models/EmployeeAllowance.js";
 import EmployeeBonus from "../models/EmployeeBonus.js";
 import AppError from "./AppError.js";
@@ -1021,7 +1018,7 @@ export const buildPayslipData = (payroll, employee) => {
     year: payroll.year,
 
     workedDays: payroll.workedDays,
-    hourlyRate: payroll.hourlyRate,
+    hourlyRate: round(payroll.hourlyRate),
     status: payroll.status,
     validatedAt: payroll.validatedAt
       ? new Date(payroll.validatedAt).toLocaleDateString("en-GB")

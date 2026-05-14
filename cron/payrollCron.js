@@ -21,8 +21,8 @@ cron.schedule("10 0 1 * *", async () => {
 
     // Fetch the active users (Exclude the Interns since they don't have payroll)
     const users = await User.find({
-      status: "active",
-      role_id: { $ne: internRole._id },
+      status: "Active",
+      role_id: { $ne: internRole?._id },
     });
 
     if (!users.length) {
