@@ -4,6 +4,7 @@ import AppError from "../utils/AppError.js";
 import { errors } from "../errors/bonusTypeErrors.js";
 import { validateDefaultAmount } from "../validators/allowanceTypeValidators.js";
 import { logAuditAction } from "../utils/logger.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Add a new bonus type
 export const createBonusType = async (
@@ -35,7 +36,10 @@ export const createBonusType = async (
   }
 
   // Validate the default amount
-  validateDefaultAmount(defaultAmount, errors.BONUS_TYPE_INVALID_DEFAULT_AMOUNT);
+  validateDefaultAmount(
+    defaultAmount,
+    errors.BONUS_TYPE_INVALID_DEFAULT_AMOUNT,
+  );
 
   const result = await createOne(BonusType)({
     name: name.trim(),
@@ -54,6 +58,25 @@ export const createBonusType = async (
     details: result,
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who created the bonus type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "BONUS_TYPE",
+      title: "New Bonus Type Created",
+      message: `A new bonus type "${name.trim()}" has been created.`,
+      data: {
+        entityType: "BonusType",
+        entityId: result.data._id,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send notification for new bonus type creation:",
+      err,
+    );
+  }
 
   return result;
 };
@@ -84,6 +107,22 @@ export const toggleBonusTypeActivation = async (id, user, ip) => {
     details: bonusType,
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who created the bonus type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "BONUS_TYPE",
+      title: "Bonus Type Activation Status Toggled",
+      message: `The activation status of the bonus type "${bonusType.name}" has been toggled.`,
+      data: {
+        entityType: "BonusType",
+        entityId: bonusType._id,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for bonus type activation toggle:", err);
+  }
 
   return {
     status: "Success",
@@ -159,7 +198,10 @@ export const updateBonusType = async (
 
   // Validate the default amount if it's being updated
   if (defaultAmount !== undefined) {
-    validateDefaultAmount(defaultAmount, errors.BONUS_TYPE_INVALID_DEFAULT_AMOUNT);
+    validateDefaultAmount(
+      defaultAmount,
+      errors.BONUS_TYPE_INVALID_DEFAULT_AMOUNT,
+    );
   }
 
   const result = await updateOne(BonusType)(id, {
@@ -180,6 +222,22 @@ export const updateBonusType = async (
     details: bonusType,
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who created the bonus type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "BONUS_TYPE",
+      title: "Bonus Type Updated",
+      message: `The bonus type "${bonusType.name}" has been updated.`,
+      data: {
+        entityType: "BonusType",
+        entityId: result.data._id,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for bonus type update:", err);
+  }
 
   return result;
 };

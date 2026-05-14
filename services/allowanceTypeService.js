@@ -4,6 +4,7 @@ import AppError from "../utils/AppError.js";
 import { errors } from "../errors/allowanceTypeErrors.js";
 import { validateDefaultAmount } from "../validators/allowanceTypeValidators.js";
 import { logAuditAction } from "../utils/logger.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Add a new allowance type
 export const createAllowanceType = async (
@@ -55,6 +56,25 @@ export const createAllowanceType = async (
     ipAddress: ip,
   });
 
+  // Notify all admins except the one who created the allowance type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "ALLOWANCE_TYPE",
+      title: "New Allowance Type Created",
+      message: `A new allowance type "${result.data.name}" has been created.`,
+      data: {
+        entityType: "AllowanceType",
+        entityId: result.data._id,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send notification for new allowance type creation:",
+      err,
+    );
+  }
+
   return result;
 };
 
@@ -84,6 +104,25 @@ export const toggleAllowanceTypeActivation = async (id, user, ip) => {
     details: allowanceType,
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who created the allowance type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "ALLOWANCE_TYPE",
+      title: "Allowance Type Activation Status Toggled",
+      message: `The activation status of the allowance type "${allowanceType.name}" has been toggled.`,
+      data: {
+        entityType: "AllowanceType",
+        entityId: allowanceType._id,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send notification for allowance type activation toggle:",
+      err,
+    );
+  }
 
   return {
     status: "Success",
@@ -185,6 +224,25 @@ export const updateAllowanceType = async (
     details: allowanceType,
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who created the allowance type
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "ALLOWANCE_TYPE",
+      title: "Allowance Type updated",
+      message: `The allowance type "${result.data.name}" has been updated.`,
+      data: {
+        entityType: "AllowanceType",
+        entityId: result.data._id,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send notification for allowance type update:",
+      err,
+    );
+  }
 
   return result;
 };
