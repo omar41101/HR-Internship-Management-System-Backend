@@ -28,6 +28,7 @@ const notificationSchema = new mongoose.Schema(
         "PAYROLL",
         "EMPLOYEE_BONUS",
         "EMPLOYEE_ALLOWANCE",
+        "LEAVE_REQUEST",
       ],
       required: true,
     },

@@ -15,6 +15,9 @@ import {
 } from "../utils/cloudinaryHelper.js";
 import { logAuditAction } from "../utils/logger.js";
 import { getIO } from "../socket.js";
+import { createNotification } from "../services/notificationService.js";
+import { createNotificationForAdmins } from "../utils/notificationHelpers.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // --------------------------------------------------------- //
 // ------------------ HELPER FUNCTIONS --------------------- //
@@ -141,7 +144,7 @@ export const getAllLeaveRequests = async (req, res, next) => {
         totalPages: Math.ceil(total / limit),
         limitPerPage: limit,
         totalLeaveRequests: total,
-      }
+      },
     });
   } catch (err) {
     next(err);
@@ -183,7 +186,7 @@ export const getLeaveRequestById = async (req, res, next) => {
         errors.LEAVE_REQUEST_NOT_FOUND.message,
         errors.LEAVE_REQUEST_NOT_FOUND.code,
         errors.LEAVE_REQUEST_NOT_FOUND.errorCode,
-        errors.LEAVE_REQUEST_NOT_FOUND.suggestion
+        errors.LEAVE_REQUEST_NOT_FOUND.suggestion,
       );
     }
 
@@ -195,11 +198,12 @@ export const getLeaveRequestById = async (req, res, next) => {
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.message,
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.code,
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.errorCode,
-          errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion
+          errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion,
         );
       }
     } else if (userRole === "supervisor") {
-      const isOwnRequest = leaveRequest.employeeId._id.toString() === user.id.toString();
+      const isOwnRequest =
+        leaveRequest.employeeId._id.toString() === user.id.toString();
       const isAssignedToSupervisor =
         leaveRequest.supervisorId &&
         leaveRequest.supervisorId._id.toString() === user.id.toString();
@@ -209,7 +213,7 @@ export const getLeaveRequestById = async (req, res, next) => {
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.message,
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.code,
           errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.errorCode,
-          errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion
+          errors.UNAUTHORIZED_TO_VIEW_LEAVE_REQUEST.suggestion,
         );
       }
     } else if (userRole === "admin") {
@@ -219,7 +223,7 @@ export const getLeaveRequestById = async (req, res, next) => {
         tokenErrors.UNAUTHORIZED.message,
         tokenErrors.UNAUTHORIZED.code,
         tokenErrors.UNAUTHORIZED.errorCode,
-        tokenErrors.UNAUTHORIZED.suggestion
+        tokenErrors.UNAUTHORIZED.suggestion,
       );
     }
 
@@ -237,7 +241,6 @@ export const getLeaveRequestById = async (req, res, next) => {
 // Add a new leave request (Every authenticated user)
 export const addLeaveRequest = async (req, res, next) => {
   try {
-
     const user = req.user; // Get the user from the token
     const { typeId, startDate, endDate, reason } = req.body;
     let attachmentURL = "";
@@ -276,9 +279,7 @@ export const addLeaveRequest = async (req, res, next) => {
     }
 
     // Gender validation (In case of paternity/maternity leaves)
-    if (
-      (leaveType.gender !== "Both" && leaveType.gender !== dbUser.gender) 
-    ) {
+    if (leaveType.gender !== "Both" && leaveType.gender !== dbUser.gender) {
       throw new AppError(
         errors.INELIGIBLE_FOR_LEAVE_TYPE.message,
         errors.INELIGIBLE_FOR_LEAVE_TYPE.code,
@@ -335,8 +336,11 @@ export const addLeaveRequest = async (req, res, next) => {
     const duration = Math.floor((end - start) / (1000 * 60 * 60 * 24)) + 1;
 
     // Ensure that the duration does not exceed the leave type's max days
-    // Skip this check for "Unpaid" leave type as it should be unlimited
-    if (leaveType.name !== "Unpaid" && leaveType.maxDays && duration > leaveType.maxDays) {
+    if (
+      leaveType.name !== "Unpaid" &&
+      leaveType.maxDays &&
+      duration > leaveType.maxDays
+    ) {
       throw new AppError(
         `Maximum allowed days for ${leaveType.name} is ${leaveType.maxDays}`,
         errors.DURATION_EXCEEDS_ALLOWED.code,
@@ -362,7 +366,6 @@ export const addLeaveRequest = async (req, res, next) => {
     let status;
 
     if (userRole === "supervisor" || userRole === "admin") {
-      // Supervisors and admins bypass the supervisor approval step entirely
       status = "Pending Admin Approval";
       supervisorId = null;
     } else if (userRole === "employee" || userRole === "intern") {
@@ -399,11 +402,54 @@ export const addLeaveRequest = async (req, res, next) => {
       reviewedBy: null,
     });
 
-
     try {
       const io = getIO();
       io.emit("leaveRequestCreated", { leaveRequest: newLeaveRequest });
-    } catch (e) { console.error("[Socket] emit failed:", e); }
+    } catch (e) {
+      console.error("[Socket] emit failed:", e);
+    }
+
+    // Send a notification to all the admins about the new leave request
+    if (status === "Pending Admin Approval") {
+      try {
+        await createNotificationForAdmins({
+          type: "LEAVE_REQUEST",
+          title: "New Leave Request Submitted",
+          message: `${dbUser.name} ${dbUser.lastName} has submitted a new leave request.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: newLeaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send admin notification for new leave request:",
+          err,
+        );
+      }
+    } else if (
+      supervisorId !== null &&
+      status === "Pending Supervisor Approval"
+    ) {
+      // Send a notification to the supervisor about the new leave request
+      try {
+        await createNotification({
+          recipientId: supervisorId,
+          type: "LEAVE_REQUEST",
+          title: "New Leave Request Submitted",
+          message: `${dbUser.name} ${dbUser.lastName} has submitted a new leave request.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: newLeaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send supervisor notification for new leave request:",
+          err,
+        );
+      }
+    }
 
     res.status(201).json({
       status: "Success",
@@ -483,7 +529,7 @@ export const updateLeaveRequest = async (req, res, next) => {
         errors.INVALID_DATE_FORMAT.message,
         errors.INVALID_DATE_FORMAT.code,
         errors.INVALID_DATE_FORMAT.errorCode,
-        errors.INVALID_DATE_FORMAT.suggestion
+        errors.INVALID_DATE_FORMAT.suggestion,
       );
     }
 
@@ -492,7 +538,7 @@ export const updateLeaveRequest = async (req, res, next) => {
         errors.INVALID_DATE_FORMAT.message,
         errors.INVALID_DATE_FORMAT.code,
         errors.INVALID_DATE_FORMAT.errorCode,
-        errors.INVALID_DATE_FORMAT.suggestion
+        errors.INVALID_DATE_FORMAT.suggestion,
       );
     }
 
@@ -512,7 +558,7 @@ export const updateLeaveRequest = async (req, res, next) => {
         errors.OVERLAPPING_LEAVE_REQUEST.message,
         errors.OVERLAPPING_LEAVE_REQUEST.code,
         errors.OVERLAPPING_LEAVE_REQUEST.errorCode,
-        errors.OVERLAPPING_LEAVE_REQUEST.suggestion
+        errors.OVERLAPPING_LEAVE_REQUEST.suggestion,
       );
     }
 
@@ -582,7 +628,7 @@ export const cancelLeaveRequest = async (req, res, next) => {
         errors.LEAVE_REQUEST_NOT_FOUND.message,
         errors.LEAVE_REQUEST_NOT_FOUND.code,
         errors.LEAVE_REQUEST_NOT_FOUND.errorCode,
-        errors.LEAVE_REQUEST_NOT_FOUND.suggestion
+        errors.LEAVE_REQUEST_NOT_FOUND.suggestion,
       );
     }
 
@@ -592,7 +638,7 @@ export const cancelLeaveRequest = async (req, res, next) => {
         errors.UNAUTHORIZED_TO_CANCEL_LEAVE_REQUEST.message,
         errors.UNAUTHORIZED_TO_CANCEL_LEAVE_REQUEST.code,
         errors.UNAUTHORIZED_TO_CANCEL_LEAVE_REQUEST.errorCode,
-        errors.UNAUTHORIZED_TO_CANCEL_LEAVE_REQUEST.suggestion
+        errors.UNAUTHORIZED_TO_CANCEL_LEAVE_REQUEST.suggestion,
       );
     }
 
@@ -614,7 +660,7 @@ export const cancelLeaveRequest = async (req, res, next) => {
         tokenErrors.UNAUTHORIZED.message,
         tokenErrors.UNAUTHORIZED.code,
         tokenErrors.UNAUTHORIZED.errorCode,
-        tokenErrors.UNAUTHORIZED.suggestion
+        tokenErrors.UNAUTHORIZED.suggestion,
       );
     }
 
@@ -623,7 +669,7 @@ export const cancelLeaveRequest = async (req, res, next) => {
         errors.CANNOT_CANCEL_LEAVE_REQUEST.message,
         errors.CANNOT_CANCEL_LEAVE_REQUEST.code,
         errors.CANNOT_CANCEL_LEAVE_REQUEST.errorCode,
-        errors.CANNOT_CANCEL_LEAVE_REQUEST.suggestion
+        errors.CANNOT_CANCEL_LEAVE_REQUEST.suggestion,
       );
     }
 
@@ -661,7 +707,9 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
         supervisorId: user.id,
-        status: { $in: ["Pending Supervisor Approval", "Under Supervisor Review"] },
+        status: {
+          $in: ["Pending Supervisor Approval", "Under Supervisor Review"],
+        },
       });
 
       if (!leaveRequest) {
@@ -682,14 +730,37 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
       try {
         const io = getIO();
         io.emit("leaveRequestUpdated", { leaveRequest });
-      } catch (e) { console.error("[Socket] emit failed:", e); }
+      } catch (e) {
+        console.error("[Socket] emit failed:", e);
+      }
+
+      // Send a notification to the user that their leave request is now under review by supervisor
+      const employee = await User.findById(leaveRequest.employeeId);
+
+      try {
+        await createNotification({
+          recipientId: employee._id,
+          type: "LEAVE_REQUEST",
+          title: "Leave Request Under Supervisor Review",
+          message: `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} is now under supervisor review.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: leaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send user notification for new leave request under review:",
+          err,
+        );
+      }
     }
 
     // ADMIN FLOW
     else if (userRole === "admin") {
       // Admins can take over ANY request that is not yet Approved/Rejected.
       // They can take over from Pending Supervisor, Under Supervisor, or Pending Admin.
-      
+
       // First, check if it's already under review by THIS admin
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
@@ -703,14 +774,14 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
         leaveRequest = await LeaveRequest.findOneAndUpdate(
           {
             _id: id,
-            status: { 
+            status: {
               $in: [
-                "Pending Supervisor Approval", 
-                "Under Supervisor Review", 
+                "Pending Supervisor Approval",
+                "Under Supervisor Review",
                 "Pending Admin Approval",
-                "Under Admin Review" // Allow taking over from another admin if needed
-              ] 
-            }
+                "Under Admin Review", // Allow taking over from another admin if needed
+              ],
+            },
           },
           {
             status: "Under Admin Review",
@@ -726,14 +797,16 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
           errors.LEAVE_REQUEST_NOT_FOUND.message,
           errors.LEAVE_REQUEST_NOT_FOUND.code,
           errors.LEAVE_REQUEST_NOT_FOUND.errorCode,
-          errors.LEAVE_REQUEST_NOT_FOUND.suggestion
+          errors.LEAVE_REQUEST_NOT_FOUND.suggestion,
         );
       }
 
       try {
         const io = getIO();
         io.emit("leaveRequestUpdated", { leaveRequest });
-      } catch (e) { console.error("[Socket] emit failed:", e); }
+      } catch (e) {
+        console.error("[Socket] emit failed:", e);
+      }
 
       // Log the action
       const employee = await User.findById(leaveRequest.employeeId);
@@ -754,6 +827,25 @@ export const markLeaveRequestUnderReview = async (req, res, next) => {
         },
         ipAddress: req.ip,
       });
+
+      // Send a notification to the user that their leave request is now under review by admin
+      try {
+        await createNotification({
+          recipientId: employee._id,
+          type: "LEAVE_REQUEST",
+          title: "Leave Request Under Admin Review",
+          message: `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} is now under admin review.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: leaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send user notification for new leave request under review:",
+          err,
+        );
+      }
     } else {
       throw new AppError(
         tokenErrors.UNAUTHORIZED.message,
@@ -811,6 +903,18 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
         );
       }
 
+      // Get employee before updating
+      const employee = await User.findById(leaveRequest.employeeId);
+      if (!employee) {
+        throw new AppError(
+          commonErrors.USER_NOT_FOUND.message,
+          commonErrors.USER_NOT_FOUND.code,
+          commonErrors.USER_NOT_FOUND.errorCode,
+          commonErrors.USER_NOT_FOUND.suggestion,
+        );
+      }
+
+      // Update status
       leaveRequest.status =
         action === "approve"
           ? "Pending Admin Approval"
@@ -819,10 +923,38 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       leaveRequest.comments = comments || leaveRequest.comments;
       await leaveRequest.save();
 
+      // Notify the employee about the supervisor's decision
+      try {
+        await createNotification({
+          recipientId: employee._id,
+          type: "LEAVE_REQUEST",
+          title:
+            action === "approve"
+              ? "Leave Request Approved by Supervisor"
+              : "Leave Request Rejected by Supervisor",
+          message:
+            action === "approve"
+              ? `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} has been approved initially by your supervisor and is now awaiting HR approval.`
+              : `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} has been rejected by your supervisor.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: leaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to create supervisor leave request notification:",
+          err,
+        );
+      }
+
+      // Real-time update
       try {
         const io = getIO();
         io.emit("leaveRequestUpdated", { leaveRequest });
-      } catch (e) { console.error("[Socket] emit failed:", e); }
+      } catch (e) {
+        console.error("[Socket] emit failed:", e);
+      }
     }
 
     // ADMIN WORKFLOW
@@ -830,7 +962,6 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
       leaveRequest = await LeaveRequest.findOne({
         _id: id,
         status: "Under Admin Review",
-        reviewedBy: user.id,
       });
 
       if (!leaveRequest) {
@@ -842,7 +973,10 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
         );
       }
 
-      // Fetch employee & leave type BEFORE updating
+      // Record the admin who reviewed it
+      leaveRequest.reviewedBy = user.id;
+
+      // Fetch employee & leave type
       const employee = await User.findById(leaveRequest.employeeId);
       const leaveType = await LeaveType.findById(leaveRequest.typeId);
 
@@ -864,10 +998,9 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
         );
       }
 
-      // APPROVE LOGIC
+      // APPROVE
       if (action === "approve") {
-        // Only deduct if required AND it's not "Unpaid" leave (which is unlimited)
-        if (leaveType.deductFrom !== "none" && leaveType.name !== "Unpaid"){
+        if (leaveType.deductFrom !== "none" && leaveType.name !== "Unpaid") {
           const balance = employee.leaveBalances.find(
             (b) => b.typeId.toString() === leaveType._id.toString(),
           );
@@ -897,7 +1030,7 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
         leaveRequest.status = "Approved";
       }
 
-      // REJECT LOGIC
+      // The reject case
       else {
         leaveRequest.status = "Rejected by Admin";
       }
@@ -907,13 +1040,40 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
 
       await leaveRequest.save();
 
-      // Emit real-time update so the employee's KPI cards refresh immediately
+      // Notify employee
+      try {
+        await createNotification({
+          recipientId: employee._id,
+          type: "LEAVE_REQUEST",
+          title:
+            action === "approve"
+              ? "Leave Request Approved"
+              : "Leave Request Rejected",
+          message:
+            action === "approve"
+              ? `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} has been approved by HR.`
+              : `Your leave request from ${leaveRequest.startDate.toDateString()} to ${leaveRequest.endDate.toDateString()} has been rejected by HR.`,
+          data: {
+            entityType: "LEAVE_REQUEST",
+            entityId: leaveRequest._id,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to create admin leave request notification:",
+          err,
+        );
+      }
+
+      // Real-time update
       try {
         const io = getIO();
         io.emit("leaveRequestUpdated", { leaveRequest });
-      } catch (e) { console.error("[Socket] emit failed:", e); }
+      } catch (e) {
+        console.error("[Socket] emit failed:", e);
+      }
 
-      // AUDIT LOG
+      // Audit log
       await logAuditAction({
         adminId: user.id,
         action:
@@ -932,7 +1092,8 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
         },
         ipAddress: req.ip,
       });
-    } else {
+    }
+    else {
       throw new AppError(
         tokenErrors.UNAUTHORIZED.message,
         tokenErrors.UNAUTHORIZED.code,
@@ -944,7 +1105,9 @@ export const approveOrRejectLeaveRequest = async (req, res, next) => {
     res.status(200).json({
       status: "Success",
       code: 200,
-      message: `Leave request ${action}d successfully!`,
+      message: `Leave request ${
+        action === "approve" ? "approved" : "rejected"
+      } successfully!`,
       data: leaveRequest,
     });
   } catch (err) {
