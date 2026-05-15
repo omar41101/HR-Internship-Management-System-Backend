@@ -194,20 +194,37 @@ export const getPersonalDocumentsService = async ({
   return getDocumentsCore(finalQuery);
 };
 
-// Toggle the personal document confidentiality: STILL NOT TESTED
-export const toggleConfidentialityService = async ({ documentId }) => {
+// Toggle the personal document confidentiality (Owner or Admin only)
+export const toggleConfidentialityService = async ({ documentId, requester }) => {
   // Validate the document existence and type
   const document = await getValidPersonalDocument(documentId);
 
-  // Toggle the confidentiality status
-  document.isConfidential = !document.isConfidential;
-  await document.save();
+  // Ownership check: only the document's owner or an Admin can toggle
+  const isOwner = requester.id === document.user_id.toString();
+  const isAdmin = requester.role === "Admin";
+
+  if (!isOwner && !isAdmin) {
+    throw new AppError(
+      "You are not authorized to change the confidentiality of this document.",
+      403,
+      "UNAUTHORIZED",
+      "Only the document owner or an admin can toggle its confidentiality.",
+    );
+  }
+
+  // Use findByIdAndUpdate to flip just the one field — avoids re-running
+  // full Mongoose schema validation on the rest of the document's fields.
+  const updated = await Document.findByIdAndUpdate(
+    documentId,
+    { $set: { isConfidential: !document.isConfidential } },
+    { new: true, runValidators: false },
+  );
 
   return {
     status: "Success",
     code: 200,
-    message: "Personal document confidentiality toggled successfully!",
-    data: document,
+    message: `Document marked as ${updated.isConfidential ? "confidential" : "public"}.`,
+    data: updated,
   };
 };
 

@@ -87,7 +87,7 @@ const router = express.Router();
 router.post(
   "/documents/personal-doc/:id", // :id = Target user's ID
   authenticate,
-  authorize(["Admin"], { allowSelf: true }),
+  
   upload("doc").single("personalDocument"),
   uploadPersonalDocument,
 );
@@ -128,7 +128,7 @@ router.post(
 router.delete(
   "/documents/personal-doc/:id", // :id = Document's ID
   authenticate,
-  authorize(["Admin"], { allowSelf: true }),
+  
   deletePersonalDocument,
 );
 
@@ -317,7 +317,7 @@ router.get(
 router.put(
   "/documents/personal-doc/toggle-confidentiality/:id", // :id = Document's ID
   authenticate,
-  authorize(["Admin"], { allowSelf: true }),
+  
   toggleConfidentiality,
 );
 

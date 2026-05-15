@@ -214,6 +214,8 @@ export const getAllProjects = async (req) => {
         status: 1,
         startDate: 1,
         dueDate: 1,
+        slug: 1,
+        publicId: 1,
         productOwner: {
           _id: "$productOwner._id",
           name: "$productOwner.name",

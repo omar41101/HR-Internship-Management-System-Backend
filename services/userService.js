@@ -947,18 +947,10 @@ export const enrollFaceService = async (userId, descriptors) => {
     );
   }
 
-  const result = await User.updateOne(
-    { _id: userId },
-    {
-      $set: {
-        faceDescriptors: descriptors,
-        faceEnrolled: true,
-        faceEnrollmentPromptRequired: false,
-      },
-    },
-  );
-
-  if (result.matchedCount === 0) {
+  // Find the user first to avoid strict Mongoose cast errors on slugs
+  const user = await User.findOne(resolveId(userId));
+  
+  if (!user) {
     throw new AppError(
       commonErrors.USER_NOT_FOUND.message,
       commonErrors.USER_NOT_FOUND.code,
@@ -967,10 +959,18 @@ export const enrollFaceService = async (userId, descriptors) => {
     );
   }
 
+  user.faceDescriptors = descriptors;
+  user.faceEnrolled = true;
+  user.faceEnrollmentPromptRequired = false;
+  
+  await user.save();
+
+
   return {
     status: "Success",
     code: 200,
-    message: "Face Id enrolled successfully!",
+    message: "Face ID enrolled successfully!",
+    data: user,
   };
 };
 

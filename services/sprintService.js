@@ -15,6 +15,7 @@ import {
   upsertSprintReviewMeeting 
 } from "../utils/sprintHelpers.js";
 import { isEmpty } from "../validators/userValidators.js";
+import { resolveId } from "../utils/idResolver.js";
 
 // Get all sprints of a project
 export const getAllSprintsOfProject = async (queryParams) => {
@@ -22,7 +23,7 @@ export const getAllSprintsOfProject = async (queryParams) => {
   const { role, id: userId } = user;
 
   // Check the project existence
-  const project = await Project.findById(projectId);
+  const project = await Project.findOne(resolveId(projectId));
   if (!project) {
     throw new AppError(
       projectErrors.PROJECT_NOT_FOUND.message,
@@ -37,6 +38,7 @@ export const getAllSprintsOfProject = async (queryParams) => {
 
   // Filter the user token from the query parameters
   delete queryParams.user;
+  queryParams.projectId = project._id;
 
   return await getAll(
     Sprint,
