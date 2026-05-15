@@ -4,6 +4,7 @@ import * as internService from "../services/internService.js";
 import { transformUserFilters } from "../utils/userQueryTransformer.js";
 import { resolveRoleId } from "../utils/userResolvers.js";
 
+
 // Get User by ID
 export const getUserById = async (req, res, next) => {
   try {
