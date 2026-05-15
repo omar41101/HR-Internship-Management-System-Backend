@@ -15,6 +15,9 @@ import {
   deleteFromCloudinary,
 } from "../utils/cloudinaryHelper.js";
 import { logAuditAction } from "../utils/logger.js"; // For the admin audit logs
+import { createNotification } from "./notificationService.js";
+import { createNotificationForAdmins } from "../utils/notificationHelpers.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Create a new alert
 export const createAlert = async (payload, currentUser, file) => {
@@ -108,6 +111,40 @@ export const createAlert = async (payload, currentUser, file) => {
   };
 
   const result = await createOne(Alert)(alertData);
+
+  if (result.data.recipientType === "SUPERVISOR") {
+    // Send a notification to the employee about the clarification request
+    try {
+      await createNotification({
+        recipientId: recipientId,
+        type: "ALERT",
+        title: "New alert submitted",
+        message: `${sender.name} ${sender.lastName} has submitted an alert.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to send notification for the alert creation:", err);
+    }
+  } else if (result.data.recipientType === "HR_DEPARTMENT") {
+    // Send a notification for all admins about the alert creation
+    try {
+      await createNotificationForAdmins({
+        type: "ALERT",
+        title: "New alert submitted",
+        message: `${sender.name} ${sender.lastName} has submitted an alert.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to send notification for the alert creation:", err);
+    }
+  }
+
   return result;
 };
 
@@ -306,8 +343,11 @@ export const deleteAlert = async (alertId, user) => {
     );
   }
 
+  // Get the sender information for the notification after deletion
+  const sender = await User.findById(alert.senderId);
+
   // Only the sender can delete
-  if (alert.senderId.toString() !== user.id.toString()) {
+  if (sender._id.toString() !== user.id.toString()) {
     throw new AppError(
       "You are not allowed to delete this alert.",
       errors.FORBIDDEN_ACTION.code,
@@ -332,6 +372,21 @@ export const deleteAlert = async (alertId, user) => {
   }
 
   await Alert.findByIdAndDelete(alertId);
+
+  // Send a notification for all admins about the alert deletion
+  try {
+    await createNotificationForAdmins({
+      type: "ALERT",
+      title: "Alert deleted",
+      message: `${sender.name} ${sender.lastName} has deleted an alert.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for the alert deletion:", err);
+  }
 
   return {
     status: "Success",
@@ -438,6 +493,22 @@ export const markAlertUnderReview = async (alertId, currentUser, ip) => {
     }
   }
 
+  // Send a notification to the user about the alert being under review
+  try {
+    await createNotification({
+      recipientId: alert.senderId._id,
+      type: "ALERT",
+      title: "Alert under review",
+      message: `Your alert: "${alert.subject}" has been marked as under review.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for the alert creation:", err);
+  }
+
   return {
     status: "Success",
     code: 200,
@@ -508,6 +579,22 @@ export const resolveAlert = async (
     }
   }
 
+  // Send a notification to the user about the alert being resolved
+  try {
+    await createNotification({
+      recipientId: alert.senderId._id,
+      type: "ALERT",
+      title: "Alert Resolved",
+      message: `Your alert: "${alert.subject}" has been resolved.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for the alert resolution:", err);
+  }
+
   return {
     status: "Success",
     code: 200,
@@ -519,7 +606,10 @@ export const resolveAlert = async (
 // Dismiss an alert
 export const dismissAlert = async (alertId, payload, currentUser, ip) => {
   // Check alert existence
-  const alert = await Alert.findById(alertId).populate("senderId", "name lastName");
+  const alert = await Alert.findById(alertId).populate(
+    "senderId",
+    "name lastName",
+  );
   if (!alert) {
     throw new AppError(
       errors.ALERT_NOT_FOUND.message,
@@ -550,8 +640,7 @@ export const dismissAlert = async (alertId, payload, currentUser, ip) => {
       errors.MISSING_RESOLUTION_NOTE.errorCode,
       errors.MISSING_RESOLUTION_NOTE.suggestion,
     );
-  }
-  else if (payload.resolutionNote) {
+  } else if (payload.resolutionNote) {
     validateDescLength(payload.resolutionNote, 400);
     alert.resolutionNote = payload.resolutionNote;
   }
@@ -575,6 +664,22 @@ export const dismissAlert = async (alertId, payload, currentUser, ip) => {
     } catch (err) {
       console.log("[AUDIT-LOG-ERROR]", err.message);
     }
+  }
+
+  // Send a notification to the user about the alert being dismissed
+  try {
+    await createNotification({
+      recipientId: alert.senderId._id,
+      type: "ALERT",
+      title: "Alert Dismissed",
+      message: `Your alert: "${alert.subject}" has been dismissed.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for the alert dismissal:", err);
   }
 
   return {
