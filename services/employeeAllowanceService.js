@@ -10,6 +10,8 @@ import { validateDefaultAmount } from "../validators/allowanceTypeValidators.js"
 import { parseDate } from "../utils/timeHelpers.js";
 import { logAuditAction } from "../utils/logger.js";
 import { validateEffectiveDates } from "../validators/employeeAllowanceValidators.js";
+import { createNotification } from "../services/notificationService.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Assign an allowance to an employee
 export const assignAllowanceToEmployee = async (payload, ip, currentUser) => {
@@ -117,16 +119,51 @@ export const assignAllowanceToEmployee = async (payload, ip, currentUser) => {
     ipAddress: ip,
   });
 
+  // Send notification to the employee about the assigned allowance
+  try {
+    await createNotification({
+      recipientId: user._id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: "Allowance Assigned",
+      message: `An allowance has been assigned to you. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for assigned allowance:", err);
+  }
+
+  // Notify all admins except the one who assigned the allowance
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: currentUser.id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: "Allowance Assigned",
+      message: `An allowance has been assigned to ${user.name} ${user.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send admin notification for assigned allowance:",
+      err,
+    );
+  }
+
   return result;
 };
 
 // Toggle an employee's allowance active/inactive
 export const toggleEmployeeAllowanceActivation = async (id, ip, user) => {
   // Check the employee allowance existence
-  const allowance = await EmployeeAllowance.findById(id).populate(
-    "userId",
-    "name lastName",
-  );
+  const allowance = await EmployeeAllowance.findById(id)
+    .populate("userId", "name lastName")
+    .populate("allowanceTypeId", "name");
+
   if (!allowance) {
     throw new AppError(
       errors.ALLOWANCE_NOT_FOUND.message,
@@ -159,6 +196,41 @@ export const toggleEmployeeAllowanceActivation = async (id, ip, user) => {
     ipAddress: ip,
   });
 
+  // Send notification to the employee about the toggled allowance
+  try {
+    await createNotification({
+      recipientId: employee._id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: `Allowance ${allowance.isActive ? "Activated" : "Deactivated"}`,
+      message: `The "${allowance.allowanceTypeId.name}" allowance has been ${allowance.isActive ? "activated" : "deactivated"}. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for toggled allowance:", err);
+  }
+
+  // Notify all admins except the one who assigned the allowance
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: `Allowance ${allowance.isActive ? "Activated" : "Deactivated"}`,
+      message: `The "${allowance.allowanceTypeId.name}" allowance has been ${allowance.isActive ? "activated" : "deactivated"} for ${employee.name} ${employee.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send admin notification for toggled allowance:",
+      err,
+    );
+  }
+
   return {
     status: "Success",
     code: 200,
@@ -185,7 +257,10 @@ export const getAllEmployeeAllowances = async (queryParams) => {
 // Update an employee's allowance
 export const updateEmployeeAllowance = async (id, payload, ip, user) => {
   // Check the employee allowance existence
-  const allowance = await EmployeeAllowance.findById(id);
+  const allowance = await EmployeeAllowance.findById(id).populate(
+    "allowanceTypeId",
+    "name",
+  );
   if (!allowance) {
     throw new AppError(
       errors.ALLOWANCE_NOT_FOUND.message,
@@ -234,6 +309,41 @@ export const updateEmployeeAllowance = async (id, payload, ip, user) => {
     details: allowance,
     ipAddress: ip,
   });
+
+  // Send notification to the employee about the updated allowance
+  try {
+    await createNotification({
+      recipientId: employee._id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: "Allowance Updated",
+      message: `The "${allowance.allowanceTypeId.name}" allowance has been updated. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for updated allowance:", err);
+  }
+
+  // Notify all admins except the one who assigned the allowance
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "EMPLOYEE_ALLOWANCE",
+      title: "Allowance Updated",
+      message: `The "${allowance.allowanceTypeId.name}" allowance has been updated for ${employee.name} ${employee.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send admin notification for updated allowance:",
+      err,
+    );
+  }
 
   return {
     status: "Success",

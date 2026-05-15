@@ -11,11 +11,12 @@ import { validateDefaultAmount } from "../validators/allowanceTypeValidators.js"
 import { parseDate } from "../utils/timeHelpers.js";
 import { logAuditAction } from "../utils/logger.js";
 import { validateEffectiveDates } from "../validators/employeeAllowanceValidators.js";
+import { createNotification } from "../services/notificationService.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Assign a bonus to an employee
 export const assignBonusToEmployee = async (payload, ip, currentUser) => {
-  const { userId, bonusTypeId, amount, effectiveFrom, effectiveTo } =
-    payload;
+  const { userId, bonusTypeId, amount, effectiveFrom, effectiveTo } = payload;
 
   // Validate required fields
   if (!userId || !bonusTypeId || !effectiveFrom) {
@@ -94,8 +95,7 @@ export const assignBonusToEmployee = async (payload, ip, currentUser) => {
     validateDefaultAmount(amount);
   }
 
-  const finalAmount =
-    amount !== undefined ? amount : bonusType.defaultAmount;
+  const finalAmount = amount !== undefined ? amount : bonusType.defaultAmount;
 
   const result = await createOne(EmployeeBonus)({
     userId,
@@ -118,16 +118,48 @@ export const assignBonusToEmployee = async (payload, ip, currentUser) => {
     ipAddress: ip,
   });
 
+  // Send notification to the employee about the assigned bonus
+  try {
+    await createNotification({
+      recipientId: user._id,
+      type: "EMPLOYEE_BONUS",
+      title: "Bonus Assigned",
+      message: `A bonus has been assigned to you. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for assigned bonus:", err);
+  }
+
+  // Notify all admins except the one who assigned the bonus
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: currentUser.id,
+      type: "EMPLOYEE_BONUS",
+      title: "Bonus Assigned",
+      message: `A bonus has been assigned to ${user.name} ${user.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send admin notification for assigned bonus:", err);
+  }
+
   return result;
 };
 
 // Toggle an employee's bonus active/inactive
 export const toggleEmployeeBonusActivation = async (id, ip, user) => {
   // Check the employee bonus existence
-  const bonus = await EmployeeBonus.findById(id).populate(
-    "userId",
-    "name lastName",
-  );
+  const bonus = await EmployeeBonus.findById(id)
+  .populate("userId", "name lastName")
+  .populate("bonusTypeId", "name");
+  
   if (!bonus) {
     throw new AppError(
       errors.BONUS_NOT_FOUND.message,
@@ -160,6 +192,38 @@ export const toggleEmployeeBonusActivation = async (id, ip, user) => {
     ipAddress: ip,
   });
 
+  // Send notification to the employee about the toggled bonus
+  try {
+    await createNotification({
+      recipientId: employee._id,
+      type: "EMPLOYEE_BONUS",
+      title: `Bonus ${bonus.isActive ? "Activated" : "Deactivated"}`,
+      message: `The "${bonus.bonusTypeId.name}" bonus has been ${bonus.isActive ? "activated" : "deactivated"}. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for toggled bonus:", err);
+  }
+
+  // Notify all admins except the one who assigned the bonus
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "EMPLOYEE_BONUS",
+      title: `Bonus ${bonus.isActive ? "Activated" : "Deactivated"}`,
+      message: `The "${bonus.bonusTypeId.name}" bonus has been ${bonus.isActive ? "activated" : "deactivated"} for ${employee.name} ${employee.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send admin notification for toggled bonus:", err);
+  }
+
   return {
     status: "Success",
     code: 200,
@@ -186,7 +250,7 @@ export const getAllEmployeeBonuses = async (queryParams) => {
 // Update an employee's bonus
 export const updateEmployeeBonus = async (id, payload, ip, user) => {
   // Check the employee bonus existence
-  const bonus = await EmployeeBonus.findById(id);
+  const bonus = await EmployeeBonus.findById(id).populate("bonusTypeId", "name");
   if (!bonus) {
     throw new AppError(
       errors.BONUS_NOT_FOUND.message,
@@ -219,11 +283,7 @@ export const updateEmployeeBonus = async (id, payload, ip, user) => {
   }
 
   await bonus.save();
-  await markPayrollDirty(
-    bonus.userId,
-    bonus.effectiveFrom,
-    "Bonus Updated",
-  );
+  await markPayrollDirty(bonus.userId, bonus.effectiveFrom, "Bonus Updated");
 
   // Create the audit log for this action
   await logAuditAction({
@@ -235,6 +295,38 @@ export const updateEmployeeBonus = async (id, payload, ip, user) => {
     details: bonus,
     ipAddress: ip,
   });
+
+  // Send notification to the employee about the updated bonus
+  try {
+    await createNotification({
+      recipientId: employee._id,
+      type: "EMPLOYEE_BONUS",
+      title: "Bonus Updated",
+      message: `The "${bonus.bonusTypeId.name}" bonus has been updated. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for updated bonus:", err);
+  }
+
+  // Notify all admins except the one who assigned the bonus
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "EMPLOYEE_BONUS",
+      title: "Bonus Updated",
+      message: `The "${bonus.bonusTypeId.name}" bonus has been updated for ${employee.name} ${employee.lastName}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send admin notification for updated bonus:", err);
+  }
 
   return {
     status: "Success",

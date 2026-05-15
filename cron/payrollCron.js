@@ -33,11 +33,9 @@ cron.schedule("10 0 1 * *", async () => {
     for (const user of users) {
       try {
         // Compute payroll snapshot
-        const computed = await calculatePayroll(
-          user._id,
-          month,
-          year,
-        );
+        const computed = await calculatePayroll(user._id, month, year);
+
+        // I'll See how to send a notif here later, for now just log the payroll creation
 
         console.log(`[CRON] Payroll created for ${user.name} ${user.lastName}`);
       } catch (err) {

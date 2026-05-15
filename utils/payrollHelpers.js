@@ -803,8 +803,8 @@ export const computePayroll = async (user, month, year, config) => {
   const netSalary = round(grossSalary - totalDeductions + nonTaxableAllowances);
 
   return {
-    baseSalary,
-    hourlyRate,
+    baseSalary: round(baseSalary),
+    hourlyRate: round(hourlyRate),
     workedDays,
 
     earnings: {

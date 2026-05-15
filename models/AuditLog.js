@@ -62,6 +62,7 @@ const auditLogSchema = mongoose.Schema(
         "MARK_ALERT_UNDER_REVIEW",
         "RESOLVE_ALERT",
         "DISMISS_ALERT",
+        "BULK_CALCULATE_PAYROLL",
       ],
     },
     target_type: {
@@ -87,7 +88,9 @@ const auditLogSchema = mongoose.Schema(
     },
     target_id: {
       type: mongoose.Schema.Types.ObjectId,
-      required: true,
+      required: function () {
+        return this.action !== "BULK_CALCULATE_PAYROLL";
+      },
     },
     target_name: {
       type: String, // Storing name for quick reference even if target is deleted

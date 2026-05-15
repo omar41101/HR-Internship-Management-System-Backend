@@ -28,6 +28,8 @@ import { getOne, getAll } from "./handlersFactory.js";
 import { logAuditAction } from "../utils/logger.js";
 import { generateDocumentService } from "./documentService.js";
 import { validateUserStatus } from "../validators/authValidators.js";
+import { createNotification } from "../services/notificationService.js";
+import { createNotificationForAdminsExcept } from "../utils/notificationHelpers.js";
 
 // Payroll calculation for an employee for a given month and year
 export const calculatePayroll = async (employeeId, month, year) => {
@@ -84,7 +86,7 @@ export const calculatePayroll = async (employeeId, month, year) => {
       irpp: configDoc.irpp,
       payroll: {
         standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
-      }
+      },
     },
 
     status: "draft",
@@ -122,7 +124,20 @@ export const getAllPayrolls = getAll(Payroll, {
 
 // Get monthly net payout trend for the last 6 months
 export const getPayrollTrend = async () => {
-  const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const MONTH_NAMES = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const now = new Date();
 
   // Build the last 6 months (inclusive of current)
@@ -142,7 +157,7 @@ export const getPayrollTrend = async () => {
         month: MONTH_NAMES[month - 1],
         netPayout: result[0]?.netPayout ?? 0,
       };
-    })
+    }),
   );
 
   return { status: "Success", code: 200, data: trend };
@@ -152,7 +167,7 @@ export const getPayrollTrend = async () => {
 export const getPayrollByDepartment = async (queryParams) => {
   const now = new Date();
   const month = parseInt(queryParams?.month) || now.getMonth() + 1;
-  const year  = parseInt(queryParams?.year)  || now.getFullYear();
+  const year = parseInt(queryParams?.year) || now.getFullYear();
 
   const result = await Payroll.aggregate([
     { $match: { month, year } },
@@ -286,6 +301,41 @@ export const validatePayroll = async (payrollId, user, ip) => {
       ipAddress: ip,
     });
 
+    // Send notification to the employee about the validated payroll
+    try {
+      await createNotification({
+        recipientId: employee._id,
+        type: "PAYROLL",
+        title: "Payroll Validated",
+        message: `Your ${payroll.month}/${payroll.year} payroll has been validated. Check the payroll section for details.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to send notification for validated payroll:", err);
+    }
+
+    // Notify all admins except the one who validated the payroll
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: user.id,
+        type: "PAYROLL",
+        title: "Payroll Validated",
+        message: `The ${employee.name} ${employee.lastName} ${payroll.month}/${payroll.year}'s payroll has been validated.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send admin notification for validated payroll:",
+        err,
+      );
+    }
+
     return {
       status: "Success",
       code: 200,
@@ -357,6 +407,44 @@ export const markPayrollAsPaid = async (payrollId, user, ip) => {
       ipAddress: ip,
     });
 
+    // Send notification to the employee about the paid payroll
+    try {
+      await createNotification({
+        recipientId: employee._id,
+        type: "PAYROLL",
+        title: "Payroll Marked as Paid",
+        message: `Your ${payroll.month}/${payroll.year} payroll has been marked as paid. Check the payroll section for details.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for marked as paid payroll:",
+        err,
+      );
+    }
+
+    // Notify all admins except the one who validated the payroll
+    try {
+      await createNotificationForAdminsExcept({
+        excludedUserId: user.id,
+        type: "PAYROLL",
+        title: "Payroll Marked as Paid",
+        message: `The ${employee.name} ${employee.lastName} ${payroll.month}/${payroll.year}'s payroll has been marked as paid.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send admin notification for marked as paid payroll:",
+        err,
+      );
+    }
+
     return {
       status: "Success",
       code: 200,
@@ -408,7 +496,7 @@ export const recomputePayroll = async (payrollId, user, ip) => {
   // Reset flags after recompute
   payroll.recalculationRequired = false;
   payroll.recalculationReason =
-  payroll.recalculationReason || "Manual recompute";
+    payroll.recalculationReason || "Manual recompute";
   payroll.recomputedAt = new Date();
   payroll.recomputedBy = user.id;
 
@@ -424,6 +512,41 @@ export const recomputePayroll = async (payrollId, user, ip) => {
     details: payroll,
     ipAddress: ip,
   });
+
+  // Send notification to the employee about the recomputed payroll
+  try {
+    await createNotification({
+      recipientId: employee._id,
+      type: "PAYROLL",
+      title: "Payroll Recomputed",
+      message: `Your ${payroll.month}/${payroll.year} payroll has been recomputed. Check the payroll section for details.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error("Failed to send notification for recomputed payroll:", err);
+  }
+
+  // Notify all admins except the one who validated the payroll
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "PAYROLL",
+      title: "Payroll Recomputed",
+      message: `The ${employee.name} ${employee.lastName} ${payroll.month}/${payroll.year}'s payroll has been recomputed.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send admin notification for recomputed payroll:",
+      err,
+    );
+  }
 
   return {
     status: "Success",
@@ -474,7 +597,7 @@ export const exportPayrollToExcel = async (payrollId, currentUser, res) => {
 
 // Bulk calculation for all eligible employees for a given month and year
 export const calculateBulkPayroll = async (month, year, user, ip) => {
-  // 1. Get the active config for the year
+  // Get the active payroll config for the year
   const configDoc = await PayrollConfig.findOne({ year, isActive: true });
   if (!configDoc) {
     throw new AppError(
@@ -485,26 +608,29 @@ export const calculateBulkPayroll = async (month, year, user, ip) => {
     );
   }
 
-  // 2. Find all active employees who are NOT interns
-  // We identify interns by role name "Intern"
+  // Find all active employees who are NOT interns
   const roles = await UserRole.find({ name: { $nin: ["Intern", "intern"] } });
-  const roleIds = roles.map(r => r._id);
+  const roleIds = roles.map((r) => r._id);
 
   const users = await User.find({
     status: "Active",
-    role_id: { $in: roleIds }
+    role_id: { $in: roleIds },
   });
 
   const results = {
     created: 0,
     skipped: 0,
-    errors: 0
+    errors: 0,
   };
 
   for (const employee of users) {
     try {
-      // Check if payroll already exists
-      const existing = await Payroll.findOne({ employeeId: employee._id, month, year });
+      // Check if the payroll already exists
+      const existing = await Payroll.findOne({
+        employeeId: employee._id,
+        month,
+        year,
+      });
       if (existing) {
         results.skipped++;
         continue;
@@ -514,7 +640,7 @@ export const calculateBulkPayroll = async (month, year, user, ip) => {
       const computed = await computePayroll(employee, month, year, configDoc);
 
       // Create payroll
-      await Payroll.create({
+      const payroll = await Payroll.create({
         employeeId: employee._id,
         month,
         year,
@@ -526,11 +652,31 @@ export const calculateBulkPayroll = async (month, year, user, ip) => {
           irpp: configDoc.irpp,
           payroll: {
             standardMonthlyHours: configDoc.payroll.standardMonthlyHours,
-          }
+          },
         },
         status: "draft",
       });
+
       results.created++;
+
+      // Send notification to the employee about the new payroll
+      try {
+        await createNotification({
+          recipientId: employee._id,
+          type: "PAYROLL",
+          title: "New Payroll Generated",
+          message: `Your ${payroll.month}/${payroll.year} payroll has been generated. Check the payroll section for details.`,
+          data: {
+            entityType: null,
+            entityId: null,
+          },
+        });
+      } catch (err) {
+        console.error(
+          "Failed to send notification for new payroll generation:",
+          err,
+        );
+      }
     } catch (err) {
       console.error(`Error calculating payroll for ${employee.name}:`, err);
       results.errors++;
@@ -542,9 +688,37 @@ export const calculateBulkPayroll = async (month, year, user, ip) => {
     adminId: user.id,
     action: "BULK_CALCULATE_PAYROLL",
     targetType: "Payroll",
-    details: { month, year, results },
+    targetId: null,
+    details: {
+      month,
+      year,
+      results,
+      affectedEmployees: users.map((u) => ({
+        employeeId: u._id,
+        name: `${u.name} ${u.lastName}`,
+      })),
+    },
     ipAddress: ip,
   });
+
+  // Notify all admins except the one who bulk calculated payrolls
+  try {
+    await createNotificationForAdminsExcept({
+      excludedUserId: user.id,
+      type: "PAYROLL",
+      title: "Payroll Generation Completed",
+      message: `Payroll calculations ${month}/${year} completed for ${results.created} employee${results.created !== 1 ? "s" : ""}.`,
+      data: {
+        entityType: null,
+        entityId: null,
+      },
+    });
+  } catch (err) {
+    console.error(
+      "Failed to send admin notification for bulk payroll calculation:",
+      err,
+    );
+  }
 
   return {
     status: "Success",
