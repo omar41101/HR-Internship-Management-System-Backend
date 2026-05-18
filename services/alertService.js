@@ -485,7 +485,7 @@ export const markAlertUnderReview = async (alertId, currentUser, ip) => {
         action: "MARK_ALERT_UNDER_REVIEW",
         targetType: "Alert",
         targetId: alert._id,
-        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        targetName: `${alert.isSystemGenerated ? 'System Alert' : `${alert.senderId.name} ${alert.senderId.lastName}`}`,
         ipAddress: ip,
       });
     } catch (logErr) {
@@ -494,19 +494,21 @@ export const markAlertUnderReview = async (alertId, currentUser, ip) => {
   }
 
   // Send a notification to the user about the alert being under review
-  try {
-    await createNotification({
-      recipientId: alert.senderId._id,
-      type: "ALERT",
-      title: "Alert under review",
-      message: `Your alert: "${alert.subject}" has been marked as under review.`,
-      data: {
-        entityType: null,
-        entityId: null,
-      },
-    });
-  } catch (err) {
-    console.error("Failed to send notification for the alert creation:", err);
+  if (alert.isSystemGenerated === false) {
+    try {
+      await createNotification({
+        recipientId: alert.senderId._id,
+        type: "ALERT",
+        title: "Alert under review",
+        message: `Your alert: "${alert.subject}" has been marked as under review.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error("Failed to send notification for the alert creation:", err);
+    }
   }
 
   return {
@@ -571,7 +573,7 @@ export const resolveAlert = async (
         action: "RESOLVE_ALERT",
         targetType: "Alert",
         targetId: alert._id,
-        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        targetName: `${alert.isSystemGenerated ? 'System Alert' : `${alert.senderId.name} ${alert.senderId.lastName}`}`,
         ipAddress: ip,
       });
     } catch (logErr) {
@@ -579,20 +581,25 @@ export const resolveAlert = async (
     }
   }
 
-  // Send a notification to the user about the alert being resolved
-  try {
-    await createNotification({
-      recipientId: alert.senderId._id,
-      type: "ALERT",
-      title: "Alert Resolved",
-      message: `Your alert: "${alert.subject}" has been resolved.`,
-      data: {
-        entityType: null,
-        entityId: null,
-      },
-    });
-  } catch (err) {
-    console.error("Failed to send notification for the alert resolution:", err);
+  if (alert.isSystemGenerated === false) {
+    // Send a notification to the user about the alert being resolved
+    try {
+      await createNotification({
+        recipientId: alert.senderId._id,
+        type: "ALERT",
+        title: "Alert Resolved",
+        message: `Your alert: "${alert.subject}" has been resolved.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for the alert resolution:",
+        err,
+      );
+    }
   }
 
   return {
@@ -658,7 +665,7 @@ export const dismissAlert = async (alertId, payload, currentUser, ip) => {
         action: "DISMISS_ALERT",
         targetType: "Alert",
         targetId: alert._id,
-        targetName: `${alert.senderId.name} ${alert.senderId.lastName}`,
+        targetName: `${alert.isSystemGenerated ? 'System Alert' : `${alert.senderId.name} ${alert.senderId.lastName}`}`,
         ipAddress: ip,
       });
     } catch (err) {
@@ -666,20 +673,25 @@ export const dismissAlert = async (alertId, payload, currentUser, ip) => {
     }
   }
 
-  // Send a notification to the user about the alert being dismissed
-  try {
-    await createNotification({
-      recipientId: alert.senderId._id,
-      type: "ALERT",
-      title: "Alert Dismissed",
-      message: `Your alert: "${alert.subject}" has been dismissed.`,
-      data: {
-        entityType: null,
-        entityId: null,
-      },
-    });
-  } catch (err) {
-    console.error("Failed to send notification for the alert dismissal:", err);
+  if (alert.isSystemGenerated === false) {
+    // Send a notification to the user about the alert being dismissed
+    try {
+      await createNotification({
+        recipientId: alert.senderId._id,
+        type: "ALERT",
+        title: "Alert Dismissed",
+        message: `Your alert: "${alert.subject}" has been dismissed.`,
+        data: {
+          entityType: null,
+          entityId: null,
+        },
+      });
+    } catch (err) {
+      console.error(
+        "Failed to send notification for the alert dismissal:",
+        err,
+      );
+    }
   }
 
   return {

@@ -21,6 +21,7 @@ import {
   TOLERANCE_METERS,
   getDistanceInMeters,
 } from "../utils/geo.js";
+import AppError from "../utils/AppError.js";
 
 const FACE_NONCE_TTL_MS = 30 * 1000;
 const FACE_CLOCK_SKEW_MS = 30 * 1000;
@@ -204,6 +205,13 @@ export const checkIn = async (req, res, next) => {
       date: { $gte: todayUTC, $lt: tomorrowUTC },
     });
 
+    if (!shift) {
+      throw new AppError(
+        "Shift not found for today. Please contact your administrator.",
+        404,
+      );
+    }
+
     // Work location: prefer explicit client selection; fallback to shift; default Remote.
     let workLocation = "Remote";
     if (location === "Remote" || location === "Onsite") {
@@ -224,16 +232,6 @@ export const checkIn = async (req, res, next) => {
       const grace = shift.gracePeriod || 15;
       const lateThreshold = new Date(shiftStart.getTime() + grace * 60000);
       if (now > lateThreshold) status = "late";
-    } else {
-      // Fallback if no shift: mark late after 09:15 local time
-      console.warn(
-        `[ATTENDANCE-FALLBACK] No shift timing found for user ${userId} on date ${todayUTC.toISOString().split("T")[0]}. Falling back to 09:15 threshold.`,
-      );
-      const currentHour = now.getHours();
-      const currentMinute = now.getMinutes();
-      if (currentHour > 9 || (currentHour === 9 && currentMinute > 15)) {
-        status = "late";
-      }
     }
 
     const checkInTime = now.toLocaleTimeString("en-US", {
@@ -243,7 +241,7 @@ export const checkIn = async (req, res, next) => {
     });
 
     const updateSet = {
-      date: todayUTC, // Force the canonical day record
+      date: todayUTC,
       checkInTime,
       status,
       workLocation,
@@ -263,7 +261,7 @@ export const checkIn = async (req, res, next) => {
       },
       {
         upsert: true,
-        new: true,
+        returnDocument: "after",
         runValidators: true,
         setDefaultsOnInsert: true,
         sort: { date: -1, updatedAt: -1 },
@@ -272,8 +270,7 @@ export const checkIn = async (req, res, next) => {
 
     await markPayrollDirty(userId, now, "Check-in recorded");
 
-    // Location mismatch alert (system-generated)
-    // Only runs for Onsite check-ins to avoid unnecessary processing.
+    // Location mismatch alert (system-generated and only for onsite check-ins not remote)
     if (workLocation === "Onsite") {
       try {
         let shouldAlert = false;
@@ -290,22 +287,28 @@ export const checkIn = async (req, res, next) => {
 
           if (distanceMeters > TOLERANCE_METERS) {
             shouldAlert = true;
+
+            const displayedDistance = Number.isFinite(distanceMeters)
+              ? `${Math.round(distanceMeters).toLocaleString()} meters`
+              : "a far unknown distance";
+
             alertDescription =
-              `Employee ${userId} checked in as Onsite but was detected ` +
-              `${Math.round(distanceMeters)}m from the office address. ` +
-              `User coordinates: (${latitude.toFixed(5)}, ` +
-              `${longitude.toFixed(5)}). ` +
-              `Office coordinates: (${COMPANY_LOCATION.lat}, ` +
-              `${COMPANY_LOCATION.lng}). ` +
-              `Tolerance: ${TOLERANCE_METERS}m. Attendance has been recorded.`;
+              `Employee ${user.name} ${user.lastName} checked in as "onsite", ` +
+              `but their recorded location was ${displayedDistance} from the registered office location.\n\n` +
+              `Employee coordinates: (${latitude.toFixed(5)}, ${longitude.toFixed(5)})\n` +
+              `Office coordinates: (${COMPANY_LOCATION.lat.toFixed(6)}, ${COMPANY_LOCATION.lng.toFixed(6)})\n` +
+              `Allowed tolerance: ${TOLERANCE_METERS.toLocaleString()} meters\n\n` +
+              `Attendance has been recorded successfully.`;
           }
         } else {
           shouldAlert = true;
           alertSubject = "Onsite Check-In Location Permission Denied";
           alertDescription =
-            `Employee ${userId} attempted an Onsite check-in but location ` +
+            `Employee ${user.name} ${user.lastName} attempted an "onsite" check-in but the location ` +
             `access was denied by the browser or device. ` +
+            "\n" +
             `Unable to verify physical presence at the office. ` +
+            "\n" +
             `Attendance has been recorded.`;
         }
 
@@ -769,10 +772,7 @@ export const updateAttendance = async (req, res, next) => {
         },
       });
     } catch (err) {
-      console.error(
-        "Failed to send notification for attendance update:",
-        err,
-      );
+      console.error("Failed to send notification for attendance update:", err);
     }
 
     res.status(200).json({
